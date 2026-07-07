@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}{% if automation_id %}Edit automation{% else %}New automation{% endif %}{% endblock %}
+{% block content %}
+<h1>{% if automation_id %}Edit automation{% else %}New automation{% endif %}</h1>
+
+{% if not automation_id %}
+<p class="muted">
+  Start from a template:
+  {% for example in examples %}
+  <a href="/automations/new?template={{ example.slug }}">{{ example.title }}</a>{% if not loop.last %} · {% endif %}
+  {% endfor %}
+</p>
+{% endif %}
+
+{% if errors %}
+<div class="error-box" role="alert">
+  <strong>Please fix the following:</strong>
+  <ul>{% for error in errors %}<li>{{ error }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+<div class="form-layout">
+  {% if automation_id %}
+  <form class="card" method="post" action="/automations/{{ automation_id }}"
+        hx-put="/automations/{{ automation_id }}" hx-target="main" hx-select="main" hx-swap="outerHTML">
+  {% else %}
+  <form class="card" method="post" action="/automations">
+  {% endif %}
+    <label>Name
+      <input type="text" name="name" value="{{ form.name }}" required maxlength="100">
+    </label>
+
+    <label>Description <span class="muted">(optional)</span>
+      <input type="text" name="description" value="{{ form.description }}">
+    </label>
+
+    <label>Lua code
+      <textarea name="lua_code" rows="18" spellcheck="false" class="code">{{ form.lua_code }}</textarea>
+    </label>
+
+    <label>Schedule <span class="muted">(optional cron expression — leave empty for manual only)</span>
+      <input type="text" name="schedule" value="{{ form.schedule }}" placeholder="0 */5 * * * *" class="code">
+    </label>
+    <p class="small muted">
+      Six fields: <code>second minute hour day month weekday</code>.
+      Examples: <code>0 */5 * * * *</code> every 5 minutes · <code>0 0 9 * * Mon-Fri</code> weekdays at 9:00 (server's local time).
+    </p>
+
+    <label class="checkbox">
+      <input type="checkbox" name="enabled" {% if form.enabled %}checked{% endif %}> Enabled
+    </label>
+
+    <div class="actions">
+      <button type="submit">{% if automation_id %}Save changes{% else %}Create automation{% endif %}</button>
+      <a class="button secondary" href="{% if automation_id %}/automations/{{ automation_id }}{% else %}/{% endif %}">Cancel</a>
+    </div>
+  </form>
+
+  <aside class="card help">
+    <h3>Lua API</h3>
+    <dl>
+      <dt><code>fs.list(path, pattern)</code></dt><dd>Files in a folder matching a pattern like <code>"*.pdf"</code>.</dd>
+      <dt><code>fs.move(src, dst)</code></dt><dd>Move or rename a file. Returns the new path.</dd>
+      <dt><code>fs.copy(src, dst)</code></dt><dd>Copy a file. Returns the new path.</dd>
+      <dt><code>fs.exists(path)</code></dt><dd><code>true</code> if the path exists.</dd>
+      <dt><code>fs.delete(path)</code></dt><dd>Delete a file or empty folder.</dd>
+      <dt><code>fs.mkdir(path)</code></dt><dd>Create a folder.</dd>
+      <dt><code>fs.basename(path)</code></dt><dd>File name part of a path.</dd>
+      <dt><code>fs.join(a, b, ...)</code></dt><dd>Join path parts.</dd>
+      <dt><code>log(msg)</code> / <code>print(...)</code></dt><dd>Write to the log.</dd>
+      <dt><code>notify(msg)</code></dt><dd>A highlighted message for you.</dd>
+    </dl>
+    <p class="small muted"><code>~</code> means your home folder. Scripts can only access the folders LocalFlow allows.</p>
+    <p class="small muted"><code>ctx</code> has <code>ctx.id</code>, <code>ctx.name</code> and <code>ctx.trigger</code> (<code>"manual"</code> or <code>"schedule"</code>).</p>
+  </aside>
+</div>
+{% endblock %}

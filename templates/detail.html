@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}{{ automation.name }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>{{ automation.name }}
+      {% if automation.enabled %}<span class="badge on">enabled</span>{% else %}<span class="badge off">disabled</span>{% endif %}
+    </h1>
+    {% if automation.description %}<p class="muted">{{ automation.description }}</p>{% endif %}
+  </div>
+  <div class="actions">
+    <form method="post" action="/automations/{{ automation.id }}/run"
+          hx-post="/automations/{{ automation.id }}/run" hx-target="main" hx-select="main" hx-swap="outerHTML"
+          hx-indicator="#run-spinner">
+      <button>Run now</button>
+    </form>
+    <a class="button secondary" href="/automations/{{ automation.id }}/edit">Edit</a>
+    <form method="post" action="/automations/{{ automation.id }}/toggle">
+      <button class="secondary">{% if automation.enabled %}Disable{% else %}Enable{% endif %}</button>
+    </form>
+    <form method="post" action="/automations/{{ automation.id }}/delete"
+          hx-delete="/automations/{{ automation.id }}"
+          hx-confirm="Delete '{{ automation.name }}' and all of its history?"
+          onsubmit="return confirm('Delete this automation and all of its history?')">
+      <button class="danger">Delete</button>
+    </form>
+  </div>
+</div>
+
+<span id="run-spinner" class="htmx-indicator muted">Running…</span>
+{% if last_result %}{% with run = last_result %}{% include "run_result.html" %}{% endwith %}{% endif %}
+
+<div class="grid">
+  <section class="card">
+    <h2>Schedule</h2>
+    {% if automation.schedule %}
+      <p><code>{{ automation.schedule }}</code></p>
+      <p class="small muted">
+        {% if scheduled %}Active — runs automatically.{% elif not automation.enabled %}Paused because the automation is disabled.{% else %}Not active.{% endif %}
+      </p>
+    {% else %}
+      <p class="muted">Manual only.</p>
+    {% endif %}
+    <p class="small muted">Created {{ m.time(automation.created_at) }} · updated {{ m.time(automation.updated_at) }}</p>
+  </section>
+
+  <section class="card">
+    <h2>Recent logs <a class="small" href="/automations/{{ automation.id }}/logs">view all</a></h2>
+    {% if logs %}
+    <ul class="log-list">
+      {% for log in logs %}
+      <li class="log-{{ log.level }}"><span class="muted small">{{ m.time(log.created_at) }}</span> <span class="badge level-{{ log.level }}">{{ log.level }}</span> {{ log.message }}</li>
+      {% endfor %}
+    </ul>
+    {% else %}<p class="muted">No logs yet.</p>{% endif %}
+  </section>
+</div>
+
+<section class="card">
+  <h2>Recent runs <a class="small" href="/automations/{{ automation.id }}/runs">view all</a></h2>
+  {% if runs %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Run</th><th>Status</th><th>Started</th><th>Duration</th><th>Result</th></tr></thead>
+      <tbody>{% for run in runs %}{{ m.run_row(run) }}{% endfor %}</tbody>
+    </table>
+  </div>
+  {% else %}<p class="muted">This automation has not run yet.</p>{% endif %}
+</section>
+
+<section class="card">
+  <h2>Code</h2>
+  <pre class="code">{{ automation.lua_code }}</pre>
+</section>
+{% endblock %}

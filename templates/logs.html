@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Logs · {{ automation.name }}{% endblock %}
+{% block content %}
+<p><a href="/automations/{{ automation.id }}">← {{ automation.name }}</a></p>
+<h1>Logs</h1>
+<p class="small muted">Newest first. Refreshes every 5 seconds.</p>
+
+<div id="log-list" class="card"
+     hx-get="/automations/{{ automation.id }}/logs" hx-trigger="every 5s"
+     hx-select="#log-list" hx-swap="outerHTML">
+  {% if logs %}
+  <ul class="log-list">
+    {% for log in logs %}
+    <li class="log-{{ log.level }}"><span class="muted small">{{ m.time(log.created_at) }}</span> <span class="badge level-{{ log.level }}">{{ log.level }}</span> {{ log.message }}</li>
+    {% endfor %}
+  </ul>
+  {% else %}<p class="muted">No logs yet. Run the automation to see output here.</p>{% endif %}
+</div>
+{% endblock %}
