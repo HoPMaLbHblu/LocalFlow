@@ -1,0 +1,21 @@
+[package]
+name = "localflow-core"
+description = "LocalFlow engine: database, sandboxed Lua runtime and scheduler."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+tokio.workspace = true
+sqlx.workspace = true
+mlua.workspace = true
+serde.workspace = true
+tokio-cron-scheduler.workspace = true
+tracing.workspace = true
+thiserror.workspace = true
+chrono.workspace = true
+dirs.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
