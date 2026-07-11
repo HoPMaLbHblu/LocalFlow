@@ -53,6 +53,22 @@ export const SCHEDULE_PRESETS: { label: string; value: string }[] = [
   { label: "Every Monday at 9:00", value: "0 0 9 * * Mon" },
 ];
 
+/** Short description of everything that starts an automation, e.g. "Every hour · On startup". */
+export function describeTriggers(a: {
+  enabled: boolean;
+  schedule: string | null;
+  run_on_startup: boolean;
+  watch_path: string | null;
+  watch_pattern?: string | null;
+}): string {
+  if (!a.enabled) return "Disabled";
+  const parts: string[] = [];
+  if (a.watch_path) parts.push(`Watching ${a.watch_path}${a.watch_pattern ? ` (${a.watch_pattern})` : ""}`);
+  if (a.schedule) parts.push(describeSchedule(a.schedule));
+  if (a.run_on_startup) parts.push("On startup");
+  return parts.length ? parts.join(" · ") : "Manual";
+}
+
 export function describeSchedule(schedule: string | null): string {
   if (!schedule) return "Manual only";
   return SCHEDULE_PRESETS.find((p) => p.value === schedule)?.label ?? schedule;

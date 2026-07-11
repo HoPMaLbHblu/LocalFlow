@@ -53,14 +53,53 @@ automation {
 | `fs.mkdir(path)` | Creates a folder and its parents. |
 | `fs.basename(path)` | The file name: `"report.pdf"` for `"~/Downloads/report.pdf"`. |
 | `fs.join(a, b, ...)` | Joins path parts. |
+| `fs.is_dir(path)` | `true` if the path is a folder. |
+| `fs.size(path)` | File size in bytes. |
+| `fs.modified(path)` | When the file last changed, as a timestamp. |
+| `app.open(what, args)` | Opens an app by its Start-menu name (`"Spotify"`), a file or folder with its usual app, a website, or a program by path. `args` is an optional list of options for a program. |
+| `app.running(name)` | `true` if a program with that name is running (`"Discord"`, `"chrome"`; `.exe` and capitals don't matter). |
+| `app.list()` | Names of the programs running now. |
+| `app.shortcuts()` | Names of the apps in the Start menu, which are the names `app.open` understands. |
+| `wait(seconds)` | Pauses the script (within its time limit). |
+| `time.now()` | The current time as a timestamp (seconds since 1970). |
+| `time.format(pattern, t)` | A timestamp as text, e.g. `time.format("%d.%m.%Y")`. Both arguments optional. |
+| `time.date(t)` | A timestamp split into `year`, `month`, `day`, `hour`, `min`, `sec`, `weekday` (1 = Monday) and `yday`. |
+| `time.today()` | Today's date, `"2026-09-29"`. |
+| `time.days(n)`, `time.hours(n)`, `time.minutes(n)` | Durations in seconds, for comparing with timestamps. |
 | `log(message)` / `print(...)` | Writes a line to the automation's log. |
 | `notify(message)` | Shows a desktop notification (desktop app) and writes a `notify` log line. |
 
-`ctx` contains `ctx.id`, `ctx.name` and `ctx.trigger` (`"manual"`, `"schedule"` or `"test"`).
+`ctx` contains `ctx.id`, `ctx.name`, `ctx.trigger` (`"manual"`, `"tray"`, `"schedule"`, `"startup"`, `"watch"` or `"test"`) and, for folder-watch runs, `ctx.file`.
 
 Paths: `~` is your home folder, and relative paths are relative to it. `/` works as a separator on every OS.
 
-The editor autocompletes these functions and marks syntax errors as you type.
+The editor autocompletes these functions, shows what they do when you hover over them, and marks syntax errors as you type. The **Help** panel next to the editor has ready-made snippets, and **Learn** in the sidebar is a short guide to Lua for beginners.
+
+### Ways to start an automation
+
+| Trigger | How |
+|---|---|
+| **Run now** | The button in the editor, or right-click the tray icon › **Run** › pick an automation. |
+| **Schedule** | Pick a preset or a custom cron expression (below). |
+| **When LocalFlow starts** | Tick *Run when LocalFlow starts*. With **Settings › Start with Windows** this runs every time you sign in, which is perfect for opening your apps. |
+| **New file in a folder** | Tick *Run when a new file appears in a folder* and choose the folder and, optionally, a pattern such as `*.pdf`. The automation runs once per new file, after it has finished downloading, with the file in `ctx.file`. |
+
+Example: open your apps when you sign in.
+
+```lua
+automation {
+    name = "Open my work apps",
+
+    run = function(ctx)
+        for _, name in ipairs({ "Spotify", "Discord", "notepad" }) do
+            if not app.running(name) then
+                app.open(name)
+                wait(1)
+            end
+        end
+    end
+}
+```
 
 ### Schedules
 
@@ -81,7 +120,8 @@ Disabling an automation pauses its schedule; you can still run it manually.
 ## Safety
 
 - **Sandboxed Lua.** Scripts get Lua's `string`, `table`, `math`, `utf8` and `coroutine` libraries plus the API above. `os`, `io`, `package`, `debug`, `require`, `load`, `dofile` and `loadfile` are not available.
-- **Limited folders.** File functions only work inside the allowed folders: your home folder by default, changeable in **Settings**. `..` and symlinks cannot be used to get out.
+- **Limited folders.** File functions (and watch folders) only work inside the allowed folders: your home folder by default, changeable in **Settings**. `..` and symlinks cannot be used to get out.
+- **Opening apps is allowed.** `app.open` can start any installed program, file or website, because that's its job. Only run scripts you trust.
 - **Limits.** Scripts are stopped after 30 seconds and may use at most 64 MB of memory.
 - **Test runs are real.** A test run doesn't save the automation or its history, but file operations really happen.
 - **Local only.** The desktop app opens no network ports. The web server listens on `127.0.0.1` unless you explicitly allow otherwise.
@@ -140,8 +180,9 @@ GitHub Actions ([`release.yml`](.github/workflows/release.yml)) runs the tests, 
 crates/
 ├── core/          localflow-core: the engine, shared by both front-ends
 │   ├── src/db/        SQLite models and every SQL query
-│   ├── src/lua/       sandbox, Lua API (fs.*, log, notify) and script execution
+│   ├── src/lua/       sandbox, Lua API (fs.*, app.*, time.*, log, notify) and script execution
 │   ├── src/scheduler/ cron jobs
+│   ├── src/watcher/   folder watching
 │   ├── src/service.rs LocalFlow: create/update/run/test automations, live events
 │   ├── migrations/    database schema (applied automatically)
 │   └── scripts/       built-in templates

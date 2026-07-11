@@ -324,3 +324,99 @@ label input, label select { color: var(--text); font-size: .9rem; font-weight: n
 
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 5px; border: 2px solid transparent; background-clip: content-box; }
+
+/* ---- learning helper -------------------------------------------------- */
+
+.learn-card {
+  display: flex; align-items: center; gap: 1rem;
+  width: 100%; text-align: left; font-weight: 400;
+  margin-bottom: 1.5rem;
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.learn-card span { display: flex; flex-direction: column; gap: .15rem; }
+.learn-icon { font-size: 1.8rem; }
+
+.guide { display: flex; height: 100%; min-height: 0; }
+.guide-toc {
+  width: 250px; flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  padding: 1.25rem .6rem;
+  overflow-y: auto;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.guide-toc-title { font-weight: 700; padding: 0 .6rem .6rem; }
+.guide-toc button {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
+  background: none; border: 1px solid transparent; text-align: left;
+  padding: .45rem .6rem; font-weight: 550;
+}
+.guide-toc button:hover { background: var(--surface); }
+.guide-toc button.active { background: var(--surface); border-color: var(--border); }
+.guide-toc button .muted { font-weight: 400; }
+.guide-content { flex: 1; overflow-y: auto; padding: 1.75rem 2.25rem 3rem; }
+.guide-content article { max-width: 720px; }
+.guide-content p { line-height: 1.65; }
+.guide-code { position: relative; margin: .6rem 0 1rem; }
+.guide-code pre { margin: 0; padding-bottom: 2.4rem; }
+.guide-code-actions { position: absolute; right: .6rem; bottom: .5rem; display: flex; gap: .75rem; align-items: center; }
+.callout { border-radius: var(--radius); padding: .65rem .9rem; margin: .8rem 0; line-height: 1.55; }
+.callout.tip { background: var(--accent-soft); }
+.callout.warning { background: var(--warn-soft); color: var(--text); }
+.guide-nav { display: flex; gap: .75rem; margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+.api-doc { margin-bottom: 1.5rem; }
+.api-doc h3 { margin: 0 0 .3rem; font-size: 1rem; }
+.api-doc p { margin: .2rem 0; }
+
+.editor-row { flex: 1; min-height: 180px; display: flex; gap: .6rem; }
+.editor-row .editor-area { flex: 1; min-width: 0; }
+.help-panel {
+  width: 270px; flex-shrink: 0;
+  display: flex; flex-direction: column;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+}
+.help-panel-header { display: flex; align-items: center; padding: .45rem .5rem; border-bottom: 1px solid var(--border); }
+.segmented { display: flex; background: var(--surface-2); border-radius: 6px; padding: 2px; }
+.segmented button { border: none; background: none; padding: .2rem .7rem; font-size: .82rem; color: var(--muted); }
+.segmented button.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgb(0 0 0 / .12); }
+.help-panel-body { flex: 1; overflow-y: auto; padding: .3rem .5rem; }
+.help-item { padding: .5rem .25rem; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: .2rem; }
+.help-item:last-child { border-bottom: none; }
+.help-item-head { display: flex; justify-content: space-between; align-items: center; gap: .5rem; font-size: .88rem; }
+.help-item-head button, .help-item-detail button { padding: .12rem .55rem; font-size: .78rem; }
+.help-item-toggle { background: none; border: none; padding: 0; text-align: left; }
+.help-item-toggle code { background: none; border: none; padding: 0; }
+.help-item-detail p { margin: .2rem 0; }
+.help-item-detail pre { font-size: .76rem; padding: .45rem .6rem; }
+.help-panel-footer { padding: .5rem .75rem; border-top: 1px solid var(--border); }
+
+.console-hint {
+  margin-top: .35rem; padding: .45rem .7rem;
+  border-radius: 6px;
+  background: var(--accent-soft);
+  font-family: inherit; font-size: .85rem;
+}
+
+.api-tooltip { max-width: 340px; padding: .5rem .65rem; font-size: .82rem; line-height: 1.45; display: flex; flex-direction: column; gap: .25rem; }
+.api-tooltip code { font-weight: 600; }
+
+@media (max-width: 1050px) {
+  .help-panel { width: 220px; }
+}
+
+
+/* ---- triggers ---------------------------------------------------------- */
+
+.triggers { display: flex; flex-direction: column; gap: .35rem; }
+.triggers label.check {
+  flex-direction: row; align-items: center; gap: .5rem;
+  font-size: .88rem; font-weight: 500; color: var(--text);
+  cursor: pointer;
+}
+.triggers label.check input { width: auto; margin: 0; }
+.watch-fields { display: flex; gap: .75rem; align-items: flex-end; flex-wrap: wrap; padding-left: 1.5rem; }
+.watch-fields label { min-width: 150px; }
+.watch-fields label.grow { flex: 1; min-width: 240px; }
+.watch-hint { padding-bottom: .5rem; }

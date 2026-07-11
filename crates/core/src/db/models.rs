@@ -12,6 +12,12 @@ pub struct Automation {
     pub enabled: bool,
     pub created_at: String,
     pub updated_at: String,
+    /// Run once every time LocalFlow starts.
+    pub run_on_startup: bool,
+    /// Run whenever a new file appears in this folder.
+    pub watch_path: Option<String>,
+    /// With `watch_path`: only files whose names match, e.g. `*.pdf`.
+    pub watch_pattern: Option<String>,
 }
 
 /// The user-editable fields of an automation, used for create and update.
@@ -22,6 +28,9 @@ pub struct NewAutomation {
     pub lua_code: String,
     pub schedule: Option<String>,
     pub enabled: bool,
+    pub run_on_startup: bool,
+    pub watch_path: Option<String>,
+    pub watch_pattern: Option<String>,
 }
 
 /// A row in the `automation_runs` table.

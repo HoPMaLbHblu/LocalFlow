@@ -5,13 +5,15 @@ import Home from "./components/Home";
 import AutomationView from "./components/AutomationView";
 import TemplatePicker from "./components/TemplatePicker";
 import SettingsView from "./components/SettingsView";
+import GuidePage from "./components/GuidePage";
 
 export type View =
   | { kind: "home" }
   | { kind: "new" }
   | { kind: "draft"; template: Template }
   | { kind: "automation"; id: number }
-  | { kind: "settings" };
+  | { kind: "settings" }
+  | { kind: "guide" };
 
 export default function App() {
   const [view, setView] = useState<View>({ kind: "home" });
@@ -64,6 +66,13 @@ export default function App() {
   }, []);
 
   const selectedId = view.kind === "automation" ? view.id : null;
+  const openGuide = () => navigate({ kind: "guide" });
+  const draftCounter = useRef(0);
+  const openDraft = (title: string, code: string) =>
+    navigate({
+      kind: "draft",
+      template: { slug: `guide-${++draftCounter.current}`, title, description: "", schedule: "", code },
+    });
 
   return (
     <div className="app">
@@ -75,6 +84,7 @@ export default function App() {
         onNew={() => navigate({ kind: "new" })}
         onHome={() => navigate({ kind: "home" })}
         onSettings={() => navigate({ kind: "settings" })}
+        onGuide={openGuide}
       />
       <main className="main">
         {loadError && <div className="banner error">Could not load automations: {loadError}</div>}
@@ -85,6 +95,7 @@ export default function App() {
             onSelect={(id) => navigate({ kind: "automation", id })}
             onTemplate={(template) => navigate({ kind: "draft", template })}
             onNew={() => navigate({ kind: "new" })}
+            onGuide={openGuide}
           />
         )}
         {view.kind === "new" && (
@@ -105,6 +116,7 @@ export default function App() {
               setView({ kind: "automation", id });
             }}
             onDeleted={() => navigate({ kind: "home" })}
+            onOpenGuide={openGuide}
           />
         )}
         {view.kind === "automation" && (
@@ -117,9 +129,11 @@ export default function App() {
               dirty.current = false;
               setView({ kind: "home" });
             }}
+            onOpenGuide={openGuide}
           />
         )}
         {view.kind === "settings" && <SettingsView />}
+        {view.kind === "guide" && <GuidePage onTry={openDraft} />}
       </main>
     </div>
   );

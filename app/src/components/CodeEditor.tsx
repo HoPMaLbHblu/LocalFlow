@@ -4,24 +4,18 @@ import { StreamLanguage } from "@codemirror/language";
 import { lua } from "@codemirror/legacy-modes/mode/lua";
 import { linter, lintGutter, type Diagnostic } from "@codemirror/lint";
 import { autocompletion, type CompletionContext, type Completion } from "@codemirror/autocomplete";
+import { hoverTooltip, type EditorView } from "@codemirror/view";
 import { api } from "../api";
+import { API_DOCS, explainError } from "../guide/content";
 
 /** The LocalFlow Lua API, offered as autocomplete suggestions. */
 const API_COMPLETIONS: Completion[] = [
-  { label: "fs.list", type: "function", detail: "(path, pattern)", info: "Files in a folder matching a wildcard like \"*.pdf\"." },
-  { label: "fs.move", type: "function", detail: "(source, destination)", info: "Move or rename a file. Returns the new path." },
-  { label: "fs.copy", type: "function", detail: "(source, destination)", info: "Copy a file. Returns the new path." },
-  { label: "fs.exists", type: "function", detail: "(path)", info: "true if the file or folder exists." },
-  { label: "fs.delete", type: "function", detail: "(path)", info: "Delete a file or empty folder." },
-  { label: "fs.mkdir", type: "function", detail: "(path)", info: "Create a folder and its parents." },
-  { label: "fs.basename", type: "function", detail: "(path)", info: "The file name part of a path." },
-  { label: "fs.join", type: "function", detail: "(a, b, ...)", info: "Join path parts." },
-  { label: "log", type: "function", detail: "(message)", info: "Write a line to the log." },
-  { label: "notify", type: "function", detail: "(message)", info: "Show a desktop notification." },
-  { label: "print", type: "function", detail: "(...)", info: "Same as log." },
-  { label: "ctx.name", type: "property", info: "Name of this automation." },
-  { label: "ctx.id", type: "property", info: "Id of this automation." },
-  { label: "ctx.trigger", type: "property", info: "\"manual\", \"schedule\" or \"test\"." },
+  ...API_DOCS.map((doc) => ({
+    label: doc.name,
+    type: doc.name.startsWith("ctx.") ? "property" : "function",
+    detail: doc.signature.slice(doc.name.length),
+    info: doc.summary.replace(/`/g, ""),
+  })),
   {
     label: "automation",
     type: "keyword",
@@ -29,6 +23,42 @@ const API_COMPLETIONS: Completion[] = [
     apply: 'automation {\n    name = "",\n\n    run = function(ctx)\n        \n    end\n}',
   },
 ];
+
+/** Show the reference entry when hovering over an API name like `fs.move`. */
+const apiHover = hoverTooltip((view, pos) => {
+  const line = view.state.doc.lineAt(pos);
+  const re = /[A-Za-z_][\w.]*/g;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(line.text))) {
+    const from = line.from + match.index;
+    const to = from + match[0].length;
+    if (pos < from || pos > to) continue;
+    const doc = API_DOCS.find((d) => d.name === match![0]);
+    if (!doc) return null;
+    return {
+      pos: from,
+      end: to,
+      above: true,
+      create: () => {
+        const dom = document.createElement("div");
+        dom.className = "api-tooltip";
+        const title = document.createElement("code");
+        title.textContent = doc.signature;
+        const body = document.createElement("div");
+        body.textContent = doc.summary.replace(/`/g, "");
+        dom.append(title, body);
+        if (doc.returns) {
+          const returns = document.createElement("div");
+          returns.className = "muted";
+          returns.textContent = "Returns " + doc.returns.replace(/`/g, "");
+          dom.append(returns);
+        }
+        return { dom };
+      },
+    };
+  }
+  return null;
+});
 
 function completeApi(context: CompletionContext) {
   const word = context.matchBefore(/[\w.]+/);
@@ -48,7 +78,13 @@ const luaLinter = linter(
       from: line.from,
       to: Math.max(line.to, line.from + 1),
       severity: "error",
-      message: error.replace(/^Lua syntax error: /, ""),
+      message: (() => {
+        const message = error.replace(/^Lua syntax error: /, "");
+        const hint = explainError(message);
+        return hint ? `${message}
+
+💡 ${hint.replace(/`/g, "")}` : message;
+      })(),
     };
     return [diagnostic];
   },
@@ -72,15 +108,18 @@ interface Props {
   onChange: (value: string) => void;
   onSave: () => void;
   onTest: () => void;
+  /** Receives the editor so others can insert text at the cursor. */
+  onReady?: (view: EditorView) => void;
 }
 
-export default function CodeEditor({ value, onChange, onSave, onTest }: Props) {
+export default function CodeEditor({ value, onChange, onSave, onTest, onReady }: Props) {
   const dark = usePrefersDark();
 
   const extensions = useMemo<Extension[]>(
     () => [
       StreamLanguage.define(lua),
       luaLinter,
+      apiHover,
       lintGutter(),
       autocompletion({ override: [completeApi] }),
       keymap.of([
@@ -99,6 +138,7 @@ export default function CodeEditor({ value, onChange, onSave, onTest }: Props) {
       theme={dark ? "dark" : "light"}
       extensions={extensions}
       onChange={onChange}
+      onCreateEditor={onReady}
       basicSetup={{ tabSize: 4, foldGutter: false }}
     />
   );

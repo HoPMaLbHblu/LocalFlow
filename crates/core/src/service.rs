@@ -23,6 +23,7 @@ use crate::{
         sandbox::PathPolicy,
     },
     scheduler::{validate_cron, JobAction, Scheduler},
+    watcher::{WatchAction, Watchers},
 };
 
 /// Something that happened, for front-ends that show live updates.
@@ -51,6 +52,19 @@ pub struct AutomationInput {
     pub schedule: Option<String>,
     #[serde(default)]
     pub enabled: bool,
+    /// Run every time LocalFlow starts.
+    #[serde(default)]
+    pub run_on_startup: bool,
+    /// Run when a new file appears in this folder; empty or `None` means don't watch.
+    #[serde(default)]
+    pub watch_path: Option<String>,
+    /// Only react to files matching this pattern, e.g. `*.pdf`. Defaults to `*`.
+    #[serde(default)]
+    pub watch_pattern: Option<String>,
+}
+
+fn non_empty(value: &Option<String>) -> Option<String> {
+    value.as_deref().map(str::trim).filter(|v| !v.is_empty()).map(String::from)
 }
 
 impl AutomationInput {
@@ -85,6 +99,9 @@ impl AutomationInput {
             lua_code: self.lua_code.clone(),
             schedule: (!schedule.is_empty()).then(|| schedule.to_string()),
             enabled: self.enabled,
+            run_on_startup: self.run_on_startup,
+            watch_path: non_empty(&self.watch_path),
+            watch_pattern: non_empty(&self.watch_pattern).filter(|_| non_empty(&self.watch_path).is_some()),
         })
     }
 }
@@ -110,6 +127,7 @@ pub struct TestRunResult {
 struct Inner {
     repo: Repository,
     scheduler: Scheduler,
+    watchers: Watchers,
     path_policy: RwLock<Arc<PathPolicy>>,
     script_timeout: Duration,
     events: Option<EventHandler>,
@@ -136,6 +154,7 @@ impl LocalFlow {
             inner: Arc::new(Inner {
                 repo,
                 scheduler: Scheduler::new().await?,
+                watchers: Watchers::new(),
                 path_policy: RwLock::new(Arc::new(PathPolicy::new(&config.allowed_dirs))),
                 script_timeout: config.script_timeout,
                 events,
@@ -143,14 +162,33 @@ impl LocalFlow {
         })
     }
 
-    /// Schedule all enabled automations and start the scheduler.
+    /// Start schedules and folder watches, then run the "when LocalFlow starts" automations.
     pub async fn start(&self) -> CoreResult<()> {
-        for automation in self.inner.repo.list_automations().await? {
-            if let Err(e) = self.sync_schedule(&automation).await {
-                tracing::warn!(automation_id = automation.id, "not scheduled: {e}");
+        let automations = self.inner.repo.list_automations().await?;
+        for automation in &automations {
+            if let Err(e) = self.sync_triggers(automation).await {
+                tracing::warn!(automation_id = automation.id, "trigger not set up: {e}");
             }
         }
-        self.inner.scheduler.start().await
+        self.inner.scheduler.start().await?;
+
+        let startup: Vec<i64> = automations
+            .iter()
+            .filter(|a| a.enabled && a.run_on_startup)
+            .map(|a| a.id)
+            .collect();
+        if !startup.is_empty() {
+            let flow = self.clone();
+            // One after another, in name order, without delaying startup.
+            tokio::spawn(async move {
+                for id in startup {
+                    if let Err(e) = flow.run(id, "startup").await {
+                        tracing::error!(automation_id = id, "startup run failed: {e}");
+                    }
+                }
+            });
+        }
+        Ok(())
     }
 
     pub fn repo(&self) -> &Repository {
@@ -170,6 +208,49 @@ impl LocalFlow {
         if let Some(handler) = &self.inner.events {
             handler(event);
         }
+    }
+
+    /// Make schedules and folder watches match an automation's current settings.
+    async fn sync_triggers(&self, automation: &Automation) -> CoreResult<()> {
+        self.sync_schedule(automation).await?;
+
+        let folder = match (&automation.watch_path, automation.enabled) {
+            (Some(path), true) => Some(self.resolve_watch_folder(path).map_err(|e| CoreError::Validation(vec![e]))?),
+            _ => None,
+        };
+        let flow = self.clone();
+        let action: WatchAction = Arc::new(move |id, file| {
+            let flow = flow.clone();
+            let job: Pin<Box<dyn Future<Output = ()> + Send>> = Box::pin(async move {
+                if let Err(e) = flow.run_with_file(id, "watch", Some(file)).await {
+                    tracing::error!(automation_id = id, "watch run failed: {e}");
+                }
+            });
+            job
+        });
+        self.inner
+            .watchers
+            .sync(automation.id, folder, automation.watch_pattern.clone(), action)
+            .await
+    }
+
+    /// A watch folder must exist and be inside the allowed folders.
+    fn resolve_watch_folder(&self, path: &str) -> Result<std::path::PathBuf, String> {
+        let resolved = self
+            .path_policy()
+            .resolve(path)
+            .map_err(|e| format!("Watch folder: {e}"))?;
+        if !resolved.is_dir() {
+            return Err(format!("Watch folder not found: {path}"));
+        }
+        Ok(resolved)
+    }
+
+    fn check_watch(&self, new: &NewAutomation) -> CoreResult<()> {
+        if let Some(path) = &new.watch_path {
+            self.resolve_watch_folder(path).map_err(|e| CoreError::Validation(vec![e]))?;
+        }
+        Ok(())
     }
 
     async fn sync_schedule(&self, automation: &Automation) -> CoreResult<()> {
@@ -204,8 +285,9 @@ impl LocalFlow {
 
     pub async fn create(&self, input: &AutomationInput) -> CoreResult<Automation> {
         let new = input.validate().map_err(CoreError::Validation)?;
+        self.check_watch(&new)?;
         let automation = self.inner.repo.create_automation(&new).await?;
-        self.sync_schedule(&automation).await?;
+        self.sync_triggers(&automation).await?;
         tracing::info!(automation_id = automation.id, "created automation '{}'", automation.name);
         self.emit(CoreEvent::AutomationsChanged);
         Ok(automation)
@@ -213,13 +295,14 @@ impl LocalFlow {
 
     pub async fn update(&self, id: i64, input: &AutomationInput) -> CoreResult<Automation> {
         let new = input.validate().map_err(CoreError::Validation)?;
+        self.check_watch(&new)?;
         let automation = self
             .inner
             .repo
             .update_automation(id, &new)
             .await?
             .ok_or(CoreError::NotFound)?;
-        self.sync_schedule(&automation).await?;
+        self.sync_triggers(&automation).await?;
         tracing::info!(automation_id = id, "updated automation");
         self.emit(CoreEvent::AutomationsChanged);
         Ok(automation)
@@ -232,7 +315,7 @@ impl LocalFlow {
             .set_enabled(id, enabled)
             .await?
             .ok_or(CoreError::NotFound)?;
-        self.sync_schedule(&automation).await?;
+        self.sync_triggers(&automation).await?;
         tracing::info!(automation_id = id, enabled, "changed enabled state");
         self.emit(CoreEvent::AutomationsChanged);
         Ok(automation)
@@ -245,6 +328,7 @@ impl LocalFlow {
 
     pub async fn delete(&self, id: i64) -> CoreResult<()> {
         self.inner.scheduler.remove(id).await?;
+        self.inner.watchers.remove(id).await;
         if !self.inner.repo.delete_automation(id).await? {
             return Err(CoreError::NotFound);
         }
@@ -255,6 +339,10 @@ impl LocalFlow {
 
     pub async fn is_scheduled(&self, id: i64) -> bool {
         self.inner.scheduler.is_scheduled(id).await
+    }
+
+    pub async fn is_watching(&self, id: i64) -> bool {
+        self.inner.watchers.is_watching(id).await
     }
 
     pub async fn next_run(&self, id: i64) -> Option<DateTime<Utc>> {
@@ -274,6 +362,11 @@ impl LocalFlow {
     /// Run a stored automation end-to-end: record the run, execute the script,
     /// save its logs and result.
     pub async fn run(&self, id: i64, trigger: &str) -> CoreResult<AutomationRun> {
+        self.run_with_file(id, trigger, None).await
+    }
+
+    /// Like [`LocalFlow::run`], passing a file to the script as `ctx.file`.
+    pub async fn run_with_file(&self, id: i64, trigger: &str, file: Option<String>) -> CoreResult<AutomationRun> {
         let repo = &self.inner.repo;
         let automation = self.get(id).await?;
         let run_id = repo.start_run(id).await?;
@@ -289,6 +382,7 @@ impl LocalFlow {
             automation_id: id,
             automation_name: automation.name.clone(),
             trigger: trigger.to_string(),
+            file,
         };
         let result = self
             .execute(automation.lua_code, ctx, Some(id), Some(run_id))
@@ -320,7 +414,7 @@ impl LocalFlow {
     /// but file operations are real.
     pub async fn test_run(&self, code: String, name: String) -> TestRunResult {
         let started = Instant::now();
-        let ctx = RunContext { automation_id: 0, automation_name: name, trigger: "test".into() };
+        let ctx = RunContext { automation_id: 0, automation_name: name, trigger: "test".into(), file: None };
         let result = self.execute(code, ctx, None, None).await;
         TestRunResult {
             success: result.success,

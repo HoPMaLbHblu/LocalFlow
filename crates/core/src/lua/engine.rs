@@ -18,8 +18,10 @@ const CHUNK_NAME: &str = "=automation";
 pub struct RunContext {
     pub automation_id: i64,
     pub automation_name: String,
-    /// `"manual"`, `"schedule"` or `"test"`.
+    /// `"manual"`, `"schedule"`, `"startup"`, `"watch"` or `"test"`.
     pub trigger: String,
+    /// For `"watch"` runs: the file that appeared.
+    pub file: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -88,7 +90,15 @@ pub fn execute_with(
 
     let result = (|| -> mlua::Result<()> {
         let lua = sandbox::new_lua(timeout)?;
-        api::register(&lua, policy, logs.clone())?;
+        api::register(&lua, policy, logs.clone(), std::time::Instant::now() + timeout)?;
+
+        // Available both as the `run(ctx)` argument and as a global for plain scripts.
+        let ctx_table = lua.create_table()?;
+        ctx_table.set("id", ctx.automation_id)?;
+        ctx_table.set("name", ctx.automation_name.as_str())?;
+        ctx_table.set("trigger", ctx.trigger.as_str())?;
+        ctx_table.set("file", ctx.file.as_deref())?;
+        lua.globals().set("ctx", &ctx_table)?;
 
         lua.load(code).set_name(CHUNK_NAME).exec()?;
 
@@ -97,11 +107,6 @@ pub fn execute_with(
             let run = run.ok_or_else(|| {
                 mlua::Error::runtime("automation { ... } must define a `run = function(ctx) ... end`")
             })?;
-
-            let ctx_table = lua.create_table()?;
-            ctx_table.set("id", ctx.automation_id)?;
-            ctx_table.set("name", ctx.automation_name.as_str())?;
-            ctx_table.set("trigger", ctx.trigger.as_str())?;
             run.call::<()>(ctx_table)?;
         }
         Ok(())

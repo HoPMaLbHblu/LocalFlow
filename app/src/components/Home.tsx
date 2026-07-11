@@ -8,9 +8,10 @@ interface Props {
   onSelect: (id: number) => void;
   onTemplate: (template: Template) => void;
   onNew: () => void;
+  onGuide: () => void;
 }
 
-export default function Home({ automations, templates, onSelect, onTemplate, onNew }: Props) {
+export default function Home({ automations, templates, onSelect, onTemplate, onNew, onGuide }: Props) {
   if (automations.length === 0) {
     return (
       <div className="page">
@@ -22,6 +23,15 @@ export default function Home({ automations, templates, onSelect, onTemplate, onN
             LocalFlow keeps working in the tray when the window is closed.
           </p>
         </div>
+        <button className="card learn-card" onClick={onGuide}>
+          <span className="learn-icon">📘</span>
+          <span>
+            <strong>New to coding? Start with the guide</strong>
+            <span className="muted small">
+              Short lessons teach you enough Lua to write your own automations, with examples you can try in one click.
+            </span>
+          </span>
+        </button>
         <h2>Start from a template</h2>
         <div className="template-grid">
           {templates.map((t) => (

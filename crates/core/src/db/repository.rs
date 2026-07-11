@@ -37,14 +37,18 @@ impl Repository {
     pub async fn create_automation(&self, new: &NewAutomation) -> sqlx::Result<Automation> {
         let now = now();
         let id = sqlx::query(
-            "INSERT INTO automations (name, description, lua_code, schedule, enabled, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO automations
+                (name, description, lua_code, schedule, enabled, run_on_startup, watch_path, watch_pattern, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&new.name)
         .bind(&new.description)
         .bind(&new.lua_code)
         .bind(&new.schedule)
         .bind(new.enabled)
+        .bind(new.run_on_startup)
+        .bind(&new.watch_path)
+        .bind(&new.watch_pattern)
         .bind(&now)
         .bind(&now)
         .execute(&self.pool)
@@ -62,7 +66,8 @@ impl Repository {
     ) -> sqlx::Result<Option<Automation>> {
         let result = sqlx::query(
             "UPDATE automations
-             SET name = ?, description = ?, lua_code = ?, schedule = ?, enabled = ?, updated_at = ?
+             SET name = ?, description = ?, lua_code = ?, schedule = ?, enabled = ?,
+                 run_on_startup = ?, watch_path = ?, watch_pattern = ?, updated_at = ?
              WHERE id = ?",
         )
         .bind(&new.name)
@@ -70,6 +75,9 @@ impl Repository {
         .bind(&new.lua_code)
         .bind(&new.schedule)
         .bind(new.enabled)
+        .bind(new.run_on_startup)
+        .bind(&new.watch_path)
+        .bind(&new.watch_pattern)
         .bind(now())
         .bind(id)
         .execute(&self.pool)
