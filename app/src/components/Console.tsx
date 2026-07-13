@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { t } from "../i18n";
 import type { LogLine } from "../api";
 import StatusBadge from "./StatusBadge";
 import { explainError } from "../guide/content";
@@ -33,11 +34,11 @@ export default function Console({ state, onClear }: Props) {
             <StatusBadge status={state.status} />
             {state.duration && <span className="muted small">{state.duration}</span>}
             <button className="link small push-right" onClick={onClear}>
-              Clear
+              {t("console.clear")}
             </button>
           </>
         ) : (
-          <span className="muted">Output — press Test run (Ctrl+Enter) to try your script without saving.</span>
+          <span className="muted">{t("console.empty")}</span>
         )}
       </div>
       <div className="console-body">
@@ -57,7 +58,7 @@ export default function Console({ state, onClear }: Props) {
           <div className="console-hint">💡 {renderInline(explainError(state.error)!)}</div>
         )}
         {state && state.status !== "running" && state.lines.length === 0 && !state.error && (
-          <div className="muted">No output.</div>
+          <div className="muted">{t("console.noOutput")}</div>
         )}
         <div ref={bottom} />
       </div>

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { t } from "../i18n";
 import {
   api,
   errorMessages,
@@ -7,7 +8,8 @@ import {
   type AutomationInput,
   type Template,
 } from "../api";
-import { describeTriggers, formatMs, formatDuration, formatRelative, parseOutput, SCHEDULE_PRESETS } from "../format";
+import { describeTriggers, formatMs, formatDuration, formatRelative, isPresetSchedule, parseOutput, schedulePresets } from "../format";
+import { renderInline } from "../guide/GuideText";
 import CodeEditor from "./CodeEditor";
 import Console, { type ConsoleState } from "./Console";
 import RunsTab from "./RunsTab";
@@ -208,18 +210,18 @@ export default function AutomationView({ id, template, setDirty, onSaved, onDele
   const testRun = useCallback(async () => {
     setBusy("testing");
     liveTarget.current = "test";
-    setConsole({ title: "Test run", status: "running", lines: [], error: null, duration: null });
+    setConsole({ title: t("view.testRun"), status: "running", lines: [], error: null, duration: null });
     try {
-      const result = await api.testRun(form.lua_code, form.name || "Untitled");
+      const result = await api.testRun(form.lua_code, form.name || t("view.untitled"));
       setConsole({
-        title: "Test run",
+        title: t("view.testRun"),
         status: result.success ? "success" : "failed",
         lines: result.logs,
         error: result.error,
         duration: formatMs(result.duration_ms),
       });
     } catch (e) {
-      setConsole({ title: "Test run", status: "failed", lines: [], error: errorMessages(e).join("\n"), duration: null });
+      setConsole({ title: t("view.testRun"), status: "failed", lines: [], error: errorMessages(e).join("\n"), duration: null });
     } finally {
       liveTarget.current = null;
       setBusy(null);
@@ -228,23 +230,23 @@ export default function AutomationView({ id, template, setDirty, onSaved, onDele
 
   const runNow = async () => {
     if (id === null) return;
-    if (dirty && !window.confirm("Run now uses the saved version. Your unsaved changes won't be included. Continue?")) {
+    if (dirty && !window.confirm(t("view.runSavedConfirm"))) {
       return;
     }
     setBusy("running");
     liveTarget.current = id;
-    setConsole({ title: "Run", status: "running", lines: [], error: null, duration: null });
+    setConsole({ title: t("view.run"), status: "running", lines: [], error: null, duration: null });
     try {
       const run = await api.runAutomation(id);
       setConsole({
-        title: `Run #${run.id}`,
+        title: t("view.runNumber", { id: run.id }),
         status: run.status,
         lines: parseOutput(run.output),
         error: run.error,
         duration: formatDuration(run.started_at, run.finished_at),
       });
     } catch (e) {
-      setConsole({ title: "Run", status: "failed", lines: [], error: errorMessages(e).join("\n"), duration: null });
+      setConsole({ title: t("view.run"), status: "failed", lines: [], error: errorMessages(e).join("\n"), duration: null });
     } finally {
       liveTarget.current = null;
       setBusy(null);
@@ -268,7 +270,7 @@ export default function AutomationView({ id, template, setDirty, onSaved, onDele
 
   const remove = async () => {
     if (id === null) return onDeleted();
-    if (!window.confirm(`Delete "${detail?.name}" and all of its history?`)) return;
+    if (!window.confirm(t("view.deleteConfirm", { name: detail?.name ?? "" }))) return;
     await api.deleteAutomation(id);
     onDeleted();
   };
@@ -276,51 +278,51 @@ export default function AutomationView({ id, template, setDirty, onSaved, onDele
   if (notFound) {
     return (
       <div className="page">
-        <p className="muted">This automation no longer exists.</p>
+        <p className="muted">{t("view.notFound")}</p>
       </div>
     );
   }
 
   const watching = !!form.watch_path || watchOpen;
-  const isPreset = SCHEDULE_PRESETS.some((p) => p.value === (form.schedule ?? ""));
+  const isPreset = isPresetSchedule(form.schedule ?? "");
 
   return (
     <div className="automation-view">
       <header className="view-header">
         <div className="view-title">
-          <h1>{id === null ? form.name || "New automation" : detail?.name ?? "…"}</h1>
+          <h1>{id === null ? form.name || t("view.newTitle") : detail?.name ?? "…"}</h1>
           <span className="muted small">
             {id === null
-              ? "Not saved yet"
+              ? t("view.notSaved")
               : detail
-                ? (detail.enabled && detail.next_run ? `Next run ${formatRelative(detail.next_run)} · ` : "") +
+                ? (detail.enabled && detail.next_run ? t("view.nextRun", { time: formatRelative(detail.next_run) }) + " · " : "") +
                   describeTriggers(detail)
                 : ""}
-            {id !== null && dirty && " · unsaved changes"}
+            {id !== null && dirty && ` · ${t("view.unsaved")}`}
           </span>
         </div>
         <div className="actions">
-          <label className="switch" title={form.enabled ? "Enabled" : "Disabled"}>
+          <label className="switch" title={form.enabled ? t("view.enabled") : t("view.disabled")}>
             <input type="checkbox" checked={form.enabled} onChange={toggleEnabled} />
             <span className="switch-track" />
-            <span className="small">{form.enabled ? "Enabled" : "Disabled"}</span>
+            <span className="small">{form.enabled ? t("view.enabled") : t("view.disabled")}</span>
           </label>
           {id !== null && (
             <button onClick={runNow} disabled={busy !== null}>
-              {busy === "running" ? "Running…" : "▶ Run now"}
+              {busy === "running" ? t("view.running") : t("view.runNow")}
             </button>
           )}
           <button className="danger-outline" onClick={remove}>
-            {id === null ? "Discard" : "Delete"}
+            {id === null ? t("view.discard") : t("view.delete")}
           </button>
         </div>
       </header>
 
       {id !== null && (
         <nav className="tabs">
-          {(["editor", "history", "logs"] as Tab[]).map((t) => (
-            <button key={t} className={tab === t ? "active" : ""} onClick={() => setTab(t)}>
-              {t === "editor" ? "Editor" : t === "history" ? "Run history" : "Logs"}
+          {(["editor", "history", "logs"] as Tab[]).map((tabName) => (
+            <button key={tabName} className={tab === tabName ? "active" : ""} onClick={() => setTab(tabName)}>
+              {tabName === "editor" ? t("view.tabEditor") : tabName === "history" ? t("view.tabHistory") : t("view.tabLogs")}
             </button>
           ))}
         </nav>
@@ -338,40 +340,40 @@ export default function AutomationView({ id, template, setDirty, onSaved, onDele
         <div className="editor-layout">
           <div className="fields">
             <label>
-              Name
+              {t("view.name")}
               <input value={form.name} maxLength={100} onChange={(e) => update({ name: e.target.value })} />
             </label>
             <label className="grow">
-              Description
+              {t("view.description")}
               <input
                 value={form.description}
-                placeholder="Optional"
+                placeholder={t("view.optional")}
                 onChange={(e) => update({ description: e.target.value })}
               />
             </label>
             <label>
-              Schedule
+              {t("view.schedule")}
               <select
                 value={isPreset ? form.schedule ?? "" : "custom"}
                 onChange={(e) => update({ schedule: e.target.value === "custom" ? form.schedule || "0 0 * * * *" : e.target.value })}
               >
-                {SCHEDULE_PRESETS.map((p) => (
+                {schedulePresets().map((p) => (
                   <option key={p.value} value={p.value}>
                     {p.label}
                   </option>
                 ))}
-                <option value="custom">Custom…</option>
+                <option value="custom">{t("view.custom")}</option>
               </select>
             </label>
             {!isPreset && (
               <label>
-                Cron expression
+                {t("view.cron")}
                 <input
                   className={`mono ${scheduleError ? "invalid" : ""}`}
                   value={form.schedule ?? ""}
-                  placeholder="sec min hour day month weekday"
+                  placeholder={t("view.cronPlaceholder")}
                   onChange={(e) => update({ schedule: e.target.value })}
-                  title={scheduleError ?? "Six fields: second minute hour day month weekday"}
+                  title={scheduleError ?? t("view.cronHelp")}
                 />
               </label>
             )}
@@ -386,8 +388,8 @@ export default function AutomationView({ id, template, setDirty, onSaved, onDele
                 onChange={(e) => update({ run_on_startup: e.target.checked })}
               />
               <span>
-                Run when LocalFlow starts
-                <span className="muted small"> (with Settings › Start with Windows, that's every time you sign in)</span>
+                {t("view.onStartup")}
+                <span className="muted small"> {t("view.onStartupHint")}</span>
               </span>
             </label>
             <label className="check">
@@ -399,12 +401,12 @@ export default function AutomationView({ id, template, setDirty, onSaved, onDele
                   update(e.target.checked ? { watch_path: form.watch_path || "~/Downloads" } : { watch_path: "", watch_pattern: "" });
                 }}
               />
-              <span>Run when a new file appears in a folder</span>
+              <span>{t("view.watch")}</span>
             </label>
             {watching && (
               <div className="watch-fields">
                 <label className="grow">
-                  Folder
+                  {t("view.folder")}
                   <input
                     className="mono"
                     value={form.watch_path ?? ""}
@@ -413,17 +415,15 @@ export default function AutomationView({ id, template, setDirty, onSaved, onDele
                   />
                 </label>
                 <label>
-                  Files
+                  {t("view.files")}
                   <input
                     className="mono"
                     value={form.watch_pattern ?? ""}
-                    placeholder="* (all files)"
+                    placeholder={t("view.allFiles")}
                     onChange={(e) => update({ watch_pattern: e.target.value })}
                   />
                 </label>
-                <span className="muted small watch-hint">
-                  The new file is in <code>ctx.file</code>.
-                </span>
+                <span className="muted small watch-hint">{renderInline(t("view.watchHint", { code: "`ctx.file`" }))}</span>
               </div>
             )}
           </div>
@@ -443,16 +443,16 @@ export default function AutomationView({ id, template, setDirty, onSaved, onDele
 
           <div className="editor-toolbar">
             <button className="secondary" onClick={testRun} disabled={busy !== null} title="Ctrl+Enter">
-              {busy === "testing" ? "Testing…" : "Test run"}
+              {busy === "testing" ? t("view.testing") : t("view.testRun")}
             </button>
-            <span className="muted small">Test runs don't save anything, but file operations are real.</span>
+            <span className="muted small">{t("view.testRunNote")}</span>
             {!helpOpen && (
               <button className="link small" onClick={toggleHelp}>
-                ? Show help
+                {t("view.showHelp")}
               </button>
             )}
             <button className="primary push-right" onClick={save} disabled={busy !== null || (!dirty && id !== null)} title="Ctrl+S">
-              {busy === "saving" ? "Saving…" : id === null ? "Create automation" : "Save"}
+              {busy === "saving" ? t("view.saving") : id === null ? t("view.create") : t("view.save")}
             </button>
           </div>
 

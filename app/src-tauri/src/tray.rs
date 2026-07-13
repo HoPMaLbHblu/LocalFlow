@@ -16,10 +16,15 @@ const RUN_PREFIX: &str = "run:";
 pub const TRAY_TRIGGER: &str = "tray";
 
 fn build_menu(app: &AppHandle, automations: &[(i64, String)]) -> tauri::Result<Menu<tauri::Wry>> {
-    let open = MenuItem::with_id(app, "open", "Open LocalFlow", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+    // Before setup finishes there is no state yet; fall back to English.
+    let texts = app
+        .try_state::<AppState>()
+        .map(|s| s.prefs.texts())
+        .unwrap_or_else(|| crate::i18n::texts("en"));
+    let open = MenuItem::with_id(app, "open", texts.open, true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", texts.quit, true, None::<&str>)?;
 
-    let run = Submenu::with_id(app, "run", "Run", !automations.is_empty())?;
+    let run = Submenu::with_id(app, "run", texts.run, !automations.is_empty())?;
     for (id, name) in automations {
         run.append(&MenuItem::with_id(app, format!("{RUN_PREFIX}{id}"), name, true, None::<&str>)?)?;
     }

@@ -26,8 +26,9 @@
   color-scheme: light;
 }
 
+/* Dark colours: used when Windows is dark (unless Light is chosen in Settings), or when Dark is chosen. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #15181f;
     --sidebar: #1b1f28;
     --surface: #1f2430;
@@ -50,6 +51,30 @@
     --console-bg: #181c24;
     color-scheme: dark;
   }
+}
+
+:root[data-theme="dark"] {
+  --bg: #15181f;
+  --sidebar: #1b1f28;
+  --surface: #1f2430;
+  --surface-2: #232937;
+  --text: #e4e7ee;
+  --muted: #949cb0;
+  --border: #2e3544;
+  --accent: #6c89ff;
+  --accent-hover: #86a0ff;
+  --accent-soft: #26305a;
+  --on-accent: #0c1024;
+  --ok: #4fc585;
+  --ok-soft: #173427;
+  --bad: #ff7d7d;
+  --bad-soft: #3b1e22;
+  --warn: #f2b84b;
+  --warn-soft: #3a2d12;
+  --notify: #b99bff;
+  --notify-soft: #2e2548;
+  --console-bg: #181c24;
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -420,3 +445,11 @@ label input, label select { color: var(--text); font-size: .9rem; font-weight: n
 .watch-fields label { min-width: 150px; }
 .watch-fields label.grow { flex: 1; min-width: 240px; }
 .watch-hint { padding-bottom: .5rem; }
+
+/* ---- settings: appearance ---------------------------------------------- */
+
+.setting-row { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-top: .75rem; }
+.setting-row label { flex-direction: row; font-size: inherit; font-weight: inherit; color: inherit; }
+.setting-row select { width: auto; min-width: 220px; }
+
+.page.narrow code { word-break: break-all; }

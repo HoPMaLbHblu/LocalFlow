@@ -1,34 +1,40 @@
 //! User preferences, stored in the `settings` table.
 
-use std::{
-    path::PathBuf,
-    sync::atomic::{AtomicBool, Ordering},
-};
+use std::{path::PathBuf, sync::atomic::Ordering};
 
 use localflow_core::{CoreResult, LocalFlow};
 use serde::Serialize;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Manager, State, Theme};
 use tauri_plugin_autostart::ManagerExt;
 
-use crate::{commands::CommandError, AppState};
+use crate::{commands::CommandError, i18n, tray, AppState, Prefs};
 
 const NOTIFICATIONS: &str = "notifications";
 const ALLOWED_DIRS: &str = "allowed_dirs";
+const LANGUAGE: &str = "language";
+const THEME: &str = "theme";
+
+const THEMES: [&str; 3] = ["system", "light", "dark"];
 
 #[derive(Serialize)]
 pub struct Settings {
     autostart: bool,
     notifications: bool,
     allowed_dirs: Vec<String>,
+    /// "auto", "en", "ru" or "de".
+    language: String,
+    /// "system", "light" or "dark".
+    theme: String,
     data_dir: String,
     version: String,
 }
 
 /// Load saved preferences into the running app. Called once at startup.
-pub async fn apply_saved(flow: &LocalFlow, notifications: &AtomicBool) -> CoreResult<()> {
+/// Returns the saved theme so the window can use it straight away.
+pub async fn apply_saved(flow: &LocalFlow, prefs: &Prefs) -> CoreResult<String> {
     let repo = flow.repo();
     if let Some(value) = repo.get_setting(NOTIFICATIONS).await? {
-        notifications.store(value == "true", Ordering::Relaxed);
+        prefs.notifications.store(value == "true", Ordering::Relaxed);
     }
     if let Some(value) = repo.get_setting(ALLOWED_DIRS).await? {
         let dirs = parse_dirs(&value);
@@ -36,7 +42,19 @@ pub async fn apply_saved(flow: &LocalFlow, notifications: &AtomicBool) -> CoreRe
             flow.set_allowed_dirs(&dirs);
         }
     }
-    Ok(())
+    let language = repo.get_setting(LANGUAGE).await?.unwrap_or_else(|| "auto".into());
+    *prefs.language.write().expect("language lock") = i18n::resolve(&language);
+
+    Ok(repo.get_setting(THEME).await?.unwrap_or_else(|| "system".into()))
+}
+
+/// The window's title bar theme for a theme setting; `None` follows Windows.
+pub fn window_theme(theme: &str) -> Option<Theme> {
+    match theme {
+        "light" => Some(Theme::Light),
+        "dark" => Some(Theme::Dark),
+        _ => None,
+    }
 }
 
 /// Stored as one folder per line.
@@ -50,6 +68,7 @@ fn error(message: impl ToString) -> CommandError {
 
 #[tauri::command]
 pub async fn get_settings(app: AppHandle, state: State<'_, AppState>) -> Result<Settings, CommandError> {
+    let repo = state.flow.repo();
     let allowed_dirs = state
         .flow
         .path_policy()
@@ -60,8 +79,10 @@ pub async fn get_settings(app: AppHandle, state: State<'_, AppState>) -> Result<
 
     Ok(Settings {
         autostart: app.autolaunch().is_enabled().unwrap_or(false),
-        notifications: state.notifications.load(Ordering::Relaxed),
+        notifications: state.prefs.notifications.load(Ordering::Relaxed),
         allowed_dirs,
+        language: repo.get_setting(LANGUAGE).await.map_err(error)?.unwrap_or_else(|| "auto".into()),
+        theme: repo.get_setting(THEME).await.map_err(error)?.unwrap_or_else(|| "system".into()),
         data_dir: app.path().app_data_dir().map(|p| p.display().to_string()).unwrap_or_default(),
         version: app.package_info().version.to_string(),
     })
@@ -76,13 +97,37 @@ pub fn set_autostart(app: AppHandle, enabled: bool) -> Result<(), CommandError> 
 
 #[tauri::command]
 pub async fn set_notifications(state: State<'_, AppState>, enabled: bool) -> Result<(), CommandError> {
-    state.notifications.store(enabled, Ordering::Relaxed);
+    state.prefs.notifications.store(enabled, Ordering::Relaxed);
     state
         .flow
         .repo()
         .set_setting(NOTIFICATIONS, if enabled { "true" } else { "false" })
         .await
         .map_err(error)
+}
+
+/// `language` is "auto" (follow Windows) or a language code.
+#[tauri::command]
+pub async fn set_language(app: AppHandle, state: State<'_, AppState>, language: String) -> Result<(), CommandError> {
+    if language != "auto" && !i18n::LANGUAGES.contains(&language.as_str()) {
+        return Err(error(format!("unsupported language: {language}")));
+    }
+    state.flow.repo().set_setting(LANGUAGE, &language).await.map_err(error)?;
+    *state.prefs.language.write().expect("language lock") = i18n::resolve(&language);
+    tray::refresh(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn set_theme(app: AppHandle, state: State<'_, AppState>, theme: String) -> Result<(), CommandError> {
+    if !THEMES.contains(&theme.as_str()) {
+        return Err(error(format!("unsupported theme: {theme}")));
+    }
+    state.flow.repo().set_setting(THEME, &theme).await.map_err(error)?;
+    if let Some(window) = app.get_webview_window("main") {
+        window.set_theme(window_theme(&theme)).map_err(error)?;
+    }
+    Ok(())
 }
 
 /// Replace the folders scripts may access. Every folder must exist.
