@@ -2,6 +2,12 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Permissions for the main window. Everything else goes through LocalFlow's own commands.",
-  "windows": ["main"],
-  "permissions": ["core:default"]
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "dialog:allow-open",
+    "dialog:allow-save"
+  ]
 }

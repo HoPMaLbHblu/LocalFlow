@@ -78,6 +78,8 @@ export interface Settings {
   language: string;
   /** "system", "light" or "dark". */
   theme: string;
+  /** How long a script may run, in seconds. */
+  script_timeout_secs: number;
   data_dir: string;
   version: string;
 }
@@ -91,6 +93,39 @@ export interface AutomationInput {
   run_on_startup: boolean;
   watch_path: string | null;
   watch_pattern: string | null;
+}
+
+/** Contents of a .localflow file. */
+export interface SharedAutomation {
+  format: string;
+  version: number;
+  name: string;
+  description: string;
+  lua_code: string;
+  schedule: string | null;
+  run_on_startup: boolean;
+  watch_path: string | null;
+  watch_pattern: string | null;
+  exported_at?: string;
+  app_version?: string;
+}
+
+export type Risk =
+  | "deletes_files"
+  | "moves_files"
+  | "writes_files"
+  | "opens_apps"
+  | "uses_internet"
+  | "uses_clipboard"
+  | "runs_on_startup"
+  | "watches_folder"
+  | "runs_on_schedule";
+
+export interface ImportPreview {
+  automation: SharedAutomation;
+  risks: Risk[];
+  /** Reasons the file can't be imported as it is (e.g. a Lua syntax error). */
+  problems: string[];
 }
 
 export type CommandError =
@@ -114,6 +149,11 @@ export type CoreEvent =
   | { type: "log"; automation_id: number | null; run_id: number | null; level: string; message: string }
   | { type: "run_finished"; automation_id: number; name: string; trigger: string; run: AutomationRun }
   | { type: "automations_changed" };
+
+/** A .localflow file was opened while LocalFlow was already running. */
+export function onOpenFile(handler: (path: string) => void): Promise<UnlistenFn> {
+  return listen<string>("localflow://open-file", (e) => handler(e.payload));
+}
 
 export function onCoreEvent(handler: (event: CoreEvent) => void): Promise<UnlistenFn> {
   return listen<CoreEvent>("localflow://event", (e) => handler(e.payload));
@@ -140,4 +180,9 @@ export const api = {
   setAllowedDirs: (dirs: string[]) => invoke<void>("set_allowed_dirs", { dirs }),
   setLanguage: (language: string) => invoke<void>("set_language", { language }),
   setTheme: (theme: string) => invoke<void>("set_theme", { theme }),
+  setScriptTimeout: (seconds: number) => invoke<void>("set_script_timeout", { seconds }),
+  exportAutomation: (id: number, path: string) => invoke<void>("export_automation", { id, path }),
+  previewImport: (path: string) => invoke<ImportPreview>("preview_import", { path }),
+  importAutomation: (path: string) => invoke<Automation>("import_automation", { path }),
+  takePendingImport: () => invoke<string | null>("take_pending_import"),
 };

@@ -54,9 +54,16 @@ impl LogCollector {
 
 pub type LogSink = Rc<LogCollector>;
 
-pub fn register(lua: &Lua, policy: Arc<PathPolicy>, logs: LogSink, deadline: std::time::Instant) -> mlua::Result<()> {
+pub fn register(
+    lua: &Lua,
+    policy: Arc<PathPolicy>,
+    logs: LogSink,
+    deadline: std::time::Instant,
+    store: super::data::SharedStore,
+) -> mlua::Result<()> {
     let globals = lua.globals();
-    super::system::register(lua, deadline)?;
+    super::system::register(lua, policy.clone(), deadline)?;
+    super::data::register(lua, store, deadline)?;
 
     let sink = logs.clone();
     globals.set(
@@ -96,7 +103,9 @@ pub fn register(lua: &Lua, policy: Arc<PathPolicy>, logs: LogSink, deadline: std
         })?,
     )?;
 
-    globals.set("fs", fs_table(lua, policy)?)?;
+    let fs = fs_table(lua, policy.clone())?;
+    super::files::register(lua, &fs, policy, deadline)?;
+    globals.set("fs", fs)?;
     Ok(())
 }
 

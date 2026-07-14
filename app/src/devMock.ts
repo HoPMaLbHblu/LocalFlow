@@ -68,9 +68,23 @@ export function installDevMock() {
       }
       case "update_automation": { Object.assign(find(), args.input); return find(); }
       case "delete_automation": automations = automations.filter((a) => a.id !== args.id); return null;
-      case "get_settings": return { autostart: true, notifications: true, allowed_dirs: ["C:\\Users\\you"], language: "auto", theme: "system", data_dir: "C:\\Users\\you\\AppData\\Roaming\\com.hopmalbhblu.localflow", version: "2.2.0" };
+      case "get_settings": return { autostart: true, notifications: true, allowed_dirs: ["C:\\Users\\you"], language: "auto", theme: "system", script_timeout_secs: 30, data_dir: "C:\\Users\\you\\AppData\\Roaming\\com.hopmalbhblu.localflow", version: "2.3.0" };
       case "plugin:event|listen": return 1;
-      case "set_language": case "set_theme": return null;
+      case "set_language": case "set_theme": case "set_script_timeout": case "export_automation": return null;
+      case "take_pending_import": return null;
+      case "plugin:dialog|open": return "C:\\Users\\you\\Downloads\\Cleaner.localflow";
+      case "plugin:dialog|save": return "C:\\Users\\you\\Documents\\export.localflow";
+      case "preview_import": return {
+        automation: { format: "localflow", version: 1, name: "Downloads cleaner", description: "Deletes old installers and opens Explorer.",
+          lua_code: 'for _, f in ipairs(fs.find("~/Downloads", "*.exe")) do\n    fs.delete(f)\nend\napp.open("~/Downloads")\n',
+          schedule: "0 0 9 * * Mon", run_on_startup: false, watch_path: null, watch_pattern: null, app_version: "2.3.0" },
+        risks: ["deletes_files", "opens_apps", "runs_on_schedule"], problems: [] };
+      case "import_automation": {
+        const a: AutomationSummary = { id: automations.length + 1, name: "Downloads cleaner", description: "", lua_code: "log(1)", schedule: "0 0 9 * * Mon",
+          enabled: false, created_at: iso(0), updated_at: iso(0), run_on_startup: false, watch_path: null, watch_pattern: null, last_run: null, next_run: null };
+        automations = [...automations, a];
+        return a;
+      }
       default: return null;
     }
   });

@@ -14,6 +14,16 @@ const THEMES: { value: Theme; label: () => string }[] = [
   { value: "dark", label: () => t("settings.themeDark") },
 ];
 
+/** Choices for how long a script may run, in seconds. */
+const TIME_LIMITS = [30, 60, 120, 300, 600, 1800, 3600];
+
+function timeLimitLabel(seconds: number): string {
+  if (seconds < 60) return t("settings.seconds", { n: seconds });
+  if (seconds === 60) return t("settings.oneMinute");
+  if (seconds === 3600) return t("settings.oneHour");
+  return t("settings.minutes", { n: Math.round(seconds / 60) });
+}
+
 export default function SettingsView({ onLanguageChange }: Props) {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [dirs, setDirs] = useState<string[]>([]);
@@ -94,6 +104,27 @@ export default function SettingsView({ onLanguageChange }: Props) {
             ))}
           </select>
         </div>
+      </section>
+
+      <section className="card setting">
+        <div>
+          <strong>{t("settings.timeLimit")}</strong>
+          <p className="muted small">{t("settings.timeLimitText")}</p>
+        </div>
+        <select
+          value={settings.script_timeout_secs}
+          onChange={(e) => run(() => api.setScriptTimeout(Number(e.target.value)), t("settings.saved"))}
+        >
+          {/* Keep an unusual saved value selectable. */}
+          {!TIME_LIMITS.includes(settings.script_timeout_secs) && (
+            <option value={settings.script_timeout_secs}>{timeLimitLabel(settings.script_timeout_secs)}</option>
+          )}
+          {TIME_LIMITS.map((seconds) => (
+            <option key={seconds} value={seconds}>
+              {timeLimitLabel(seconds)}
+            </option>
+          ))}
+        </select>
       </section>
 
       <section className="card setting">

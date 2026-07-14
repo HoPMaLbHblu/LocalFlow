@@ -13,6 +13,7 @@ interface Props {
   onHome: () => void;
   onSettings: () => void;
   onGuide: () => void;
+  onImport: () => void;
 }
 
 /** Status dot: green/red for the last run, grey if it never ran, hollow if disabled. */
@@ -36,9 +37,14 @@ export default function Sidebar(props: Props) {
         LocalFlow
       </button>
 
-      <button className="primary new-button" onClick={props.onNew}>
-        {t("sidebar.new")}
-      </button>
+      <div className="new-row">
+        <button className="primary new-button" onClick={props.onNew}>
+          {t("sidebar.new")}
+        </button>
+        <button className="secondary import-button" onClick={props.onImport} title={t("import.title")}>
+          {t("sidebar.import")}
+        </button>
+      </div>
 
       {props.automations.length > 5 && (
         <input

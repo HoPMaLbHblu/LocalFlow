@@ -192,6 +192,39 @@ impl Repository {
         Ok(())
     }
 
+    // ---- store (script memory) ---------------------------------------------
+
+    /// Everything an automation has saved with `store.set`, as JSON text by key.
+    pub async fn load_store(&self, automation_id: i64) -> sqlx::Result<std::collections::HashMap<String, String>> {
+        let rows: Vec<(String, String)> = sqlx::query_as("SELECT key, value FROM automation_store WHERE automation_id = ?")
+            .bind(automation_id)
+            .fetch_all(&self.pool)
+            .await?;
+        Ok(rows.into_iter().collect())
+    }
+
+    /// Replace everything an automation has saved.
+    pub async fn save_store(
+        &self,
+        automation_id: i64,
+        values: &std::collections::HashMap<String, String>,
+    ) -> sqlx::Result<()> {
+        let mut tx = self.pool.begin().await?;
+        sqlx::query("DELETE FROM automation_store WHERE automation_id = ?")
+            .bind(automation_id)
+            .execute(&mut *tx)
+            .await?;
+        for (key, value) in values {
+            sqlx::query("INSERT INTO automation_store (automation_id, key, value) VALUES (?, ?, ?)")
+                .bind(automation_id)
+                .bind(key)
+                .bind(value)
+                .execute(&mut *tx)
+                .await?;
+        }
+        tx.commit().await
+    }
+
     // ---- settings ----------------------------------------------------------
 
     pub async fn get_setting(&self, key: &str) -> sqlx::Result<Option<String>> {

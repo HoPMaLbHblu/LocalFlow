@@ -6,6 +6,10 @@ import AutomationView from "./components/AutomationView";
 import TemplatePicker from "./components/TemplatePicker";
 import SettingsView from "./components/SettingsView";
 import GuidePage from "./components/GuidePage";
+import ImportView from "./components/ImportView";
+import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { onOpenFile } from "./api";
 import { t, tMaybe } from "./i18n";
 
 export type View =
@@ -14,7 +18,10 @@ export type View =
   | { kind: "draft"; template: Template }
   | { kind: "automation"; id: number }
   | { kind: "settings" }
-  | { kind: "guide" };
+  | { kind: "guide" }
+  | { kind: "import"; path: string };
+
+const isLocalflowFile = (path: string) => path.toLowerCase().endsWith(".localflow");
 
 /** Built-in templates come from Rust in English; show them in the current language. */
 function localizeTemplate(template: Template): Template {
@@ -81,6 +88,38 @@ export default function App({ initialView, onLanguageChange }: Props) {
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, []);
 
+  // .localflow files: opened by double-click (at startup or while running) or dropped on the window.
+  useEffect(() => {
+    api.takePendingImport().then((path) => path && navigate({ kind: "import", path }));
+    const unlistenOpen = onOpenFile((path) => navigate({ kind: "import", path }));
+    // Drag and drop is a convenience: if it can't be set up, everything else still works.
+    let unlistenDrop: Promise<() => void> = Promise.resolve(() => {});
+    try {
+      unlistenDrop = getCurrentWebview()
+        .onDragDropEvent((event) => {
+          if (event.payload.type !== "drop") return;
+          const file = event.payload.paths.find(isLocalflowFile);
+          if (file) navigate({ kind: "import", path: file });
+        })
+        .catch(() => () => {});
+    } catch {
+      // Not running inside the desktop window (browser preview).
+    }
+    return () => {
+      unlistenOpen.then((f) => f());
+      unlistenDrop.then((f) => f());
+    };
+  }, [navigate]);
+
+  const pickImportFile = async () => {
+    const path = await openFileDialog({
+      multiple: false,
+      directory: false,
+      filters: [{ name: t("import.fileType"), extensions: ["localflow"] }],
+    });
+    if (typeof path === "string") navigate({ kind: "import", path });
+  };
+
   const selectedId = view.kind === "automation" ? view.id : null;
   const openGuide = () => navigate({ kind: "guide" });
   const draftCounter = useRef(0);
@@ -101,6 +140,7 @@ export default function App({ initialView, onLanguageChange }: Props) {
         onHome={() => navigate({ kind: "home" })}
         onSettings={() => navigate({ kind: "settings" })}
         onGuide={openGuide}
+        onImport={pickImportFile}
       />
       <main className="main">
         {loadError && <div className="banner error">{t("app.loadError", { error: loadError })}</div>}
@@ -150,6 +190,14 @@ export default function App({ initialView, onLanguageChange }: Props) {
         )}
         {view.kind === "settings" && <SettingsView onLanguageChange={onLanguageChange} />}
         {view.kind === "guide" && <GuidePage onTry={openDraft} />}
+        {view.kind === "import" && (
+          <ImportView
+            key={view.path}
+            path={view.path}
+            onImported={(id) => navigate({ kind: "automation", id })}
+            onCancel={() => navigate({ kind: "home" })}
+          />
+        )}
       </main>
     </div>
   );

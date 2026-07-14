@@ -7,6 +7,7 @@
 mod commands;
 mod i18n;
 mod settings;
+mod sharing;
 mod tray;
 
 use std::sync::{
@@ -93,7 +94,10 @@ pub fn run() {
 
     tauri::Builder::default()
         // A second launch just brings the existing window forward.
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_main_window(app)))
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            sharing::open_from_second_instance(app, args)
+        }))
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
@@ -130,6 +134,8 @@ pub fn run() {
                 let _ = window.set_theme(settings::window_theme(&theme));
             }
             app.manage(AppState { flow, prefs });
+            // Opened by double-clicking a .localflow file: the frontend picks it up when ready.
+            app.manage(sharing::PendingImport(std::sync::Mutex::new(sharing::file_argument(std::env::args()))));
             tray::create(&handle)?;
 
             if std::env::args().any(|a| a == MINIMIZED_FLAG) {
@@ -166,6 +172,11 @@ pub fn run() {
             settings::set_allowed_dirs,
             settings::set_language,
             settings::set_theme,
+            settings::set_script_timeout,
+            sharing::export_automation,
+            sharing::preview_import,
+            sharing::import_automation,
+            sharing::take_pending_import,
         ])
         .run(tauri::generate_context!())
         .expect("error while running LocalFlow");

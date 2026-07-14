@@ -16,6 +16,7 @@ import RunsTab from "./RunsTab";
 import LogsTab from "./LogsTab";
 import HelpPanel from "./HelpPanel";
 import type { EditorView } from "@codemirror/view";
+import { save as saveFileDialog } from "@tauri-apps/plugin-dialog";
 
 type Tab = "editor" | "history" | "logs";
 
@@ -78,6 +79,26 @@ export default function AutomationView({ id, template, setDirty, onSaved, onDele
   const [saved, setSaved] = useState<AutomationInput | null>(null);
   const [tab, setTab] = useState<Tab>("editor");
   const [errors, setErrors] = useState<string[]>([]);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const exportToFile = async () => {
+    if (id === null || !detail) return;
+    // Windows doesn't allow these characters in file names.
+    const fileName = (detail.name.replace(/[<>:"/\\|?*]+/g, " ").trim() || "automation") + ".localflow";
+    const path = await saveFileDialog({
+      title: t("view.exportTitle"),
+      defaultPath: fileName,
+      filters: [{ name: t("import.fileType"), extensions: ["localflow"] }],
+    });
+    if (!path) return;
+    try {
+      await api.exportAutomation(id, path);
+      setErrors([]);
+      setNotice(t("view.exported", { path }));
+    } catch (e) {
+      setErrors(errorMessages(e));
+    }
+  };
   const [scheduleError, setScheduleError] = useState<string | null>(null);
   const [busy, setBusy] = useState<"saving" | "running" | "testing" | null>(null);
   const [console_, setConsole] = useState<ConsoleState | null>(null);
@@ -312,6 +333,11 @@ export default function AutomationView({ id, template, setDirty, onSaved, onDele
               {busy === "running" ? t("view.running") : t("view.runNow")}
             </button>
           )}
+          {id !== null && (
+            <button className="secondary" onClick={exportToFile} title={t("view.exportTitle")}>
+              {t("view.export")}
+            </button>
+          )}
           <button className="danger-outline" onClick={remove}>
             {id === null ? t("view.discard") : t("view.delete")}
           </button>
@@ -328,6 +354,11 @@ export default function AutomationView({ id, template, setDirty, onSaved, onDele
         </nav>
       )}
 
+      {notice && (
+        <div className="banner ok" onClick={() => setNotice(null)}>
+          {notice}
+        </div>
+      )}
       {errors.length > 0 && (
         <div className="banner error">
           {errors.map((e, i) => (

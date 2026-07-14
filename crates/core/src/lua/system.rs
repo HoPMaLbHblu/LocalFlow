@@ -26,17 +26,27 @@ use std::{
 };
 
 use chrono::{DateTime, Datelike, Local, Timelike};
-use mlua::{Lua, Table};
+use mlua::{Lua, Table, Value};
 use sysinfo::{ProcessesToUpdate, System};
 
 fn err(function: &str, error: impl std::fmt::Display) -> mlua::Error {
     mlua::Error::runtime(format!("{function}: {error}"))
 }
 
-pub fn register(lua: &Lua, deadline: Instant) -> mlua::Result<()> {
+pub fn register(lua: &Lua, policy: std::sync::Arc<super::sandbox::PathPolicy>, deadline: Instant) -> mlua::Result<()> {
     let globals = lua.globals();
     globals.set("app", app_table(lua)?)?;
     globals.set("time", time_table(lua)?)?;
+    globals.set("system", system_table(lua)?)?;
+    globals.set("clipboard", clipboard_table(lua)?)?;
+    globals.set("sound", sound_table(lua, policy)?)?;
+
+    globals.set(
+        "ask",
+        lua.create_function(|_, (question, title): (String, Option<String>)| {
+            ask(&question, title.as_deref().unwrap_or("LocalFlow")).map_err(|e| err("ask", e))
+        })?,
+    )?;
 
     globals.set(
         "wait",
@@ -213,6 +223,217 @@ fn running_processes() -> BTreeSet<String> {
         .map(|p| process_key(&p.name().to_string_lossy()))
         .filter(|n| !n.is_empty())
         .collect()
+}
+
+// ---- system information ----------------------------------------------------------
+
+fn system_table(lua: &Lua) -> mlua::Result<Table> {
+    use sysinfo::{Disks, MemoryRefreshKind, RefreshKind};
+
+    let system = lua.create_table()?;
+
+    system.set("computer_name", lua.create_function(|_, ()| Ok(System::host_name().unwrap_or_default()))?)?;
+    system.set(
+        "user_name",
+        lua.create_function(|_, ()| {
+            Ok(std::env::var("USERNAME").or_else(|_| std::env::var("USER")).unwrap_or_default())
+        })?,
+    )?;
+    system.set(
+        "os",
+        lua.create_function(|_, ()| {
+            Ok(System::long_os_version().or_else(System::name).unwrap_or_else(|| std::env::consts::OS.to_string()))
+        })?,
+    )?;
+    system.set("uptime", lua.create_function(|_, ()| Ok(System::uptime()))?)?;
+
+    system.set(
+        "memory",
+        lua.create_function(|lua, ()| {
+            let sys = System::new_with_specifics(RefreshKind::nothing().with_memory(MemoryRefreshKind::everything()));
+            let table = lua.create_table()?;
+            table.set("total", sys.total_memory())?;
+            table.set("used", sys.used_memory())?;
+            table.set("free", sys.available_memory())?;
+            Ok(table)
+        })?,
+    )?;
+
+    system.set(
+        "cpu",
+        lua.create_function(|_, ()| {
+            // CPU usage is measured over a short interval.
+            let mut sys = System::new();
+            sys.refresh_cpu_usage();
+            std::thread::sleep(sysinfo::MINIMUM_CPU_UPDATE_INTERVAL.max(Duration::from_millis(200)));
+            sys.refresh_cpu_usage();
+            Ok((sys.global_cpu_usage() * 10.0).round() / 10.0)
+        })?,
+    )?;
+
+    system.set(
+        "disks",
+        lua.create_function(|lua, ()| {
+            let disks = Disks::new_with_refreshed_list();
+            let list = lua.create_table()?;
+            for disk in disks.list() {
+                let entry = lua.create_table()?;
+                entry.set("name", disk.name().to_string_lossy().into_owned())?;
+                entry.set("mount", disk.mount_point().to_string_lossy().into_owned())?;
+                entry.set("total", disk.total_space())?;
+                entry.set("free", disk.available_space())?;
+                entry.set("removable", disk.is_removable())?;
+                list.push(entry)?;
+            }
+            Ok(list)
+        })?,
+    )?;
+
+    system.set(
+        "disk_free",
+        lua.create_function(|_, path: Option<String>| {
+            let target = expand_home(path.as_deref().unwrap_or("~")).to_string_lossy().to_lowercase().replace('/', "\\");
+            let disks = Disks::new_with_refreshed_list();
+            // The disk whose mount point is the longest prefix of the path.
+            let best = disks
+                .list()
+                .iter()
+                .filter(|d| {
+                    let mount = d.mount_point().to_string_lossy().to_lowercase().replace('/', "\\");
+                    target.starts_with(&mount)
+                })
+                .max_by_key(|d| d.mount_point().as_os_str().len());
+            Ok(best.map(|d| d.available_space()))
+        })?,
+    )?;
+
+    system.set(
+        "battery",
+        lua.create_function(|lua, ()| match battery_status() {
+            None => Ok(Value::Nil),
+            Some((percent, charging, plugged_in)) => {
+                let table = lua.create_table()?;
+                table.set("percent", percent)?;
+                table.set("charging", charging)?;
+                table.set("plugged_in", plugged_in)?;
+                Ok(Value::Table(table))
+            }
+        })?,
+    )?;
+
+    Ok(system)
+}
+
+/// `(percent, charging, plugged_in)`, or `None` on a PC without a battery.
+#[cfg(windows)]
+fn battery_status() -> Option<(u8, bool, bool)> {
+    use windows_sys::Win32::System::Power::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
+    let mut status: SYSTEM_POWER_STATUS = unsafe { std::mem::zeroed() };
+    // SAFETY: `status` is a valid, writable SYSTEM_POWER_STATUS.
+    if unsafe { GetSystemPowerStatus(&mut status) } == 0 {
+        return None;
+    }
+    // 128 = no system battery, 255 = unknown.
+    if status.BatteryFlag & 128 != 0 || status.BatteryLifePercent == 255 {
+        return None;
+    }
+    Some((status.BatteryLifePercent, status.BatteryFlag & 8 != 0, status.ACLineStatus == 1))
+}
+
+#[cfg(not(windows))]
+fn battery_status() -> Option<(u8, bool, bool)> {
+    None
+}
+
+// ---- clipboard, dialogs, sound ---------------------------------------------------
+
+fn clipboard_table(lua: &Lua) -> mlua::Result<Table> {
+    let clipboard = lua.create_table()?;
+    clipboard.set(
+        "get",
+        lua.create_function(|_, ()| {
+            let mut board = arboard::Clipboard::new().map_err(|e| err("clipboard.get", e))?;
+            Ok(board.get_text().ok())
+        })?,
+    )?;
+    clipboard.set(
+        "set",
+        lua.create_function(|_, text: String| {
+            let mut board = arboard::Clipboard::new().map_err(|e| err("clipboard.set", e))?;
+            board.set_text(text).map_err(|e| err("clipboard.set", e))
+        })?,
+    )?;
+    Ok(clipboard)
+}
+
+/// Show a Yes/No question and wait for the answer.
+#[cfg(windows)]
+fn ask(question: &str, title: &str) -> Result<bool, String> {
+    let answer = rfd::MessageDialog::new()
+        .set_title(title)
+        .set_description(question)
+        .set_level(rfd::MessageLevel::Info)
+        .set_buttons(rfd::MessageButtons::YesNo)
+        .show();
+    Ok(answer == rfd::MessageDialogResult::Yes)
+}
+
+#[cfg(not(windows))]
+fn ask(_question: &str, _title: &str) -> Result<bool, String> {
+    Err("dialogs are only available on Windows".into())
+}
+
+fn sound_table(lua: &Lua, policy: std::sync::Arc<super::sandbox::PathPolicy>) -> mlua::Result<Table> {
+    let sound = lua.create_table()?;
+    sound.set("beep", lua.create_function(|_, ()| beep().map_err(|e| err("sound.beep", e)))?)?;
+    sound.set(
+        "play",
+        lua.create_function(move |_, path: String| {
+            let resolved = policy.resolve(&path).map_err(|e| err("sound.play", e))?;
+            if !resolved.is_file() {
+                return Err(err("sound.play", format!("file not found: {path}")));
+            }
+            let is_wav = resolved.extension().is_some_and(|e| e.eq_ignore_ascii_case("wav"));
+            if !is_wav {
+                return Err(err("sound.play", "only .wav files can be played"));
+            }
+            play_wav(&resolved).map_err(|e| err("sound.play", e))
+        })?,
+    )?;
+    Ok(sound)
+}
+
+#[cfg(windows)]
+fn beep() -> Result<(), String> {
+    use windows_sys::Win32::{System::Diagnostics::Debug::MessageBeep, UI::WindowsAndMessaging::MB_OK};
+    // SAFETY: MessageBeep takes a plain flag and has no memory requirements.
+    unsafe { MessageBeep(MB_OK) };
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn beep() -> Result<(), String> {
+    Err("sound is only available on Windows".into())
+}
+
+/// Starts playing and returns immediately; the sound keeps playing in the background.
+#[cfg(windows)]
+fn play_wav(path: &Path) -> Result<(), String> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Media::Audio::{PlaySoundW, SND_ASYNC, SND_FILENAME, SND_NODEFAULT};
+    let wide: Vec<u16> = path.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
+    // SAFETY: `wide` is a NUL-terminated UTF-16 path that outlives the call.
+    let ok = unsafe { PlaySoundW(wide.as_ptr(), std::ptr::null_mut(), SND_FILENAME | SND_ASYNC | SND_NODEFAULT) };
+    if ok == 0 {
+        Err("could not play this file".into())
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(not(windows))]
+fn play_wav(_path: &Path) -> Result<(), String> {
+    Err("sound is only available on Windows".into())
 }
 
 // ---- time ----------------------------------------------------------------------

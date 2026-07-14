@@ -129,7 +129,7 @@ struct Inner {
     scheduler: Scheduler,
     watchers: Watchers,
     path_policy: RwLock<Arc<PathPolicy>>,
-    script_timeout: Duration,
+    script_timeout: RwLock<Duration>,
     events: Option<EventHandler>,
 }
 
@@ -156,7 +156,7 @@ impl LocalFlow {
                 scheduler: Scheduler::new().await?,
                 watchers: Watchers::new(),
                 path_policy: RwLock::new(Arc::new(PathPolicy::new(&config.allowed_dirs))),
-                script_timeout: config.script_timeout,
+                script_timeout: RwLock::new(config.script_timeout),
                 events,
             }),
         })
@@ -204,6 +204,15 @@ impl LocalFlow {
         *self.inner.path_policy.write().expect("path policy lock") = Arc::new(PathPolicy::new(dirs));
     }
 
+    pub fn script_timeout(&self) -> Duration {
+        *self.inner.script_timeout.read().expect("timeout lock")
+    }
+
+    /// Change how long a script may run. Applies to the next run.
+    pub fn set_script_timeout(&self, timeout: Duration) {
+        *self.inner.script_timeout.write().expect("timeout lock") = timeout;
+    }
+
     fn emit(&self, event: CoreEvent) {
         if let Some(handler) = &self.inner.events {
             handler(event);
@@ -247,7 +256,7 @@ impl LocalFlow {
     }
 
     fn check_watch(&self, new: &NewAutomation) -> CoreResult<()> {
-        if let Some(path) = &new.watch_path {
+        if let (Some(path), true) = (&new.watch_path, new.enabled) {
             self.resolve_watch_folder(path).map_err(|e| CoreError::Validation(vec![e]))?;
         }
         Ok(())
@@ -357,6 +366,27 @@ impl LocalFlow {
         Ok(self.inner.repo.list_logs(id, limit).await?)
     }
 
+    // ---- sharing -----------------------------------------------------------
+
+    /// The contents of a `.localflow` file for this automation.
+    pub async fn export(&self, id: i64) -> CoreResult<String> {
+        let automation = self.get(id).await?;
+        Ok(crate::sharing::SharedAutomation::from_automation(&automation).to_json())
+    }
+
+    /// Check a `.localflow` file and describe it, without saving anything.
+    pub fn preview_import(&self, text: &str) -> CoreResult<crate::sharing::ImportPreview> {
+        crate::sharing::preview(text).map_err(|e| CoreError::Validation(vec![e]))
+    }
+
+    /// Create an automation from a `.localflow` file. It starts disabled.
+    pub async fn import(&self, text: &str) -> CoreResult<Automation> {
+        let shared = crate::sharing::SharedAutomation::parse(text).map_err(|e| CoreError::Validation(vec![e]))?;
+        let automation = self.create(&shared.to_input()).await?;
+        tracing::info!(automation_id = automation.id, "imported automation '{}'", automation.name);
+        Ok(automation)
+    }
+
     // ---- running -----------------------------------------------------------
 
     /// Run a stored automation end-to-end: record the run, execute the script,
@@ -384,9 +414,13 @@ impl LocalFlow {
             trigger: trigger.to_string(),
             file,
         };
+        let store = repo.load_store(id).await?;
         let result = self
-            .execute(automation.lua_code, ctx, Some(id), Some(run_id))
+            .execute(automation.lua_code, ctx, Some(id), Some(run_id), store)
             .await;
+        if let Some(store) = &result.store {
+            repo.save_store(id, store).await?;
+        }
 
         for line in &result.logs {
             repo.add_log(id, &line.level, &line.message).await?;
@@ -415,7 +449,8 @@ impl LocalFlow {
     pub async fn test_run(&self, code: String, name: String) -> TestRunResult {
         let started = Instant::now();
         let ctx = RunContext { automation_id: 0, automation_name: name, trigger: "test".into(), file: None };
-        let result = self.execute(code, ctx, None, None).await;
+        // Test runs start with an empty store and don't save it.
+        let result = self.execute(code, ctx, None, None, Default::default()).await;
         TestRunResult {
             success: result.success,
             logs: result.logs,
@@ -430,13 +465,14 @@ impl LocalFlow {
         ctx: RunContext,
         automation_id: Option<i64>,
         run_id: Option<i64>,
+        store: std::collections::HashMap<String, String>,
     ) -> ExecutionResult {
         let policy = self.path_policy();
-        let timeout = self.inner.script_timeout;
+        let timeout = self.script_timeout();
         let events = self.inner.events.clone();
 
         tokio::task::spawn_blocking(move || {
-            engine::execute_with(&code, &ctx, policy, timeout, move |line| {
+            engine::execute_with(&code, &ctx, policy, timeout, store, move |line| {
                 if let Some(events) = &events {
                     events(CoreEvent::Log {
                         automation_id,
