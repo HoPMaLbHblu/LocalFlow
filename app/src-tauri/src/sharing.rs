@@ -36,25 +36,39 @@ pub fn open_from_second_instance(app: &AppHandle, args: Vec<String>) {
 }
 
 fn read_file(path: &str) -> Result<String, CommandError> {
-    std::fs::read_to_string(path).map_err(|e| CommandError::Error { message: format!("Could not read {path}: {e}") })
+    std::fs::read_to_string(path).map_err(|e| CommandError::Error {
+        message: format!("Could not read {path}: {e}"),
+    })
 }
 
 /// Save an automation as a `.localflow` file at `path` (chosen by the user).
 #[tauri::command]
-pub async fn export_automation(state: State<'_, AppState>, id: i64, path: String) -> Result<(), CommandError> {
+pub async fn export_automation(
+    state: State<'_, AppState>,
+    id: i64,
+    path: String,
+) -> Result<(), CommandError> {
     let contents = state.flow.export(id).await?;
-    std::fs::write(&path, contents).map_err(|e| CommandError::Error { message: format!("Could not save {path}: {e}") })
+    std::fs::write(&path, contents).map_err(|e| CommandError::Error {
+        message: format!("Could not save {path}: {e}"),
+    })
 }
 
 /// Read a `.localflow` file and describe it without importing it.
 #[tauri::command]
-pub fn preview_import(state: State<'_, AppState>, path: String) -> Result<ImportPreview, CommandError> {
+pub fn preview_import(
+    state: State<'_, AppState>,
+    path: String,
+) -> Result<ImportPreview, CommandError> {
     Ok(state.flow.preview_import(&read_file(&path)?)?)
 }
 
 /// Import a `.localflow` file. The automation starts disabled.
 #[tauri::command]
-pub async fn import_automation(state: State<'_, AppState>, path: String) -> Result<Automation, CommandError> {
+pub async fn import_automation(
+    state: State<'_, AppState>,
+    path: String,
+) -> Result<Automation, CommandError> {
     Ok(state.flow.import(&read_file(&path)?).await?)
 }
 

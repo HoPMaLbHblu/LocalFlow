@@ -63,11 +63,18 @@ fn handle_event(app: &AppHandle, prefs: &Prefs, event: CoreEvent) {
     if prefs.notifications.load(Ordering::Relaxed) {
         let texts = prefs.texts();
         match &event {
-            CoreEvent::Log { level, message, automation_id: Some(_), .. } if level == "notify" => {
+            CoreEvent::Log {
+                level,
+                message,
+                automation_id: Some(_),
+                ..
+            } if level == "notify" => {
                 notify(app, "LocalFlow", message);
             }
             // Runs nobody is watching: report failures, and confirm runs started from the tray.
-            CoreEvent::RunFinished { name, trigger, run, .. } if trigger != "manual" => {
+            CoreEvent::RunFinished {
+                name, trigger, run, ..
+            } if trigger != "manual" => {
                 if run.status == "failed" {
                     let error = run.error.as_deref().unwrap_or(texts.unknown_error);
                     notify(app, &texts.failed.replace("{name}", name), error);
@@ -82,6 +89,69 @@ fn handle_event(app: &AppHandle, prefs: &Prefs, event: CoreEvent) {
         tray::refresh(app);
     }
     let _ = app.emit(EVENT_NAME, event);
+}
+
+/// Everything that happens once at startup: database, settings, scheduler, tray.
+fn init(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    let handle = app.handle().clone();
+
+    let data_dir = app.path().app_data_dir()?;
+    std::fs::create_dir_all(&data_dir)?;
+    let db_path = data_dir.join("localflow.db");
+    let config = CoreConfig::new(format!(
+        "sqlite://{}",
+        db_path.to_string_lossy().replace('\\', "/")
+    ));
+
+    let prefs = Arc::new(Prefs {
+        notifications: AtomicBool::new(true),
+        language: RwLock::new(i18n::resolve("auto")),
+    });
+    let events_prefs = prefs.clone();
+    let events_handle = handle.clone();
+    let on_event = Arc::new(move |event| handle_event(&events_handle, &events_prefs, event));
+
+    let (flow, theme) = tauri::async_runtime::block_on(async {
+        let flow = LocalFlow::open(config, Some(on_event)).await?;
+        let theme = settings::apply_saved(&flow, &prefs).await?;
+        flow.start().await?;
+        Ok::<_, localflow_core::CoreError>((flow, theme))
+    })?;
+
+    tracing::info!("database: {}", db_path.display());
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.set_theme(settings::window_theme(&theme));
+    }
+    app.manage(AppState { flow, prefs });
+    // Opened by double-clicking a .localflow file: the frontend picks it up when ready.
+    app.manage(sharing::PendingImport(std::sync::Mutex::new(
+        sharing::file_argument(std::env::args()),
+    )));
+    tray::create(&handle)?;
+
+    if std::env::args().any(|a| a == MINIMIZED_FLAG) {
+        if let Some(window) = app.get_webview_window("main") {
+            window.hide()?;
+        }
+    }
+    Ok(())
+}
+
+/// Tell the user why LocalFlow couldn't start, and where their data is.
+fn show_fatal_error(error: &str) {
+    tracing::error!("LocalFlow could not start: {error}");
+    let data_dir = std::env::var("APPDATA")
+        .map(|d| format!(r"{d}\com.hopmalbhblu.localflow"))
+        .unwrap_or_default();
+    rfd::MessageDialog::new()
+        .set_title("LocalFlow could not start")
+        .set_description(format!(
+            "{error}\n\nYour automations are stored in:\n{data_dir}\n\n\
+             Please report this at https://github.com/HoPMaLbHblu/LSFUA/issues"
+        ))
+        .set_level(rfd::MessageLevel::Error)
+        .set_buttons(rfd::MessageButtons::Ok)
+        .show();
 }
 
 pub fn run() {
@@ -104,44 +174,10 @@ pub fn run() {
             Some(vec![MINIMIZED_FLAG]),
         ))
         .setup(|app| {
-            let handle = app.handle().clone();
-
-            let data_dir = app.path().app_data_dir()?;
-            std::fs::create_dir_all(&data_dir)?;
-            let db_path = data_dir.join("localflow.db");
-            let config = CoreConfig::new(format!(
-                "sqlite://{}",
-                db_path.to_string_lossy().replace('\\', "/")
-            ));
-
-            let prefs = Arc::new(Prefs {
-                notifications: AtomicBool::new(true),
-                language: RwLock::new(i18n::resolve("auto")),
-            });
-            let events_prefs = prefs.clone();
-            let events_handle = handle.clone();
-            let on_event = Arc::new(move |event| handle_event(&events_handle, &events_prefs, event));
-
-            let (flow, theme) = tauri::async_runtime::block_on(async {
-                let flow = LocalFlow::open(config, Some(on_event)).await?;
-                let theme = settings::apply_saved(&flow, &prefs).await?;
-                flow.start().await?;
-                Ok::<_, localflow_core::CoreError>((flow, theme))
-            })?;
-
-            tracing::info!("database: {}", db_path.display());
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.set_theme(settings::window_theme(&theme));
-            }
-            app.manage(AppState { flow, prefs });
-            // Opened by double-clicking a .localflow file: the frontend picks it up when ready.
-            app.manage(sharing::PendingImport(std::sync::Mutex::new(sharing::file_argument(std::env::args()))));
-            tray::create(&handle)?;
-
-            if std::env::args().any(|a| a == MINIMIZED_FLAG) {
-                if let Some(window) = app.get_webview_window("main") {
-                    window.hide()?;
-                }
+            // A startup failure shows a readable message instead of silently closing.
+            if let Err(error) = init(app) {
+                show_fatal_error(&error.to_string());
+                std::process::exit(1);
             }
             Ok(())
         })

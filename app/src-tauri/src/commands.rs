@@ -17,9 +17,13 @@ use crate::AppState;
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum CommandError {
     /// Input was rejected; show each message next to the form.
-    Validation { messages: Vec<String> },
+    Validation {
+        messages: Vec<String>,
+    },
     NotFound,
-    Error { message: String },
+    Error {
+        message: String,
+    },
 }
 
 impl From<CoreError> for CommandError {
@@ -29,7 +33,9 @@ impl From<CoreError> for CommandError {
             CoreError::NotFound => CommandError::NotFound,
             other => {
                 tracing::error!("command failed: {other}");
-                CommandError::Error { message: other.to_string() }
+                CommandError::Error {
+                    message: other.to_string(),
+                }
             }
         }
     }
@@ -52,7 +58,10 @@ pub async fn list_automations(state: State<'_, AppState>) -> CommandResult<Vec<A
 }
 
 #[tauri::command]
-pub async fn get_automation(state: State<'_, AppState>, id: i64) -> CommandResult<AutomationDetail> {
+pub async fn get_automation(
+    state: State<'_, AppState>,
+    id: i64,
+) -> CommandResult<AutomationDetail> {
     let automation = state.flow.get(id).await?;
     Ok(AutomationDetail {
         automation,
@@ -80,7 +89,11 @@ pub async fn update_automation(
 }
 
 #[tauri::command]
-pub async fn set_enabled(state: State<'_, AppState>, id: i64, enabled: bool) -> CommandResult<Automation> {
+pub async fn set_enabled(
+    state: State<'_, AppState>,
+    id: i64,
+    enabled: bool,
+) -> CommandResult<Automation> {
     Ok(state.flow.set_enabled(id, enabled).await?)
 }
 
@@ -96,7 +109,11 @@ pub async fn run_automation(state: State<'_, AppState>, id: i64) -> CommandResul
 
 /// Run code straight from the editor without saving it.
 #[tauri::command]
-pub async fn test_run(state: State<'_, AppState>, code: String, name: String) -> CommandResult<TestRunResult> {
+pub async fn test_run(
+    state: State<'_, AppState>,
+    code: String,
+    name: String,
+) -> CommandResult<TestRunResult> {
     Ok(state.flow.test_run(code, name).await)
 }
 
@@ -120,12 +137,20 @@ pub fn validate_schedule(schedule: String) -> Option<String> {
 }
 
 #[tauri::command]
-pub async fn list_runs(state: State<'_, AppState>, id: i64, limit: i64) -> CommandResult<Vec<AutomationRun>> {
+pub async fn list_runs(
+    state: State<'_, AppState>,
+    id: i64,
+    limit: i64,
+) -> CommandResult<Vec<AutomationRun>> {
     Ok(state.flow.runs(id, limit).await?)
 }
 
 #[tauri::command]
-pub async fn list_logs(state: State<'_, AppState>, id: i64, limit: i64) -> CommandResult<Vec<LogEntry>> {
+pub async fn list_logs(
+    state: State<'_, AppState>,
+    id: i64,
+    limit: i64,
+) -> CommandResult<Vec<LogEntry>> {
     Ok(state.flow.logs(id, limit).await?)
 }
 
