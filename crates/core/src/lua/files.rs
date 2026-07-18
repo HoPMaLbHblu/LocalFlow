@@ -97,6 +97,8 @@ pub fn register(lua: &Lua, fs: &Table, policy: Arc<PathPolicy>, deadline: Instan
             if let Some(parent) = resolved.parent() {
                 std::fs::create_dir_all(parent).map_err(|e| err("fs.write", e))?;
             }
+            // The previous contents go to the Recycle Bin, not into thin air.
+            super::recycle::keep_old_version(&resolved).map_err(|e| err("fs.write", e))?;
             std::fs::write(&resolved, text.as_bytes()).map_err(|e| err("fs.write", e))?;
             Ok(path_string(&resolved))
         })?,
@@ -338,6 +340,7 @@ fn extract_zip(archive: &Path, destination: &Path) -> Result<usize, String> {
         if let Some(parent) = out.parent() {
             std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
+        super::recycle::keep_old_version(&out)?;
         let mut target = File::create(&out).map_err(|e| e.to_string())?;
         std::io::copy(&mut entry, &mut target).map_err(|e| e.to_string())?;
         extracted += 1;

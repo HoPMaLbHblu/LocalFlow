@@ -465,3 +465,10 @@ label input, label select { color: var(--text); font-size: .9rem; font-weight: n
 .import-code { max-height: 360px; overflow: auto; }
 .card h2 { margin-top: 0; }
 .page.narrow .card + .card, .page.narrow .card + .banner, .page.narrow .banner + .card { margin-top: .75rem; }
+
+/* ---- trash, versions, backups ---- */
+
+.backup-list { list-style: none; padding: 0; margin: .75rem 0 0; display: flex; flex-direction: column; gap: .35rem; }
+.backup-list li { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+.card.version { margin-bottom: .6rem; }
+.card.version pre { margin-top: .75rem; }

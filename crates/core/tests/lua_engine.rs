@@ -154,6 +154,9 @@ fn fs_list_and_move() {
 
 #[test]
 fn fs_copy_exists_delete_mkdir() {
+    // fs.delete sends files to the Recycle Bin; keep test files out of the real one.
+    let bin = TempDir::new().unwrap();
+    std::env::set_var("LOCALFLOW_TEST_RECYCLE_DIR", bin.path());
     let dir = TempDir::new().unwrap();
     let root = dir.path();
     std::fs::write(root.join("src.txt"), "hello").unwrap();

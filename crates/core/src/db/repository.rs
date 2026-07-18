@@ -1,7 +1,7 @@
 use chrono::{SecondsFormat, Utc};
 use sqlx::SqlitePool;
 
-use super::models::{Automation, AutomationRun, LogEntry, NewAutomation};
+use super::models::{Automation, AutomationRun, AutomationVersion, LogEntry, NewAutomation};
 
 /// Current time as an RFC 3339 string, the format every timestamp column uses.
 pub fn now() -> String {
@@ -19,11 +19,51 @@ impl Repository {
         Repository { pool }
     }
 
+    /// The connection pool, for backups (`VACUUM INTO`).
+    pub fn pool(&self) -> &SqlitePool {
+        &self.pool
+    }
+
     // ---- automations -------------------------------------------------------
 
+    /// Automations that are not in the trash.
     pub async fn list_automations(&self) -> sqlx::Result<Vec<Automation>> {
-        sqlx::query_as("SELECT * FROM automations ORDER BY name COLLATE NOCASE, id")
+        sqlx::query_as("SELECT * FROM automations WHERE deleted_at IS NULL ORDER BY name COLLATE NOCASE, id")
             .fetch_all(&self.pool)
+            .await
+    }
+
+    /// Automations in the trash, most recently deleted first.
+    pub async fn list_trash(&self) -> sqlx::Result<Vec<Automation>> {
+        sqlx::query_as("SELECT * FROM automations WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC")
+            .fetch_all(&self.pool)
+            .await
+    }
+
+    /// Move to the trash (or back out of it with `deleted = false`).
+    /// Returns `false` if there is no such automation.
+    pub async fn set_deleted(&self, id: i64, deleted: bool) -> sqlx::Result<bool> {
+        let deleted_at = deleted.then(now);
+        let result = sqlx::query("UPDATE automations SET deleted_at = ? WHERE id = ?")
+            .bind(deleted_at)
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    /// Earlier versions of an automation, newest first.
+    pub async fn list_versions(&self, automation_id: i64) -> sqlx::Result<Vec<AutomationVersion>> {
+        sqlx::query_as("SELECT * FROM automation_versions WHERE automation_id = ? ORDER BY id DESC")
+            .bind(automation_id)
+            .fetch_all(&self.pool)
+            .await
+    }
+
+    pub async fn get_version(&self, version_id: i64) -> sqlx::Result<Option<AutomationVersion>> {
+        sqlx::query_as("SELECT * FROM automation_versions WHERE id = ?")
+            .bind(version_id)
+            .fetch_optional(&self.pool)
             .await
     }
 
@@ -58,12 +98,48 @@ impl Repository {
         self.get_automation(id).await?.ok_or(sqlx::Error::RowNotFound)
     }
 
-    /// Returns `None` if no automation has this id.
+    /// Returns `None` if no automation has this id. The previous state is kept
+    /// in `automation_versions` whenever the code, name, description or triggers change.
     pub async fn update_automation(
         &self,
         id: i64,
         new: &NewAutomation,
     ) -> sqlx::Result<Option<Automation>> {
+        let mut tx = self.pool.begin().await?;
+
+        let Some(old): Option<Automation> = sqlx::query_as("SELECT * FROM automations WHERE id = ?")
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await?
+        else {
+            return Ok(None);
+        };
+        let changed = old.name != new.name
+            || old.description != new.description
+            || old.lua_code != new.lua_code
+            || old.schedule != new.schedule
+            || old.run_on_startup != new.run_on_startup
+            || old.watch_path != new.watch_path
+            || old.watch_pattern != new.watch_pattern;
+        if changed {
+            sqlx::query(
+                "INSERT INTO automation_versions
+                    (automation_id, name, description, lua_code, schedule, run_on_startup, watch_path, watch_pattern, saved_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            )
+            .bind(id)
+            .bind(&old.name)
+            .bind(&old.description)
+            .bind(&old.lua_code)
+            .bind(&old.schedule)
+            .bind(old.run_on_startup)
+            .bind(&old.watch_path)
+            .bind(&old.watch_pattern)
+            .bind(now())
+            .execute(&mut *tx)
+            .await?;
+        }
+
         let result = sqlx::query(
             "UPDATE automations
              SET name = ?, description = ?, lua_code = ?, schedule = ?, enabled = ?,
@@ -80,8 +156,9 @@ impl Repository {
         .bind(&new.watch_pattern)
         .bind(now())
         .bind(id)
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await?;
+        tx.commit().await?;
 
         if result.rows_affected() == 0 {
             return Ok(None);
@@ -99,7 +176,8 @@ impl Repository {
         self.get_automation(id).await
     }
 
-    /// Deletes the automation and (via `ON DELETE CASCADE`) its runs and logs.
+    /// Permanently deletes the automation and (via `ON DELETE CASCADE`) its runs, logs,
+    /// saved values and versions. Normally only used to empty the trash.
     /// Returns `false` if it did not exist.
     pub async fn delete_automation(&self, id: i64) -> sqlx::Result<bool> {
         let result = sqlx::query("DELETE FROM automations WHERE id = ?")

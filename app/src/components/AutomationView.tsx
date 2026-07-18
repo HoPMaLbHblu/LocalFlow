@@ -14,11 +14,12 @@ import CodeEditor from "./CodeEditor";
 import Console, { type ConsoleState } from "./Console";
 import RunsTab from "./RunsTab";
 import LogsTab from "./LogsTab";
+import VersionsTab from "./VersionsTab";
 import HelpPanel from "./HelpPanel";
 import type { EditorView } from "@codemirror/view";
 import { save as saveFileDialog } from "@tauri-apps/plugin-dialog";
 
-type Tab = "editor" | "history" | "logs";
+type Tab = "editor" | "history" | "versions" | "logs";
 
 interface Props {
   /** `null` for a new, unsaved automation. */
@@ -220,6 +221,7 @@ export default function AutomationView({ id, template, setDirty, onSaved, onDele
         await api.updateAutomation(id, form);
         setSaved(form);
         await load();
+        setHistoryVersion((v) => v + 1);
       }
     } catch (e) {
       setErrors(errorMessages(e));
@@ -291,7 +293,7 @@ export default function AutomationView({ id, template, setDirty, onSaved, onDele
 
   const remove = async () => {
     if (id === null) return onDeleted();
-    if (!window.confirm(t("view.deleteConfirm", { name: detail?.name ?? "" }))) return;
+    if (!window.confirm(t("view.trashConfirm", { name: detail?.name ?? "" }))) return;
     await api.deleteAutomation(id);
     onDeleted();
   };
@@ -339,16 +341,22 @@ export default function AutomationView({ id, template, setDirty, onSaved, onDele
             </button>
           )}
           <button className="danger-outline" onClick={remove}>
-            {id === null ? t("view.discard") : t("view.delete")}
+            {id === null ? t("view.discard") : t("view.moveToTrash")}
           </button>
         </div>
       </header>
 
       {id !== null && (
         <nav className="tabs">
-          {(["editor", "history", "logs"] as Tab[]).map((tabName) => (
+          {(["editor", "history", "versions", "logs"] as Tab[]).map((tabName) => (
             <button key={tabName} className={tab === tabName ? "active" : ""} onClick={() => setTab(tabName)}>
-              {tabName === "editor" ? t("view.tabEditor") : tabName === "history" ? t("view.tabHistory") : t("view.tabLogs")}
+              {tabName === "editor"
+                ? t("view.tabEditor")
+                : tabName === "history"
+                  ? t("view.tabHistory")
+                  : tabName === "versions"
+                    ? t("view.tabVersions")
+                    : t("view.tabLogs")}
             </button>
           ))}
         </nav>
@@ -492,6 +500,21 @@ export default function AutomationView({ id, template, setDirty, onSaved, onDele
       )}
 
       {tab === "history" && id !== null && <RunsTab id={id} version={historyVersion} />}
+      {tab === "versions" && id !== null && (
+        <VersionsTab
+          id={id}
+          version={historyVersion}
+          onRestored={() =>
+            load().then((d) => {
+              if (d) {
+                const input = inputFromAutomation(d);
+                setForm(input);
+                setSaved(input);
+              }
+            })
+          }
+        />
+      )}
       {tab === "logs" && id !== null && <LogsTab id={id} />}
     </div>
   );

@@ -5,6 +5,7 @@
 //! registered in [`lua::api`]. Front-ends (the web server and the desktop app)
 //! talk to the [`LocalFlow`] service.
 
+pub mod backup;
 pub mod config;
 pub mod db;
 pub mod errors;
@@ -16,4 +17,4 @@ mod service;
 
 pub use config::CoreConfig;
 pub use errors::{CoreError, CoreResult};
-pub use service::{AutomationInput, AutomationSummary, CoreEvent, EventHandler, LocalFlow, TestRunResult};
+pub use service::{AutomationInput, AutomationSummary, CoreEvent, EventHandler, LocalFlow, StartupNotice, TestRunResult};

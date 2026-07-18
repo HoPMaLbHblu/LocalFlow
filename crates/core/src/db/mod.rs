@@ -1,12 +1,12 @@
 pub mod models;
 pub mod repository;
 
-use std::str::FromStr;
+use std::{str::FromStr, time::Duration};
 
 use sha2::{Digest, Sha384};
 use sqlx::{
     migrate::Migrator,
-    sqlite::{SqliteConnectOptions, SqlitePoolOptions},
+    sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous},
     SqlitePool,
 };
 
@@ -14,12 +14,26 @@ static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
 
 /// Open (or create) the SQLite database and apply migrations from `migrations/`.
 pub async fn connect(database_url: &str) -> Result<SqlitePool, sqlx::Error> {
-    let options = SqliteConnectOptions::from_str(database_url)?
+    let pool = open(database_url).await?;
+    migrate(&pool).await?;
+    Ok(pool)
+}
+
+/// Open the database without changing its schema.
+pub async fn open(database_url: &str) -> Result<SqlitePool, sqlx::Error> {
+    let in_memory = database_url.contains(":memory:");
+    let mut options = SqliteConnectOptions::from_str(database_url)?
         .create_if_missing(true)
-        .foreign_keys(true);
+        .foreign_keys(true)
+        .busy_timeout(Duration::from_secs(10));
+    if !in_memory {
+        // WAL + FULL sync: a crash or power cut can't corrupt the database or
+        // lose a change that was reported as saved.
+        options = options.journal_mode(SqliteJournalMode::Wal).synchronous(SqliteSynchronous::Full);
+    }
 
     // An in-memory database lives only as long as its connection, so keep exactly one open.
-    let pool_options = if database_url.contains(":memory:") {
+    let pool_options = if in_memory {
         SqlitePoolOptions::new()
             .max_connections(1)
             .idle_timeout(None)
@@ -27,11 +41,45 @@ pub async fn connect(database_url: &str) -> Result<SqlitePool, sqlx::Error> {
     } else {
         SqlitePoolOptions::new().max_connections(5)
     };
+    pool_options.connect_with(options).await
+}
 
-    let pool = pool_options.connect_with(options).await?;
-    repair_line_ending_checksums(&pool).await?;
-    MIGRATOR.run(&pool).await?;
-    Ok(pool)
+/// True if this version of LocalFlow will change the database's schema.
+pub async fn needs_migration(pool: &SqlitePool) -> bool {
+    let latest = MIGRATOR.iter().map(|m| m.version).max().unwrap_or(0);
+    let applied: Option<i64> = sqlx::query_scalar("SELECT MAX(version) FROM _sqlx_migrations")
+        .fetch_one(pool)
+        .await
+        .unwrap_or(None);
+    applied.is_some_and(|v| v < latest)
+}
+
+/// True if the database has been set up at all (it isn't brand new).
+pub async fn is_initialized(pool: &SqlitePool) -> bool {
+    sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM _sqlx_migrations")
+        .fetch_one(pool)
+        .await
+        .is_ok_and(|n| n > 0)
+}
+
+/// Bring the schema up to date.
+pub async fn migrate(pool: &SqlitePool) -> Result<(), sqlx::Error> {
+    repair_line_ending_checksums(pool).await?;
+    MIGRATOR.run(pool).await?;
+    Ok(())
+}
+
+/// SQLite's own consistency check. `Ok(())` if the database is healthy.
+pub async fn check_integrity(pool: &SqlitePool) -> Result<(), String> {
+    let result: String = sqlx::query_scalar("PRAGMA quick_check")
+        .fetch_one(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    if result == "ok" {
+        Ok(())
+    } else {
+        Err(result)
+    }
 }
 
 /// sqlx refuses to start if an applied migration's file "changed". A build made

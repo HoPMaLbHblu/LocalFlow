@@ -49,7 +49,7 @@ automation {
 | `fs.move(source, destination)` | Moves or renames a file. If `destination` is an existing folder, the file keeps its name. Missing parent folders are created. Refuses to overwrite. Returns the new path. |
 | `fs.copy(source, destination)` | Copies a file (same destination rules; overwrites). Returns the new path. |
 | `fs.exists(path)` | `true` if the file or folder exists. |
-| `fs.delete(path)` | Deletes a file or an **empty** folder. Returns `false` if it did not exist. |
+| `fs.delete(path)` | Moves a file or folder to the **Recycle Bin** (never deletes permanently). Returns `false` if it did not exist. |
 | `fs.mkdir(path)` | Creates a folder and its parents. |
 | `fs.basename(path)` | The file name: `"report.pdf"` for `"~/Downloads/report.pdf"`. |
 | `fs.join(a, b, ...)` | Joins path parts. |
@@ -139,6 +139,15 @@ Pick a preset in the editor (every 5 minutes, every hour, weekdays at 9:00, ...)
 ```
 
 Disabling an automation pauses its schedule; you can still run it manually.
+
+## Your data is safe
+
+- **Backups.** LocalFlow backs up all automations, history, logs and settings every day, before every update, before permanently deleting anything, and before restoring an older backup. **Settings › Backups** lists them and can restore any of them. Only daily backups are ever cleaned up (the newest 30 are kept).
+- **Damage protection.** The database uses SQLite's write-ahead log with full sync, so a crash or power cut can't corrupt it. It is checked at every start; if it is ever damaged, LocalFlow restores the newest backup automatically and keeps the damaged copy.
+- **Trash.** Deleting an automation moves it to the **Trash** with its history and logs. It can be restored, or deleted for good (a backup is made first).
+- **Version history.** Every save keeps the previous version of the code and triggers; the **Versions** tab can put any of them back.
+- **Your files.** Scripts never delete files permanently: `fs.delete` uses the Recycle Bin, and `fs.write`, `fs.copy` and `zip.extract` move a file they replace to the Recycle Bin first. `fs.move` and `fs.rename` never overwrite.
+- **Privacy.** LocalFlow has no accounts, no telemetry and no automatic update checks. Everything stays on your computer; it only goes online when one of *your* scripts calls `http.get` or `http.post`.
 
 ## Safety
 

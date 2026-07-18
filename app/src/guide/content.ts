@@ -37,7 +37,7 @@ const API_DOCS: ApiDoc[] = [
   {
     name: "fs.copy",
     signature: "fs.copy(source, destination)",
-    summary: "Copies a file. Works like `fs.move`, but keeps the original and overwrites an existing copy.",
+    summary: "Copies a file. Works like `fs.move`, but keeps the original. If the copy already exists, the old one goes to the Recycle Bin first.",
     returns: "the path of the copy",
     example: 'fs.copy("~/Documents/notes.md", "~/Backups/notes.md")',
   },
@@ -51,7 +51,7 @@ const API_DOCS: ApiDoc[] = [
   {
     name: "fs.delete",
     signature: "fs.delete(path)",
-    summary: "Deletes a file, or a folder if it is empty. Deleted files do not go to the Recycle Bin, so be careful.",
+    summary: "Moves a file or folder to the Recycle Bin, so it can always be restored from there.",
     returns: "`true` if something was deleted, `false` if it didn't exist",
     example: 'fs.delete("~/Downloads/old-installer.exe")',
   },
@@ -176,7 +176,7 @@ const API_DOCS: ApiDoc[] = [
   {
     name: "fs.write",
     signature: "fs.write(path, text)",
-    summary: "Creates a text file, or replaces what's in it. Missing folders are created.",
+    summary: "Creates a text file, or replaces what's in it (the old file goes to the Recycle Bin). Missing folders are created.",
     returns: "the file's path",
     example: 'fs.write("~/Documents/hello.txt", "Hello from LocalFlow")',
   },
@@ -232,7 +232,7 @@ const API_DOCS: ApiDoc[] = [
   {
     name: "zip.extract",
     signature: "zip.extract(zip_path, folder)",
-    summary: "Unpacks a zip archive into a folder. Archives that try to write outside that folder are refused.",
+    summary: "Unpacks a zip archive into a folder. Files it replaces go to the Recycle Bin, and archives that try to write outside that folder are refused.",
     returns: "how many files were extracted",
     example: 'zip.extract("~/Downloads/photos.zip", "~/Pictures/Imported")',
   },

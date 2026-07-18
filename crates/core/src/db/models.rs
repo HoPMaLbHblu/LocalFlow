@@ -18,6 +18,24 @@ pub struct Automation {
     pub watch_path: Option<String>,
     /// With `watch_path`: only files whose names match, e.g. `*.pdf`.
     pub watch_pattern: Option<String>,
+    /// Set when the automation is in the trash.
+    pub deleted_at: Option<String>,
+}
+
+/// An earlier saved state of an automation (from `automation_versions`).
+#[derive(Debug, Clone, Serialize, sqlx::FromRow)]
+pub struct AutomationVersion {
+    pub id: i64,
+    pub automation_id: i64,
+    pub name: String,
+    pub description: String,
+    pub lua_code: String,
+    pub schedule: Option<String>,
+    pub run_on_startup: bool,
+    pub watch_path: Option<String>,
+    pub watch_pattern: Option<String>,
+    /// When this version was replaced by a newer one.
+    pub saved_at: String,
 }
 
 /// The user-editable fields of an automation, used for create and update.
