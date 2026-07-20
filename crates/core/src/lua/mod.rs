@@ -1,4 +1,6 @@
 pub mod api;
+pub mod chain;
+pub mod control;
 pub mod data;
 pub mod files;
 pub mod recycle;
@@ -20,6 +22,10 @@ pub struct Example {
     /// Folder to watch ("" for none).
     pub watch_path: &'static str,
     pub watch_pattern: &'static str,
+    /// Whether the template needs "Allow system control".
+    pub allow_system: bool,
+    /// ExtraTriggers as JSON ("" for none).
+    pub triggers: &'static str,
 }
 
 /// Defaults for the trigger fields, so each template only lists what it uses.
@@ -35,6 +41,8 @@ pub const EXAMPLES: &[Example] = &[
         run_on_startup: NO_TRIGGERS.0,
         watch_path: NO_TRIGGERS.1,
         watch_pattern: NO_TRIGGERS.2,
+        allow_system: false,
+        triggers: "",
     },
     Example {
         slug: "organize-pdfs",
@@ -45,6 +53,8 @@ pub const EXAMPLES: &[Example] = &[
         run_on_startup: NO_TRIGGERS.0,
         watch_path: NO_TRIGGERS.1,
         watch_pattern: NO_TRIGGERS.2,
+        allow_system: false,
+        triggers: "",
     },
     Example {
         slug: "tidy-screenshots",
@@ -55,6 +65,8 @@ pub const EXAMPLES: &[Example] = &[
         run_on_startup: NO_TRIGGERS.0,
         watch_path: NO_TRIGGERS.1,
         watch_pattern: NO_TRIGGERS.2,
+        allow_system: false,
+        triggers: "",
     },
     Example {
         slug: "backup-notes",
@@ -65,6 +77,8 @@ pub const EXAMPLES: &[Example] = &[
         run_on_startup: NO_TRIGGERS.0,
         watch_path: NO_TRIGGERS.1,
         watch_pattern: NO_TRIGGERS.2,
+        allow_system: false,
+        triggers: "",
     },
     Example {
         slug: "open-work-apps",
@@ -75,6 +89,8 @@ pub const EXAMPLES: &[Example] = &[
         run_on_startup: true,
         watch_path: "",
         watch_pattern: "",
+        allow_system: false,
+        triggers: "",
     },
     Example {
         slug: "list-apps",
@@ -85,6 +101,8 @@ pub const EXAMPLES: &[Example] = &[
         run_on_startup: NO_TRIGGERS.0,
         watch_path: NO_TRIGGERS.1,
         watch_pattern: NO_TRIGGERS.2,
+        allow_system: false,
+        triggers: "",
     },
     Example {
         slug: "file-new-pdfs",
@@ -95,6 +113,8 @@ pub const EXAMPLES: &[Example] = &[
         run_on_startup: false,
         watch_path: "~/Downloads",
         watch_pattern: "*.pdf",
+        allow_system: false,
+        triggers: "",
     },
     Example {
         slug: "old-installers",
@@ -105,6 +125,8 @@ pub const EXAMPLES: &[Example] = &[
         run_on_startup: NO_TRIGGERS.0,
         watch_path: NO_TRIGGERS.1,
         watch_pattern: NO_TRIGGERS.2,
+        allow_system: false,
+        triggers: "",
     },
     Example {
         slug: "largest-files",
@@ -115,6 +137,8 @@ pub const EXAMPLES: &[Example] = &[
         run_on_startup: NO_TRIGGERS.0,
         watch_path: NO_TRIGGERS.1,
         watch_pattern: NO_TRIGGERS.2,
+        allow_system: false,
+        triggers: "",
     },
     Example {
         slug: "suspicious-files",
@@ -125,6 +149,8 @@ pub const EXAMPLES: &[Example] = &[
         run_on_startup: NO_TRIGGERS.0,
         watch_path: NO_TRIGGERS.1,
         watch_pattern: NO_TRIGGERS.2,
+        allow_system: false,
+        triggers: "",
     },
     Example {
         slug: "low-disk-space",
@@ -135,6 +161,8 @@ pub const EXAMPLES: &[Example] = &[
         run_on_startup: NO_TRIGGERS.0,
         watch_path: NO_TRIGGERS.1,
         watch_pattern: NO_TRIGGERS.2,
+        allow_system: false,
+        triggers: "",
     },
     Example {
         slug: "clipboard-history",
@@ -145,6 +173,8 @@ pub const EXAMPLES: &[Example] = &[
         run_on_startup: NO_TRIGGERS.0,
         watch_path: NO_TRIGGERS.1,
         watch_pattern: NO_TRIGGERS.2,
+        allow_system: false,
+        triggers: "",
     },
     Example {
         slug: "zip-backup",
@@ -155,6 +185,68 @@ pub const EXAMPLES: &[Example] = &[
         run_on_startup: NO_TRIGGERS.0,
         watch_path: NO_TRIGGERS.1,
         watch_pattern: NO_TRIGGERS.2,
+        allow_system: false,
+        triggers: "",
+    },
+    Example {
+        slug: "wake-every-morning",
+        title: "Wake my PC every morning",
+        description: "Every evening, set a wake timer so the PC wakes from sleep at 7:30. Needs system control.",
+        schedule: "0 0 22 * * *",
+        code: include_str!("../../scripts/wake_every_morning.lua"),
+        run_on_startup: false,
+        watch_path: "",
+        watch_pattern: "",
+        allow_system: true,
+        triggers: "",
+    },
+    Example {
+        slug: "focus-mode",
+        title: "Focus mode",
+        description: "Press Ctrl+Alt+F to close distracting apps and mute the sound. Needs system control.",
+        schedule: "",
+        code: include_str!("../../scripts/focus_mode.lua"),
+        run_on_startup: false,
+        watch_path: "",
+        watch_pattern: "",
+        allow_system: true,
+        triggers: r#"{"hotkey":"Ctrl+Alt+F"}"#,
+    },
+    Example {
+        slug: "lock-when-idle",
+        title: "Lock when I walk away",
+        description: "Lock the PC after 10 minutes without keyboard or mouse. Needs system control.",
+        schedule: "",
+        code: include_str!("../../scripts/lock_when_idle.lua"),
+        run_on_startup: false,
+        watch_path: "",
+        watch_pattern: "",
+        allow_system: true,
+        triggers: r#"{"idle_minutes":10}"#,
+    },
+    Example {
+        slug: "usb-photo-import",
+        title: "Import photos from a memory card",
+        description: "When a USB drive or card is plugged in, copy its photos into Pictures/Imported.",
+        schedule: "",
+        code: include_str!("../../scripts/usb_photo_import.lua"),
+        run_on_startup: false,
+        watch_path: "",
+        watch_pattern: "",
+        allow_system: false,
+        triggers: r#"{"usb":true}"#,
+    },
+    Example {
+        slug: "arrange-windows",
+        title: "Arrange my windows",
+        description: "Press Ctrl+Alt+A to put your browser on the left and your editor on the right. Needs system control.",
+        schedule: "",
+        code: include_str!("../../scripts/arrange_windows.lua"),
+        run_on_startup: false,
+        watch_path: "",
+        watch_pattern: "",
+        allow_system: true,
+        triggers: r#"{"hotkey":"Ctrl+Alt+A"}"#,
     },
 ];
 

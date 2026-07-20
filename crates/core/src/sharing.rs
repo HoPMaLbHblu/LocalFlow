@@ -21,7 +21,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{db::models::Automation, service::AutomationInput};
+use crate::{db::models::Automation, service::AutomationInput, triggers::ExtraTriggers};
 
 pub const FORMAT: &str = "localflow";
 pub const VERSION: u32 = 1;
@@ -46,6 +46,13 @@ pub struct SharedAutomation {
     pub watch_path: Option<String>,
     #[serde(default)]
     pub watch_pattern: Option<String>,
+    /// Hotkey, app, idle and USB triggers.
+    #[serde(default, skip_serializing_if = "ExtraTriggers::is_empty")]
+    pub triggers: ExtraTriggers,
+    /// Whether the author had "Allow system control" on. Imports never get it
+    /// automatically; it is only shown as a warning.
+    #[serde(default)]
+    pub allow_system: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exported_at: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -64,6 +71,9 @@ impl SharedAutomation {
             run_on_startup: a.run_on_startup,
             watch_path: a.watch_path.clone(),
             watch_pattern: a.watch_pattern.clone(),
+            // "Run after" points at an automation on this PC only, so it isn't shared.
+            triggers: ExtraTriggers { after: None, ..ExtraTriggers::from_json(a.triggers.as_deref()) },
+            allow_system: a.allow_system,
             exported_at: Some(crate::db::repository::now()),
             app_version: Some(env!("CARGO_PKG_VERSION").into()),
         }
@@ -100,6 +110,9 @@ impl SharedAutomation {
             run_on_startup: self.run_on_startup,
             watch_path: self.watch_path.clone(),
             watch_pattern: self.watch_pattern.clone(),
+            // Never granted by a file: the user switches it on after reading the code.
+            allow_system: false,
+            triggers: ExtraTriggers { after: None, ..self.triggers.clone() },
         }
     }
 }
@@ -118,6 +131,16 @@ pub enum Risk {
     RunsOnStartup,
     WatchesFolder,
     RunsOnSchedule,
+    /// Runs commands or PowerShell.
+    RunsCommands,
+    /// Presses keys, types or clicks.
+    ControlsInput,
+    /// Stops programs, closes windows, locks, sleeps, shuts down or wakes the PC.
+    ControlsPower,
+    /// The author had "Allow system control" on.
+    NeedsSystemControl,
+    /// Runs by itself on a hotkey, when an app starts or closes, when idle, or on USB.
+    RunsOnEvents,
 }
 
 /// Remove `--` comments so a commented-out call isn't reported.
@@ -163,6 +186,21 @@ pub fn risks(shared: &SharedAutomation) -> Vec<Risk> {
     check(Risk::OpensApps, &["app.open"]);
     check(Risk::UsesInternet, &["http.get", "http.post"]);
     check(Risk::UsesClipboard, &["clipboard.get", "clipboard.set"]);
+    check(Risk::RunsCommands, &["shell.run", "shell.powershell"]);
+    check(Risk::ControlsInput, &["keyboard.press", "keyboard.type", "mouse.move", "mouse.click"]);
+    check(
+        Risk::ControlsPower,
+        &[
+            "process.kill", "window.close", "system.lock", "system.sleep", "system.shutdown", "system.restart",
+            "system.wake_at", "system.set_wallpaper", "system.brightness",
+        ],
+    );
+    if shared.allow_system {
+        found.push(Risk::NeedsSystemControl);
+    }
+    if !shared.triggers.is_empty() {
+        found.push(Risk::RunsOnEvents);
+    }
     if shared.run_on_startup {
         found.push(Risk::RunsOnStartup);
     }
@@ -205,6 +243,8 @@ mod tests {
             run_on_startup: false,
             watch_path: None,
             watch_pattern: None,
+            triggers: ExtraTriggers::default(),
+            allow_system: false,
             exported_at: None,
             app_version: None,
         }

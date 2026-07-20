@@ -1,6 +1,7 @@
 //! The `LocalFlow` service: the one API both front-ends use.
 
 use std::{
+    collections::HashMap,
     future::Future,
     pin::Pin,
     sync::{Arc, RwLock},
@@ -20,10 +21,12 @@ use crate::{
     },
     errors::{CoreError, CoreResult},
     lua::{
+        chain::{self, Library, Step},
         engine::{self, ExecutionResult, LogLine, RunContext},
         sandbox::PathPolicy,
     },
     scheduler::{validate_cron, JobAction, Scheduler},
+    triggers::ExtraTriggers,
     watcher::{WatchAction, Watchers},
 };
 
@@ -62,6 +65,12 @@ pub struct AutomationInput {
     /// Only react to files matching this pattern, e.g. `*.pdf`. Defaults to `*`.
     #[serde(default)]
     pub watch_pattern: Option<String>,
+    /// Let the script use powerful functions (commands, keystrokes, shutdown, ...).
+    #[serde(default)]
+    pub allow_system: bool,
+    /// Hotkey, app start/exit, idle and USB triggers.
+    #[serde(default)]
+    pub triggers: ExtraTriggers,
 }
 
 fn non_empty(value: &Option<String>) -> Option<String> {
@@ -83,6 +92,7 @@ impl AutomationInput {
         if let Err(e) = engine::validate(&self.lua_code) {
             errors.push(e);
         }
+        errors.extend(self.triggers.problems());
 
         let schedule = self.schedule.as_deref().map(str::trim).unwrap_or("");
         if !schedule.is_empty() {
@@ -103,6 +113,8 @@ impl AutomationInput {
             run_on_startup: self.run_on_startup,
             watch_path: non_empty(&self.watch_path),
             watch_pattern: non_empty(&self.watch_pattern).filter(|_| non_empty(&self.watch_path).is_some()),
+            allow_system: self.allow_system,
+            triggers: self.triggers.normalized().to_json(),
         })
     }
 }
@@ -225,6 +237,9 @@ impl LocalFlow {
             }
         }
         self.inner.scheduler.start().await?;
+
+        // App start/exit, idle and USB triggers.
+        tokio::spawn(crate::triggers::monitor(self.clone()));
 
         // A backup every day, also when LocalFlow runs for weeks without a restart.
         if self.inner.backups.is_some() {
@@ -489,6 +504,8 @@ impl LocalFlow {
             run_on_startup: version.run_on_startup,
             watch_path: version.watch_path,
             watch_pattern: version.watch_pattern,
+            allow_system: current.allow_system,
+            triggers: ExtraTriggers::from_json(version.triggers.as_deref()),
         };
         self.update(id, &input).await
     }
@@ -576,11 +593,49 @@ impl LocalFlow {
     /// Run a stored automation end-to-end: record the run, execute the script,
     /// save its logs and result.
     pub async fn run(&self, id: i64, trigger: &str) -> CoreResult<AutomationRun> {
-        self.run_with_file(id, trigger, None).await
+        self.run_with_details(id, trigger, None, HashMap::new()).await
     }
 
     /// Like [`LocalFlow::run`], passing a file to the script as `ctx.file`.
     pub async fn run_with_file(&self, id: i64, trigger: &str, file: Option<String>) -> CoreResult<AutomationRun> {
+        self.run_with_details(id, trigger, file, HashMap::new()).await
+    }
+
+    /// Like [`LocalFlow::run`], with `ctx.file` and more `ctx` values (e.g. `ctx.app`).
+    pub async fn run_with_details(
+        &self,
+        id: i64,
+        trigger: &str,
+        file: Option<String>,
+        details: HashMap<String, String>,
+    ) -> CoreResult<AutomationRun> {
+        self.run_full(id, trigger.to_string(), file, details, None, 0).await
+    }
+
+    /// Everything a run can be given. `depth` counts "run after" links, so a loop of
+    /// automations starting each other stops instead of running forever.
+    fn run_full(
+        &self,
+        id: i64,
+        trigger: String,
+        file: Option<String>,
+        details: HashMap<String, String>,
+        input: Option<serde_json::Value>,
+        depth: usize,
+    ) -> Pin<Box<dyn Future<Output = CoreResult<AutomationRun>> + Send + 'static>> {
+        let this = self.clone();
+        Box::pin(async move { this.run_inner(id, &trigger, file, details, input, depth).await })
+    }
+
+    async fn run_inner(
+        &self,
+        id: i64,
+        trigger: &str,
+        file: Option<String>,
+        details: HashMap<String, String>,
+        input: Option<serde_json::Value>,
+        depth: usize,
+    ) -> CoreResult<AutomationRun> {
         let repo = &self.inner.repo;
         let automation = self.get(id).await?;
         let run_id = repo.start_run(id).await?;
@@ -592,18 +647,24 @@ impl LocalFlow {
             trigger: trigger.to_string(),
         });
 
+        // A run started by a USB drive may use that drive.
+        let extra_root = details.get("drive").map(std::path::PathBuf::from);
         let ctx = RunContext {
-            automation_id: id,
-            automation_name: automation.name.clone(),
-            trigger: trigger.to_string(),
             file,
+            details,
+            input,
+            library: self.library_for(&automation.lua_code).await?,
+            ..RunContext::new(id, automation.name.clone(), trigger, automation.allow_system)
         };
         let store = repo.load_store(id).await?;
         let result = self
-            .execute(automation.lua_code, ctx, Some(id), Some(run_id), store)
+            .execute(automation.lua_code, ctx, Some(id), Some(run_id), store, extra_root)
             .await;
         if let Some(store) = &result.store {
             repo.save_store(id, store).await?;
+        }
+        for (step_id, store) in &result.step_stores {
+            repo.save_store(*step_id, store).await?;
         }
 
         for line in &result.logs {
@@ -621,20 +682,77 @@ impl LocalFlow {
         let run = repo.get_run(run_id).await?.ok_or(CoreError::NotFound)?;
         self.emit(CoreEvent::RunFinished {
             automation_id: id,
-            name: automation.name,
+            name: automation.name.clone(),
             trigger: trigger.to_string(),
             run: run.clone(),
         });
+        self.start_followers(id, &automation.name, result.success, result.result, depth).await;
         Ok(run)
+    }
+
+    /// Start the automations set to "run after" this one. Each gets what this one
+    /// returned as `ctx.input`.
+    async fn start_followers(&self, id: i64, name: &str, success: bool, result: Option<serde_json::Value>, depth: usize) {
+        let Ok(list) = self.inner.repo.list_automations().await else { return };
+        for follower in list.into_iter().filter(|a| a.enabled && a.id != id) {
+            let Some(after) = ExtraTriggers::from_json(follower.triggers.as_deref()).after else { continue };
+            if after.automation_id != id || !after.matches(success) {
+                continue;
+            }
+            if depth + 1 >= chain::MAX_DEPTH {
+                tracing::warn!(automation_id = follower.id, "not started: too many automations in a row");
+                continue;
+            }
+            let details = HashMap::from([
+                ("previous".to_string(), name.to_string()),
+                ("previous_ok".to_string(), success.to_string()),
+            ]);
+            let run = self.run_full(follower.id, "after".into(), None, details, result.clone(), depth + 1);
+            tokio::spawn(async move {
+                if let Err(e) = run.await {
+                    tracing::error!("\"run after\" failed: {e}");
+                }
+            });
+        }
+    }
+
+    /// The automations a script may run as steps. Only loaded when the script uses them.
+    async fn library_for(&self, code: &str) -> CoreResult<Option<Arc<Library>>> {
+        if !code.contains("automations.") {
+            return Ok(None);
+        }
+        let repo = &self.inner.repo;
+        let mut steps = Vec::new();
+        for a in repo.list_automations().await? {
+            let store = repo.load_store(a.id).await?;
+            steps.push(Step {
+                id: a.id,
+                name: a.name,
+                code: a.lua_code,
+                enabled: a.enabled,
+                allow_system: a.allow_system,
+                store,
+            });
+        }
+        Ok(Some(Arc::new(Library { steps })))
     }
 
     /// Run code that has not been saved. Nothing is written to the database,
     /// but file operations are real.
     pub async fn test_run(&self, code: String, name: String) -> TestRunResult {
+        self.test_run_with(code, name, false).await
+    }
+
+    /// A test run that may use powerful functions if `allow_system` is on.
+    pub async fn test_run_with(&self, code: String, name: String, allow_system: bool) -> TestRunResult {
         let started = Instant::now();
-        let ctx = RunContext { automation_id: 0, automation_name: name, trigger: "test".into(), file: None };
+        let ctx = RunContext {
+            // A missing library only means steps can't be found.
+            library: self.library_for(&code).await.unwrap_or_default(),
+            ..RunContext::new(0, name, "test", allow_system)
+        };
         // Test runs start with an empty store and don't save it.
-        let result = self.execute(code, ctx, None, None, Default::default()).await;
+        let result = self.execute(code, ctx, None, None, Default::default(), None).await;
         TestRunResult {
             success: result.success,
             logs: result.logs,
@@ -650,8 +768,12 @@ impl LocalFlow {
         automation_id: Option<i64>,
         run_id: Option<i64>,
         store: std::collections::HashMap<String, String>,
+        extra_root: Option<std::path::PathBuf>,
     ) -> ExecutionResult {
-        let policy = self.path_policy();
+        let policy = match extra_root {
+            Some(folder) => Arc::new(self.path_policy().with_extra_root(&folder)),
+            None => self.path_policy(),
+        };
         let timeout = self.script_timeout();
         let events = self.inner.events.clone();
 

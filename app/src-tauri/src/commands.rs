@@ -113,8 +113,9 @@ pub async fn test_run(
     state: State<'_, AppState>,
     code: String,
     name: String,
+    allow_system: Option<bool>,
 ) -> CommandResult<TestRunResult> {
-    Ok(state.flow.test_run(code, name).await)
+    Ok(state.flow.test_run_with(code, name, allow_system.unwrap_or(false)).await)
 }
 
 /// `None` if the code compiles, otherwise the syntax error.

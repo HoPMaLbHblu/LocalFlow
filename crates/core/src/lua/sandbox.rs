@@ -75,6 +75,16 @@ impl PathPolicy {
         &self.roots
     }
 
+    /// The same rules, plus access to one more folder (e.g. a USB drive that
+    /// was just plugged in, for the run it triggered).
+    pub fn with_extra_root(&self, folder: &Path) -> Self {
+        let mut policy = self.clone();
+        if let Ok(root) = folder.canonicalize() {
+            policy.roots.push(root);
+        }
+        policy
+    }
+
     /// Turn a path written in a script into a real path, or explain why it is not allowed.
     ///
     /// `~` expands to the home directory and relative paths are relative to it.

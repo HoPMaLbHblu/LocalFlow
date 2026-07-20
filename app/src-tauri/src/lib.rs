@@ -5,11 +5,13 @@
 //! - `notify()` in scripts shows a native desktop notification.
 
 mod commands;
+mod hotkeys;
 mod i18n;
 mod safety;
 mod settings;
 mod sharing;
 mod tray;
+mod windows;
 
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -88,6 +90,7 @@ fn handle_event(app: &AppHandle, prefs: &Prefs, event: CoreEvent) {
     }
     if matches!(event, CoreEvent::AutomationsChanged) {
         tray::refresh(app);
+        hotkeys::refresh(app);
     }
     let _ = app.emit(EVENT_NAME, event);
 }
@@ -128,7 +131,9 @@ fn init(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     app.manage(sharing::PendingImport(std::sync::Mutex::new(
         sharing::file_argument(std::env::args()),
     )));
+    app.manage(hotkeys::Hotkeys::default());
     tray::create(&handle)?;
+    hotkeys::refresh(&handle);
 
     if std::env::args().any(|a| a == MINIMIZED_FLAG) {
         if let Some(window) = app.get_webview_window("main") {
@@ -169,6 +174,11 @@ pub fn run() {
             sharing::open_from_second_instance(app, args)
         }))
         .plugin(tauri_plugin_dialog::init())
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, shortcut, event| hotkeys::handle(app, shortcut, event.state()))
+                .build(),
+        )
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
@@ -182,11 +192,14 @@ pub fn run() {
             }
             Ok(())
         })
-        // Closing the window hides it; "Quit" in the tray menu exits.
+        // Closing the main window hides it; "Quit" in the tray menu exits.
+        // Other windows (the guide) close normally.
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
-                api.prevent_close();
-                let _ = window.hide();
+                if window.label() == "main" {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -224,6 +237,8 @@ pub fn run() {
             safety::restore_backup,
             safety::open_backups_folder,
             safety::startup_notice,
+            windows::open_guide,
+            windows::show_main,
         ])
         .run(tauri::generate_context!())
         .expect("error while running LocalFlow");

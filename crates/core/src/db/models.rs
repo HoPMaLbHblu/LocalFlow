@@ -20,6 +20,10 @@ pub struct Automation {
     pub watch_pattern: Option<String>,
     /// Set when the automation is in the trash.
     pub deleted_at: Option<String>,
+    /// Whether powerful functions (commands, keystrokes, shutdown, ...) may run.
+    pub allow_system: bool,
+    /// More triggers as JSON, see [`crate::triggers::ExtraTriggers`].
+    pub triggers: Option<String>,
 }
 
 /// An earlier saved state of an automation (from `automation_versions`).
@@ -36,6 +40,7 @@ pub struct AutomationVersion {
     pub watch_pattern: Option<String>,
     /// When this version was replaced by a newer one.
     pub saved_at: String,
+    pub triggers: Option<String>,
 }
 
 /// The user-editable fields of an automation, used for create and update.
@@ -49,6 +54,9 @@ pub struct NewAutomation {
     pub run_on_startup: bool,
     pub watch_path: Option<String>,
     pub watch_pattern: Option<String>,
+    pub allow_system: bool,
+    /// JSON, or `None` when there are no extra triggers.
+    pub triggers: Option<String>,
 }
 
 /// A row in the `automation_runs` table.

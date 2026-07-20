@@ -78,8 +78,9 @@ impl Repository {
         let now = now();
         let id = sqlx::query(
             "INSERT INTO automations
-                (name, description, lua_code, schedule, enabled, run_on_startup, watch_path, watch_pattern, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (name, description, lua_code, schedule, enabled, run_on_startup, watch_path, watch_pattern,
+                 allow_system, triggers, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&new.name)
         .bind(&new.description)
@@ -89,6 +90,8 @@ impl Repository {
         .bind(new.run_on_startup)
         .bind(&new.watch_path)
         .bind(&new.watch_pattern)
+        .bind(new.allow_system)
+        .bind(&new.triggers)
         .bind(&now)
         .bind(&now)
         .execute(&self.pool)
@@ -120,12 +123,14 @@ impl Repository {
             || old.schedule != new.schedule
             || old.run_on_startup != new.run_on_startup
             || old.watch_path != new.watch_path
-            || old.watch_pattern != new.watch_pattern;
+            || old.watch_pattern != new.watch_pattern
+            || old.triggers != new.triggers;
         if changed {
             sqlx::query(
                 "INSERT INTO automation_versions
-                    (automation_id, name, description, lua_code, schedule, run_on_startup, watch_path, watch_pattern, saved_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (automation_id, name, description, lua_code, schedule, run_on_startup, watch_path, watch_pattern,
+                     triggers, saved_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             )
             .bind(id)
             .bind(&old.name)
@@ -135,6 +140,7 @@ impl Repository {
             .bind(old.run_on_startup)
             .bind(&old.watch_path)
             .bind(&old.watch_pattern)
+            .bind(&old.triggers)
             .bind(now())
             .execute(&mut *tx)
             .await?;
@@ -143,7 +149,8 @@ impl Repository {
         let result = sqlx::query(
             "UPDATE automations
              SET name = ?, description = ?, lua_code = ?, schedule = ?, enabled = ?,
-                 run_on_startup = ?, watch_path = ?, watch_pattern = ?, updated_at = ?
+                 run_on_startup = ?, watch_path = ?, watch_pattern = ?, allow_system = ?, triggers = ?,
+                 updated_at = ?
              WHERE id = ?",
         )
         .bind(&new.name)
@@ -154,6 +161,8 @@ impl Repository {
         .bind(new.run_on_startup)
         .bind(&new.watch_path)
         .bind(&new.watch_pattern)
+        .bind(new.allow_system)
+        .bind(&new.triggers)
         .bind(now())
         .bind(id)
         .execute(&mut *tx)
