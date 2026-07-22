@@ -41,7 +41,8 @@ export type HintId =
   | "missingRun"
   | "appNotFound"
   | "timeLimit"
-  | "badArgument";
+  | "badArgument"
+  | "stepMissing";
 
 /** A translation of the guide. Anything missing falls back to English. */
 export interface GuideTranslation {
