@@ -15,7 +15,11 @@ export default function BackupsCard() {
   const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const load = () => api.listBackups().then(setBackups).catch(() => {});
+  const load = () =>
+    api
+      .listBackups()
+      .then((list) => setBackups(list ?? []))
+      .catch(() => {});
   useEffect(() => {
     load();
   }, []);

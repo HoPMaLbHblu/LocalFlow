@@ -11,6 +11,10 @@ interface Props {
 
 /** The more dangerous risks are listed first and highlighted. */
 const RISKS: { risk: Risk; key: Key; serious: boolean }[] = [
+  { risk: "needs_system_control", key: "risk.needs_system_control", serious: true },
+  { risk: "runs_commands", key: "risk.runs_commands", serious: true },
+  { risk: "controls_input", key: "risk.controls_input", serious: true },
+  { risk: "controls_power", key: "risk.controls_power", serious: true },
   { risk: "deletes_files", key: "risk.deletes_files", serious: true },
   { risk: "uses_internet", key: "risk.uses_internet", serious: true },
   { risk: "opens_apps", key: "risk.opens_apps", serious: true },
@@ -20,6 +24,7 @@ const RISKS: { risk: Risk; key: Key; serious: boolean }[] = [
   { risk: "runs_on_startup", key: "risk.runs_on_startup", serious: false },
   { risk: "watches_folder", key: "risk.watches_folder", serious: false },
   { risk: "runs_on_schedule", key: "risk.runs_on_schedule", serious: false },
+  { risk: "runs_on_events", key: "risk.runs_on_events", serious: false },
 ];
 
 /** Shows what a .localflow file contains before anything is saved. */

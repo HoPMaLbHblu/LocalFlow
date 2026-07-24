@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { t } from "../i18n";
 import {
   api,
+  cleanTriggers,
+  parseTriggers,
   errorMessages,
   onCoreEvent,
   type AutomationDetail,
@@ -15,6 +17,7 @@ import Console, { type ConsoleState } from "./Console";
 import RunsTab from "./RunsTab";
 import LogsTab from "./LogsTab";
 import VersionsTab from "./VersionsTab";
+import MoreTriggers from "./MoreTriggers";
 import HelpPanel from "./HelpPanel";
 import type { EditorView } from "@codemirror/view";
 import { save as saveFileDialog } from "@tauri-apps/plugin-dialog";
@@ -41,6 +44,8 @@ function inputFromTemplate(t: Template): AutomationInput {
     run_on_startup: t.run_on_startup ?? false,
     watch_path: t.watch_path ?? "",
     watch_pattern: t.watch_pattern ?? "",
+    allow_system: t.allow_system ?? false,
+    triggers: parseTriggers(t.triggers),
   };
 }
 
@@ -54,6 +59,8 @@ function inputFromAutomation(a: AutomationDetail): AutomationInput {
     run_on_startup: a.run_on_startup,
     watch_path: a.watch_path ?? "",
     watch_pattern: a.watch_pattern ?? "",
+    allow_system: a.allow_system ?? false,
+    triggers: parseTriggers(a.triggers),
   };
 }
 
@@ -66,7 +73,9 @@ function sameInput(a: AutomationInput, b: AutomationInput) {
     a.enabled === b.enabled &&
     a.run_on_startup === b.run_on_startup &&
     (a.watch_path ?? "") === (b.watch_path ?? "") &&
-    (a.watch_pattern ?? "") === (b.watch_pattern ?? "")
+    (a.watch_pattern ?? "") === (b.watch_pattern ?? "") &&
+    a.allow_system === b.allow_system &&
+    JSON.stringify(cleanTriggers(a.triggers)) === JSON.stringify(cleanTriggers(b.triggers))
   );
 }
 
@@ -75,7 +84,7 @@ export default function AutomationView({ id, template, setDirty, onSaved, onDele
   const [form, setForm] = useState<AutomationInput>(() =>
     template
       ? inputFromTemplate(template)
-      : { name: "", description: "", lua_code: "", schedule: "", enabled: true, run_on_startup: false, watch_path: "", watch_pattern: "" },
+      : { name: "", description: "", lua_code: "", schedule: "", enabled: true, run_on_startup: false, watch_path: "", watch_pattern: "", allow_system: false, triggers: {} },
   );
   const [saved, setSaved] = useState<AutomationInput | null>(null);
   const [tab, setTab] = useState<Tab>("editor");
@@ -235,7 +244,7 @@ export default function AutomationView({ id, template, setDirty, onSaved, onDele
     liveTarget.current = "test";
     setConsole({ title: t("view.testRun"), status: "running", lines: [], error: null, duration: null });
     try {
-      const result = await api.testRun(form.lua_code, form.name || t("view.untitled"));
+      const result = await api.testRun(form.lua_code, form.name || t("view.untitled"), form.allow_system);
       setConsole({
         title: t("view.testRun"),
         status: result.success ? "success" : "failed",
@@ -466,6 +475,14 @@ export default function AutomationView({ id, template, setDirty, onSaved, onDele
               </div>
             )}
           </div>
+
+          <MoreTriggers
+            automationId={id}
+            triggers={form.triggers}
+            allowSystem={form.allow_system}
+            onTriggers={(triggers) => update({ triggers })}
+            onAllowSystem={(allow_system) => update({ allow_system })}
+          />
 
           <div className="editor-row">
             <div className="editor-area">

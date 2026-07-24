@@ -2,6 +2,7 @@
 // in the language chosen in Settings.
 
 import { locale, t, type Key } from "./i18n";
+import { parseTriggers, type ExtraTriggers } from "./api";
 
 export function formatTime(iso: string | null | undefined): string {
   if (!iso) return "—";
@@ -71,9 +72,17 @@ export function describeTriggers(a: {
   run_on_startup: boolean;
   watch_path: string | null;
   watch_pattern?: string | null;
+  triggers?: string | ExtraTriggers | null;
 }): string {
   if (!a.enabled) return t("trigger.disabled");
   const parts: string[] = [];
+  const extra = typeof a.triggers === "string" || a.triggers == null ? parseTriggers(a.triggers) : a.triggers;
+  if (extra.hotkey) parts.push(extra.hotkey);
+  if (extra.app_start) parts.push(t("trigger.appStart", { app: extra.app_start }));
+  if (extra.app_exit) parts.push(t("trigger.appExit", { app: extra.app_exit }));
+  if (extra.idle_minutes) parts.push(t("trigger.idle", { n: extra.idle_minutes }));
+  if (extra.usb) parts.push(t("trigger.usb"));
+  if (extra.after?.automation_id) parts.push(t("trigger.after"));
   if (a.watch_path) parts.push(t("trigger.watching", { path: a.watch_path + (a.watch_pattern ? ` (${a.watch_pattern})` : "") }));
   if (a.schedule) parts.push(describeSchedule(a.schedule));
   if (a.run_on_startup) parts.push(t("trigger.onStartup"));

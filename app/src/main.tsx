@@ -4,6 +4,8 @@ import App, { type View } from "./App";
 import { api } from "./api";
 import { cachedLanguageSetting, setLanguage } from "./i18n";
 import { applyTheme, cachedTheme } from "./theme";
+import { inDesktopApp, isGuideWindow, onPrefsChanged } from "./windowing";
+import GuideWindow from "./components/GuideWindow";
 import "./styles.css";
 
 /**
@@ -16,14 +18,24 @@ function Root() {
 
   useEffect(() => {
     // The cached values paint the first frame; the backend has the saved truth.
-    api
-      .getSettings()
-      .then((settings) => {
-        applyTheme(settings.theme);
-        setLang(setLanguage(settings.language));
-      })
-      .catch(() => {});
+    const load = () =>
+      api
+        .getSettings()
+        .then((settings) => {
+          applyTheme(settings.theme);
+          setLang(setLanguage(settings.language));
+        })
+        .catch(() => {});
+    load();
+    // The guide window follows theme and language changes made in the app window.
+    if (!inDesktopApp() || !isGuideWindow()) return;
+    const unlisten = onPrefsChanged(load);
+    return () => {
+      unlisten.then((f) => f());
+    };
   }, []);
+
+  if (isGuideWindow()) return <GuideWindow key={lang} />;
 
   const changeLanguage = (setting: string) => {
     setInitialView({ kind: "settings" });

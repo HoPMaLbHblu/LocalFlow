@@ -68,16 +68,23 @@ export function installDevMock() {
       }
       case "update_automation": { Object.assign(find(), args.input); return find(); }
       case "delete_automation": automations = automations.filter((a) => a.id !== args.id); return null;
-      case "get_settings": return { autostart: true, notifications: true, allowed_dirs: ["C:\\Users\\you"], language: "auto", theme: "system", script_timeout_secs: 30, data_dir: "C:\\Users\\you\\AppData\\Roaming\\com.hopmalbhblu.localflow", version: "2.4.0" };
+      case "get_settings": return { autostart: true, notifications: true, allowed_dirs: ["C:\\Users\\you"], language: "auto", theme: "system", script_timeout_secs: 30, data_dir: "C:\\Users\\you\\AppData\\Roaming\\com.hopmalbhblu.localflow", version: "2.5.0" };
       case "plugin:event|listen": return 1;
       case "set_language": case "set_theme": case "set_script_timeout": case "export_automation": return null;
       case "take_pending_import": return null;
+      case "list_backups": return [
+        { file_name: "localflow-2026-09-29_09-00-00-daily.db", created_at: iso(-3_600_000), size: 61440, kind: "daily" },
+        { file_name: "localflow-2026-09-28_18-30-00-before-update.db", created_at: iso(-86_400_000), size: 53248, kind: "before-update" },
+      ];
+      case "list_trash": return [];
+      case "list_versions": return [];
+      case "startup_notice": return null;
       case "plugin:dialog|open": return "C:\\Users\\you\\Downloads\\Cleaner.localflow";
       case "plugin:dialog|save": return "C:\\Users\\you\\Documents\\export.localflow";
       case "preview_import": return {
         automation: { format: "localflow", version: 1, name: "Downloads cleaner", description: "Deletes old installers and opens Explorer.",
           lua_code: 'for _, f in ipairs(fs.find("~/Downloads", "*.exe")) do\n    fs.delete(f)\nend\napp.open("~/Downloads")\n',
-          schedule: "0 0 9 * * Mon", run_on_startup: false, watch_path: null, watch_pattern: null, app_version: "2.4.0" },
+          schedule: "0 0 9 * * Mon", run_on_startup: false, watch_path: null, watch_pattern: null, app_version: "2.5.0" },
         risks: ["deletes_files", "opens_apps", "runs_on_schedule"], problems: [] };
       case "import_automation": {
         const a: AutomationSummary = { id: automations.length + 1, name: "Downloads cleaner", description: "", lua_code: "log(1)", schedule: "0 0 9 * * Mon",
