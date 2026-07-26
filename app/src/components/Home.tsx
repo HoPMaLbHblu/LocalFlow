@@ -2,6 +2,7 @@ import type { AutomationSummary, Template } from "../api";
 import { t } from "../i18n";
 import { describeSchedule, formatRelative } from "../format";
 import StatusBadge from "./StatusBadge";
+import SystemCard from "./SystemCard";
 
 interface Props {
   automations: AutomationSummary[];
@@ -69,6 +70,8 @@ export default function Home({ automations, templates, onSelect, onTemplate, onN
         <Stat value={scheduled} label={t("home.statScheduled")} />
         <Stat value={failing} label={t("home.statFailing")} tone={failing > 0 ? "bad" : undefined} />
       </div>
+
+      <SystemCard />
 
       <div className="columns">
         <section className="card">

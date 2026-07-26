@@ -11,6 +11,8 @@
 //! time.format("%d.%m.%Y", t)     -- a timestamp as text; both arguments optional
 //! time.date(t)                   -- a timestamp as { year, month, day, hour, min, sec, weekday, yday }
 //! time.today()                   -- "2026-09-29"
+//! time.parse("2026-09-29 14:05")  -- text as a timestamp (nil if it isn't a date); optional format
+//! time.make{ year = 2026, month = 9, day = 29, hour = 7 }  -- parts as a timestamp
 //! time.days(n), time.hours(n), time.minutes(n)  -- durations in seconds
 //! ```
 //!
@@ -25,7 +27,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use chrono::{DateTime, Datelike, Local, Timelike};
+use chrono::{DateTime, Datelike, Local, TimeZone, Timelike};
 use mlua::{Lua, Table, Value};
 use sysinfo::{ProcessesToUpdate, System};
 
@@ -331,7 +333,7 @@ fn system_table(lua: &Lua) -> mlua::Result<Table> {
 
 /// `(percent, charging, plugged_in)`, or `None` on a PC without a battery.
 #[cfg(windows)]
-fn battery_status() -> Option<(u8, bool, bool)> {
+pub(crate) fn battery_status() -> Option<(u8, bool, bool)> {
     use windows_sys::Win32::System::Power::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
     let mut status: SYSTEM_POWER_STATUS = unsafe { std::mem::zeroed() };
     // SAFETY: `status` is a valid, writable SYSTEM_POWER_STATUS.
@@ -346,7 +348,7 @@ fn battery_status() -> Option<(u8, bool, bool)> {
 }
 
 #[cfg(not(windows))]
-fn battery_status() -> Option<(u8, bool, bool)> {
+pub(crate) fn battery_status() -> Option<(u8, bool, bool)> {
     None
 }
 
@@ -487,6 +489,52 @@ fn time_table(lua: &Lua) -> mlua::Result<Table> {
     )?;
 
     time.set("today", lua.create_function(|_, ()| Ok(Local::now().format("%Y-%m-%d").to_string()))?)?;
+    time.set(
+        "parse",
+        lua.create_function(|_, (text, format): (String, Option<String>)| {
+            let text = text.trim();
+            let with_format = |f: &str| {
+                chrono::NaiveDateTime::parse_from_str(text, f)
+                    .ok()
+                    .or_else(|| chrono::NaiveDate::parse_from_str(text, f).ok().map(|d| d.and_time(chrono::NaiveTime::MIN)))
+            };
+            let parsed = match format.as_deref() {
+                Some(format) => with_format(format),
+                None => ["%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"].iter().find_map(|f| with_format(f)),
+            };
+            // Text that isn't a date gives nil, so scripts can check.
+            Ok(parsed.and_then(|n| Local.from_local_datetime(&n).earliest()).map(|t| t.timestamp()))
+        })?,
+    )?;
+    time.set(
+        "make",
+        lua.create_function(|_, parts: Table| {
+            // Values may overflow (day 35, hour -1): they roll over like a calendar.
+            let get = |key: &str, default: i64| -> mlua::Result<i64> { Ok(parts.get::<Option<i64>>(key)?.unwrap_or(default)) };
+            let year: i64 = parts.get("year")?;
+            let months = year * 12 + get("month", 1)? - 1;
+            let first = i32::try_from(months.div_euclid(12))
+                .ok()
+                .and_then(|y| chrono::NaiveDate::from_ymd_opt(y, months.rem_euclid(12) as u32 + 1, 1))
+                .ok_or_else(|| err("time.make", "that year is out of range"))?;
+            let offset = chrono::TimeDelta::try_days(get("day", 1)? - 1)
+                .zip(chrono::TimeDelta::try_hours(get("hour", 0)?))
+                .zip(chrono::TimeDelta::try_minutes(get("min", 0)?))
+                .zip(chrono::TimeDelta::try_seconds(get("sec", 0)?))
+                .map(|(((d, h), m), s)| d + h + m + s)
+                .ok_or_else(|| err("time.make", "the numbers are too large"))?;
+            let naive = first
+                .and_time(chrono::NaiveTime::MIN)
+                .checked_add_signed(offset)
+                .ok_or_else(|| err("time.make", "that date is out of range"))?;
+            // A time skipped by a clock change moves forward an hour.
+            let local = Local
+                .from_local_datetime(&naive)
+                .earliest()
+                .or_else(|| Local.from_local_datetime(&(naive + chrono::TimeDelta::hours(1))).earliest());
+            Ok(local.map(|t| t.timestamp()))
+        })?,
+    )?;
     time.set("days", lua.create_function(|_, n: f64| Ok((n * 86_400.0) as i64))?)?;
     time.set("hours", lua.create_function(|_, n: f64| Ok((n * 3_600.0) as i64))?)?;
     time.set("minutes", lua.create_function(|_, n: f64| Ok((n * 60.0) as i64))?)?;

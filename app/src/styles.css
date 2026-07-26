@@ -490,6 +490,14 @@ label input, label select { color: var(--text); font-size: .9rem; font-weight: n
 
 .brand-row { display: flex; align-items: center; justify-content: space-between; gap: .25rem; }
 .brand-row .brand { flex: 1; min-width: 0; }
+.system-card { margin: 16px 0; }
+.system-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.system-head h2 { margin: 0; }
+.system-now { display: flex; flex-wrap: wrap; gap: 16px; margin: 10px 0 6px; font-size: .9rem; }
+.system-now .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+.system-chart { width: 100%; height: 120px; display: block; background: var(--surface-2); border-radius: 6px; }
+.system-chart .grid { stroke: var(--border); stroke-width: 1; vector-effect: non-scaling-stroke; }
+
 .after-row {
   display: flex;
   flex-wrap: wrap;

@@ -44,6 +44,13 @@ pub fn new_lua(timeout: Duration) -> mlua::Result<Lua> {
     Ok(lua)
 }
 
+/// Tests set this so `~` points at a temporary folder instead of the real home folder.
+const TEST_HOME: &str = "LOCALFLOW_TEST_HOME";
+
+fn test_home() -> Option<PathBuf> {
+    std::env::var_os(TEST_HOME).map(PathBuf::from)
+}
+
 /// Decides which filesystem paths scripts are allowed to use.
 #[derive(Debug, Clone)]
 pub struct PathPolicy {
@@ -67,7 +74,7 @@ impl PathPolicy {
 
         PathPolicy {
             roots,
-            home: dirs::home_dir().unwrap_or_else(|| PathBuf::from(".")),
+            home: test_home().or_else(dirs::home_dir).unwrap_or_else(|| PathBuf::from(".")),
         }
     }
 

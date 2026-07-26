@@ -72,12 +72,34 @@ export function installDevMock() {
       case "plugin:event|listen": return 1;
       case "set_language": case "set_theme": case "set_script_timeout": case "export_automation": return null;
       case "take_pending_import": return null;
+      case "get_metrics": {
+        const minutes = (args as { minutes: number }).minutes;
+        const now = Math.floor(Date.now() / 1000);
+        return Array.from({ length: 120 }, (_, i) => {
+          const at = now - minutes * 60 + ((i + 1) * minutes * 60) / 120;
+          return {
+            at: Math.round(at),
+            cpu: Math.round(25 + 20 * Math.sin(i / 7) + (i % 5) * 3),
+            memory: Math.round(55 + 8 * Math.sin(i / 19)),
+            disk: 63,
+            battery: Math.max(20, 100 - Math.floor(i / 2)),
+          };
+        });
+      }
       case "list_backups": return [
         { file_name: "localflow-2026-09-29_09-00-00-daily.db", created_at: iso(-3_600_000), size: 61440, kind: "daily" },
         { file_name: "localflow-2026-09-28_18-30-00-before-update.db", created_at: iso(-86_400_000), size: 53248, kind: "before-update" },
       ];
-      case "list_trash": return [];
-      case "list_versions": return [];
+      case "list_trash": return [{
+        ...automations[0], id: 99, name: "Old experiment", enabled: false,
+        deleted_at: iso(-2 * 86_400_000), last_run: null, next_run: null,
+      }];
+      case "restore_automation": return { ...automations[0], id: 99, name: "Old experiment" };
+      case "delete_forever": return null;
+      case "list_versions": return [{
+        id: 1, automation_id: args.id, name: find()?.name ?? "Earlier", description: "", lua_code: "log('older version')",
+        schedule: null, run_on_startup: false, watch_path: null, watch_pattern: null, triggers: null, saved_at: iso(-3_600_000),
+      }];
       case "startup_notice": return null;
       case "plugin:dialog|open": return "C:\\Users\\you\\Downloads\\Cleaner.localflow";
       case "plugin:dialog|save": return "C:\\Users\\you\\Documents\\export.localflow";

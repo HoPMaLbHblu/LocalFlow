@@ -75,3 +75,13 @@ pub fn open_backups_folder(state: State<'_, AppState>) -> CommandResult<()> {
 pub fn startup_notice(state: State<'_, AppState>) -> Option<StartupNotice> {
     state.flow.startup_notice()
 }
+
+/// CPU, memory, disk and battery history for the chart on the overview page.
+#[tauri::command]
+pub async fn get_metrics(
+    state: State<'_, AppState>,
+    minutes: i64,
+    points: usize,
+) -> CommandResult<Vec<localflow_core::metrics::Sample>> {
+    Ok(state.flow.metrics(minutes, points).await?)
+}

@@ -160,6 +160,33 @@ Pick a preset in the editor (every 5 minutes, every hour, weekdays at 9:00, ...)
 
 Disabling an automation pauses its schedule; you can still run it manually.
 
+### Built-in helper library
+
+Scripts can load helpers written in Lua with `require`. They live in [`crates/core/lualib/lf/`](crates/core/lualib/lf):
+
+| Module | What it does |
+|---|---|
+| `lf.strings` | trim, split, contains, replace, title, slug, pad, wrap, number formatting |
+| `lf.tables` | map, filter, sort_by, group_by, unique, chunk, merge, sum, dump |
+| `lf.paths` | ext, stem, with_ext, safe_name, unique file names, readable sizes |
+| `lf.dates` | add days/months, days between, week numbers, "3 days ago", durations |
+| `lf.retry` | try again, wait for something, "at most every 6 hours" |
+| `lf.template` | fill `{placeholders}` with filters like `{size\|size}` |
+| `lf.report` | build tidy text reports with aligned tables |
+| `lf.test` | a tiny test framework |
+
+```lua
+local tables = require("lf.tables")
+local paths = require("lf.paths")
+
+local biggest = tables.take(tables.sort_by(fs.list("~/Downloads", "*"), fs.size, true), 3)
+for _, file in ipairs(biggest) do
+    log(paths.name(file) .. "  " .. paths.size_text(fs.size(file)))
+end
+```
+
+Rust also provides pictures (`image.resize`, `image.convert`, `image.taken`), CSV files (`csv.read`, `csv.write`), password-locked files (`crypto.encrypt`, `crypto.decrypt`), duplicate search (`fs.duplicates`) and the PC's CPU/memory/disk/battery history (`metrics.average`, `metrics.peak`, ...). The history is recorded once a minute, kept for 30 days, and never leaves the PC.
+
 ## Your data is safe
 
 - **Backups.** LocalFlow backs up all automations, history, logs and settings every day, before every update, before permanently deleting anything, and before restoring an older backup. **Settings › Backups** lists them and can restore any of them. Only daily backups are ever cleaned up (the newest 30 are kept).
@@ -215,6 +242,18 @@ cargo test --workspace
 
 The desktop crate embeds `app/dist`, so run `npm run build` in `app/` once before testing the whole workspace.
 
+The Lua helper library has its own tests, written in Lua, in [`crates/core/lua_tests/`](crates/core/lua_tests). They run with the rest (`cargo test -p localflow-core --test lua_suite`). The templates run end to end in a temporary folder in `tests/templates_run.rs`.
+
+To check every code example in the in-app guide, export them and run the guide test:
+
+```bash
+cd app
+npx esbuild src/guide/content.ts --bundle --platform=node --format=esm --outfile=guide.mjs
+node -e "import('./guide.mjs').then(g => console.log(JSON.stringify([...g.lessons().flatMap(l => l.blocks.filter(b => b.kind === 'code').map(b => ({ from: 'lesson ' + l.id, code: b.code, runnable: b.runnable !== false }))), ...g.apiDocs().map(d => ({ from: 'api ' + d.name, code: d.example })), ...g.snippets().map(s => ({ from: 'snippet ' + s.title, code: s.code }))])))" > guide_examples.json
+cd ..
+LOCALFLOW_GUIDE_EXAMPLES=app/guide_examples.json cargo test -p localflow-core --test guide_examples -- --ignored
+```
+
 ### Releasing
 
 Bump the version in `Cargo.toml` (`[workspace.package]`), `app/package.json` and `app/src-tauri/tauri.conf.json`, then push a tag:
@@ -232,7 +271,10 @@ GitHub Actions ([`release.yml`](.github/workflows/release.yml)) runs the tests, 
 crates/
 ├── core/          localflow-core: the engine, shared by both front-ends
 │   ├── src/db/        SQLite models and every SQL query
-│   ├── src/lua/       sandbox, Lua API (fs.*, app.*, time.*, log, notify) and script execution
+│   ├── src/lua/       sandbox, Lua API (fs.*, app.*, image.*, csv.*, crypto.*, ...) and script execution
+│   ├── src/metrics.rs CPU/memory/disk/battery history
+│   ├── lualib/lf/     helper library written in Lua (require("lf.strings") etc.)
+│   ├── lua_tests/     tests for the helper library, written in Lua
 │   ├── src/scheduler/ cron jobs
 │   ├── src/watcher/   folder watching
 │   ├── src/service.rs LocalFlow: create/update/run/test automations, live events

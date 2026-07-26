@@ -47,7 +47,7 @@ fn path_string(path: &Path) -> String {
 /// Visit every file below `root` (not following folder links), until `visit`
 /// returns false or the deadline passes. Unreadable folders are skipped.
 /// Returns true if the whole tree was visited.
-fn walk_files(root: &Path, deadline: Instant, mut visit: impl FnMut(&Path, &std::fs::Metadata) -> bool) -> bool {
+pub(crate) fn walk_files(root: &Path, deadline: Instant, mut visit: impl FnMut(&Path, &std::fs::Metadata) -> bool) -> bool {
     let mut stack = vec![root.to_path_buf()];
     let mut seen = 0u32;
     while let Some(dir) = stack.pop() {
