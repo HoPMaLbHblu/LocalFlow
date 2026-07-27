@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, errorMessages, type AutomationVersion } from "../api";
 import { describeTriggers, formatTime } from "../format";
 import { t } from "../i18n";
+import { confirmAction } from "../confirm";
 
 interface Props {
   id: number;
@@ -21,7 +22,7 @@ export default function VersionsTab({ id, version, onRestored }: Props) {
   }, [id, version]);
 
   const restore = async (v: AutomationVersion) => {
-    if (!window.confirm(t("versions.restoreConfirm"))) return;
+    if (!(await confirmAction(t("versions.restoreConfirm")))) return;
     try {
       await api.restoreVersion(id, v.id);
       setMessage({ tone: "ok", text: t("versions.restored") });

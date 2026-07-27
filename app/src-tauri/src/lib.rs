@@ -153,7 +153,7 @@ fn show_fatal_error(error: &str) {
         .set_title("LocalFlow could not start")
         .set_description(format!(
             "{error}\n\nYour automations are stored in:\n{data_dir}\n\n\
-             Please report this at https://github.com/HoPMaLbHblu/LSFUA/issues"
+             Please report this at https://github.com/HoPMaLbHblu/LocalFlow/issues"
         ))
         .set_level(rfd::MessageLevel::Error)
         .set_buttons(rfd::MessageButtons::Ok)

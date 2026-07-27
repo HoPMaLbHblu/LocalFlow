@@ -5,7 +5,7 @@ Automate chores on your computer with small **Lua** scripts: tidy your Downloads
 LocalFlow comes in two flavours that share the same engine:
 
 - **Desktop app** (Windows): a native window with a code editor, test runs, live logs, a system tray icon, desktop notifications, "start with Windows", light/dark themes and English/Russian/German.
-- **Web server**: the same features in your browser at `http://127.0.0.1:3000`, for headless machines.
+- **Web server**: the basics (create, edit, schedule, run, logs) in your browser at `http://127.0.0.1:3000`, for headless machines. Folder watching, extra triggers, system control, import/export and backups are desktop-only.
 
 ## Install the desktop app
 
@@ -13,7 +13,7 @@ Download `LocalFlow_x.y.z_x64-setup.exe` from the [latest release](../../release
 
 After installing:
 
-1. Click **+ New automation** and pick a template, for example *Hello world*.
+1. Click **+ New automation** and pick one of the 34 templates, for example *Hello world*, or start from a blank one.
 2. Press **Test run** (Ctrl+Enter) to try it without saving.
 3. Press **Save** (Ctrl+S). Choose a **schedule** to run it automatically.
 4. Close the window whenever you like. LocalFlow keeps running in the system tray (the icons next to the clock on the taskbar; click **^** if you don't see it). Right-click its icon there and choose **Quit** to exit.
@@ -47,7 +47,7 @@ automation {
 |---|---|
 | `fs.list(path, pattern)` | Files in a folder whose names match a wildcard like `"*.pdf"` or `"IMG_????.jpg"` (case-insensitive). `pattern` defaults to `"*"`. |
 | `fs.move(source, destination)` | Moves or renames a file. If `destination` is an existing folder, the file keeps its name. Missing parent folders are created. Refuses to overwrite. Returns the new path. |
-| `fs.copy(source, destination)` | Copies a file (same destination rules; overwrites). Returns the new path. |
+| `fs.copy(source, destination)` | Copies a file (same destination rules). A file it replaces goes to the Recycle Bin first. Returns the new path. |
 | `fs.exists(path)` | `true` if the file or folder exists. |
 | `fs.delete(path)` | Moves a file or folder to the **Recycle Bin** (never deletes permanently). Returns `false` if it did not exist. |
 | `fs.mkdir(path)` | Creates a folder and its parents. |
@@ -65,6 +65,8 @@ automation {
 | `time.format(pattern, t)` | A timestamp as text, e.g. `time.format("%d.%m.%Y")`. Both arguments optional. |
 | `time.date(t)` | A timestamp split into `year`, `month`, `day`, `hour`, `min`, `sec`, `weekday` (1 = Monday) and `yday`. |
 | `time.today()` | Today's date, `"2026-09-29"`. |
+| `time.parse(text, format)` | Date text such as `"2026-09-29 14:05"` as a timestamp, or `nil` if it isn't a date. `format` is optional, e.g. `"%d.%m.%Y"`. |
+| `time.make{ year, month, day, hour, min, sec }` | A timestamp from parts; values roll over like a calendar (`day = 32` in January is February 1st). |
 | `time.days(n)`, `time.hours(n)`, `time.minutes(n)` | Durations in seconds, for comparing with timestamps. |
 | `fs.read(path)` / `fs.write(path, text)` / `fs.append(path, text)` | Read, create/replace, or add to a text file. |
 | `fs.rename(path, new_name)` | Renames in place; never overwrites. |
@@ -84,9 +86,9 @@ automation {
 | `log(message)` / `print(...)` | Writes a line to the automation's log. |
 | `notify(message)` | Shows a desktop notification (desktop app) and writes a `notify` log line. |
 
-Searches (`fs.find`, `fs.largest`, `security.scan`) stop at the script's time limit and then return what they found plus `false` as a second value. For a whole-disk scan, add the disk (e.g. `C:\`) under **Settings › Allowed folders** and raise **Settings › Script time limit** (up to 1 hour).
+Searches (`fs.find`, `fs.largest`, `fs.duplicates`, `security.scan`) stop at the script's time limit and then return what they found plus `false` as a second value. For a whole-disk scan, add the disk (e.g. `C:\`) under **Settings › Allowed folders** and raise **Settings › Script time limit** (up to 1 hour).
 
-`ctx` contains `ctx.id`, `ctx.name`, `ctx.trigger` (`"manual"`, `"tray"` (system tray menu), `"schedule"`, `"startup"`, `"watch"` or `"test"`) and, for folder-watch runs, `ctx.file`.
+`ctx` contains `ctx.id`, `ctx.name` and `ctx.trigger`: `"manual"`, `"tray"` (system tray menu), `"schedule"`, `"startup"`, `"watch"`, `"hotkey"`, `"app_start"`, `"app_exit"`, `"idle"`, `"usb"`, `"after"`, `"step"` or `"test"`. Depending on the trigger it also has `ctx.file` (folder watch), `ctx.app` (app started or closed), `ctx.drive` (USB drive), and `ctx.input` and `ctx.previous` (see *Combining automations*).
 
 Paths: `~` is your home folder, and relative paths are relative to it. `/` works as a separator on every OS.
 
@@ -100,6 +102,8 @@ The editor autocompletes these functions, shows what they do when you hover over
 | **Schedule** | Pick a preset or a custom cron expression (below). |
 | **When LocalFlow starts** | Tick *Run when LocalFlow starts*. With **Settings › Start with Windows** this runs every time you sign in, which is perfect for opening your apps. |
 | **New file in a folder** | Tick *Run when a new file appears in a folder* and choose the folder and, optionally, a pattern such as `*.pdf`. The automation runs once per new file, after it has finished downloading, with the file in `ctx.file`. |
+| **After another automation** | Under *More triggers and permissions*, pick an automation and whether to run when it worked, failed, or either way. |
+| **Hotkey, app, idle, USB** | See *Controlling Windows* below. |
 
 Example: open your apps when you sign in.
 
@@ -137,6 +141,40 @@ These functions control the whole PC. Everything marked 🔒 only works when **A
 | `system.idle_seconds()` · `network.wake_on_lan(mac)` | Time since the last input; wake another PC on the network. |
 
 More triggers, also under *More triggers and permissions*: a global **hotkey** (e.g. `Ctrl+Alt+K`), **when an app starts** or **closes** (`ctx.app`), **when the PC is idle** for some minutes, and **when a USB drive is plugged in** (`ctx.drive`; that run may read and write the drive).
+
+### Combining automations
+
+Build something big out of small automations. A script can run other saved automations as **steps**, pass them data, and use what they return:
+
+```lua
+local project = automations.call("Make project folder", { name = "Holiday photos" })
+automations.call("Write readme", project)   -- gets step 1's result as ctx.input
+```
+
+| Function | What it does |
+|---|---|
+| `automations.call(name, input)` | Runs a saved automation and returns what its `run` returned. Stops this script if the step fails. |
+| `automations.run(name, input)` | The same, but never stops the script: returns `{ ok, error, result }`. |
+| `automations.list()` | All automations as `{ id, name, enabled }`. Switched-off ones still work as steps. |
+
+Steps share the main automation's time limit and keep their own *Allow system control* setting and saved values. An automation can't call itself (not even through other steps), and chains stop after 8 automations in a row. Without code, the **After another automation** trigger does the same: the first automation's result arrives as `ctx.input` and its name as `ctx.previous`.
+
+### Files, pictures, spreadsheets and passwords
+
+| Function | What it does |
+|---|---|
+| `fs.duplicates(folder, pattern)` | Groups of files with identical contents, biggest first: `{ size, hash, files }`. |
+| `image.info(path)` | `{ width, height, format }` of a PNG, JPG, WebP, GIF or BMP. |
+| `image.resize(source, destination, max_width, max_height)` | A smaller copy that keeps its shape (never enlarges). The new file's extension picks the format. |
+| `image.convert(source, destination)` | The picture in another format, by extension. |
+| `image.taken(path)` | When a photo was taken (from the camera's EXIF data), or `nil`. |
+| `csv.read(path, { header, separator })` / `csv.write(path, rows, { header, separator })` | Read and write CSV files that Excel opens. With a header, rows are tables by column name. |
+| `crypto.encrypt(source, destination, password)` / `crypto.decrypt(...)` | Lock a copy of a file with a password (XChaCha20-Poly1305, Argon2 key; 8+ characters). **A forgotten password can't be recovered.** |
+| `crypto.password(length)` | A random password. |
+| `metrics.average(name, minutes)` / `metrics.peak(...)` / `metrics.lowest(...)` | `"cpu"`, `"memory"`, `"disk"` or `"battery"` in % over the last minutes (default 60), or `nil` without history. |
+| `metrics.recent(minutes)` / `metrics.latest()` | The recorded samples `{ at, cpu, memory, disk, battery }`. |
+
+LocalFlow records CPU, memory, disk and battery use once a minute while it runs, keeps it for 30 days on your PC only, and shows it as a chart on the overview page.
 
 ### Sharing automations
 
@@ -185,7 +223,7 @@ for _, file in ipairs(biggest) do
 end
 ```
 
-Rust also provides pictures (`image.resize`, `image.convert`, `image.taken`), CSV files (`csv.read`, `csv.write`), password-locked files (`crypto.encrypt`, `crypto.decrypt`), duplicate search (`fs.duplicates`) and the PC's CPU/memory/disk/battery history (`metrics.average`, `metrics.peak`, ...). The history is recorded once a minute, kept for 30 days, and never leaves the PC.
+`require` only loads these built-in modules; it can't load files from disk.
 
 ## Your data is safe
 
@@ -198,9 +236,10 @@ Rust also provides pictures (`image.resize`, `image.convert`, `image.taken`), CS
 
 ## Safety
 
-- **Sandboxed Lua.** Scripts get Lua's `string`, `table`, `math`, `utf8` and `coroutine` libraries plus the API above. `os`, `io`, `package`, `debug`, `require`, `load`, `dofile` and `loadfile` are not available.
+- **Sandboxed Lua.** Scripts get Lua's `string`, `table`, `math`, `utf8` and `coroutine` libraries plus the API above. `os`, `io`, `package`, `debug`, `load`, `dofile` and `loadfile` are not available, and `require` only loads LocalFlow's built-in `lf.*` modules.
 - **Limited folders.** File functions (and watch folders) only work inside the allowed folders: your home folder by default, changeable in **Settings**. `..` and symlinks cannot be used to get out.
 - **Opening apps is allowed.** `app.open` can start any installed program, file or website, because that's its job. Only run scripts you trust.
+- **System control is opt-in.** Commands, keystrokes, mouse, closing programs and power functions only work in automations where you switch on *Allow system control*. Imports never get it.
 - **Limits.** Scripts are stopped after their time limit (30 seconds by default, adjustable in Settings) and may use at most 64 MB of memory.
 - **Test runs are real.** A test run doesn't save the automation or its history, but file operations really happen.
 - **Local only.** The desktop app opens no network ports. The web server listens on `127.0.0.1` unless you explicitly allow otherwise.
@@ -259,8 +298,8 @@ LOCALFLOW_GUIDE_EXAMPLES=app/guide_examples.json cargo test -p localflow-core --
 Bump the version in `Cargo.toml` (`[workspace.package]`), `app/package.json` and `app/src-tauri/tauri.conf.json`, then push a tag:
 
 ```bash
-git tag v2.0.1
-git push origin v2.0.1
+git tag v1.0.1
+git push origin v1.0.1
 ```
 
 GitHub Actions ([`release.yml`](.github/workflows/release.yml)) runs the tests, builds the Windows installers and attaches them to a GitHub release.
@@ -271,7 +310,8 @@ GitHub Actions ([`release.yml`](.github/workflows/release.yml)) runs the tests, 
 crates/
 ├── core/          localflow-core: the engine, shared by both front-ends
 │   ├── src/db/        SQLite models and every SQL query
-│   ├── src/lua/       sandbox, Lua API (fs.*, app.*, image.*, csv.*, crypto.*, ...) and script execution
+│   ├── src/lua/       sandbox, Lua API (fs.*, app.*, image.*, csv.*, crypto.*, automations.*, ...) and script execution
+│   ├── src/triggers.rs hotkey, app, idle, USB and "run after" triggers
 │   ├── src/metrics.rs CPU/memory/disk/battery history
 │   ├── lualib/lf/     helper library written in Lua (require("lf.strings") etc.)
 │   ├── lua_tests/     tests for the helper library, written in Lua
@@ -279,7 +319,8 @@ crates/
 │   ├── src/watcher/   folder watching
 │   ├── src/service.rs LocalFlow: create/update/run/test automations, live events
 │   ├── migrations/    database schema (applied automatically)
-│   └── scripts/       built-in templates
+│   ├── scripts/       the 34 built-in templates
+│   └── tests/         Rust tests (including qa.rs: hand-written automations and things scripts must not be able to do)
 └── server/        localflow: Axum + HTMX web interface
 app/
 ├── src/           React + TypeScript interface (CodeMirror editor)

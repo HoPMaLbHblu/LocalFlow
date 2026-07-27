@@ -114,7 +114,12 @@ async fn startup_automations_run_when_localflow_starts() {
     let flow = flow_in(&dir, &db).await;
     flow.start().await.unwrap();
 
-    let ran = eventually(5, async || flow.runs(a.id, 10).await.unwrap().len() == 1).await;
+    // A run is recorded when it starts; wait until it has finished and written its log.
+    let ran = eventually(10, async || {
+        let runs = flow.runs(a.id, 10).await.unwrap();
+        runs.len() == 1 && runs[0].status == "success" && !flow.logs(a.id, 10).await.unwrap().is_empty()
+    })
+    .await;
     assert!(ran, "startup automation should run");
     assert_eq!(flow.logs(a.id, 10).await.unwrap()[0].message, "startup");
     assert!(flow.runs(b.id, 10).await.unwrap().is_empty(), "disabled automations don't run");

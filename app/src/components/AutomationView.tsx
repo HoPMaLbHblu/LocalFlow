@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { t } from "../i18n";
+import { confirmAction } from "../confirm";
 import {
   api,
   cleanTriggers,
@@ -262,7 +263,7 @@ export default function AutomationView({ id, template, setDirty, onSaved, onDele
 
   const runNow = async () => {
     if (id === null) return;
-    if (dirty && !window.confirm(t("view.runSavedConfirm"))) {
+    if (dirty && !(await confirmAction(t("view.runSavedConfirm")))) {
       return;
     }
     setBusy("running");
@@ -302,7 +303,7 @@ export default function AutomationView({ id, template, setDirty, onSaved, onDele
 
   const remove = async () => {
     if (id === null) return onDeleted();
-    if (!window.confirm(t("view.trashConfirm", { name: detail?.name ?? "" }))) return;
+    if (!(await confirmAction(t("view.trashConfirm", { name: detail?.name ?? "" })))) return;
     await api.deleteAutomation(id);
     onDeleted();
   };

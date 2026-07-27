@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, errorMessages, type BackupInfo } from "../api";
 import { formatTime } from "../format";
 import { t, tMaybe } from "../i18n";
+import { confirmAction } from "../confirm";
 
 const SHOWN = 12;
 
@@ -37,8 +38,8 @@ export default function BackupsCard() {
     }
   };
 
-  const restore = (b: BackupInfo) => {
-    if (!window.confirm(t("backups.restoreConfirm", { time: formatTime(b.created_at) }))) return;
+  const restore = async (b: BackupInfo) => {
+    if (!(await confirmAction(t("backups.restoreConfirm", { time: formatTime(b.created_at) })))) return;
     act(() => api.restoreBackup(b.file_name));
   };
 

@@ -85,7 +85,7 @@ pub async fn check_integrity(pool: &SqlitePool) -> Result<(), String> {
 /// sqlx refuses to start if an applied migration's file "changed". A build made
 /// from a checkout with Windows line endings (CRLF) and one with Unix line
 /// endings (LF) produce different checksums for the very same SQL, which made
-/// LocalFlow 2.3.0 crash on databases created by earlier builds. If the only
+/// an early LocalFlow build crash on databases created by earlier builds. If the only
 /// difference is line endings, record the current checksum instead.
 async fn repair_line_ending_checksums(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     let applied: Vec<(i64, Vec<u8>)> = match sqlx::query_as("SELECT version, checksum FROM _sqlx_migrations")

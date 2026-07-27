@@ -13,6 +13,7 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { onOpenFile } from "./api";
 import { inDesktopApp, onOpenDraft, openGuideWindow } from "./windowing";
 import { t, tMaybe } from "./i18n";
+import { confirmAction } from "./confirm";
 
 export type View =
   | { kind: "home" }
@@ -82,15 +83,15 @@ export default function App({ initialView, onLanguageChange }: Props) {
   }, [refresh]);
 
   /** Leave the current page, asking first if it has unsaved changes. */
-  const leave = useCallback((): boolean => {
-    if (dirty.current && !window.confirm(t("app.unsavedConfirm"))) return false;
+  const leave = useCallback(async (): Promise<boolean> => {
+    if (dirty.current && !(await confirmAction(t("app.unsavedConfirm")))) return false;
     dirty.current = false;
     return true;
   }, []);
 
   const navigate = useCallback(
-    (next: View) => {
-      if (!leave()) return;
+    async (next: View) => {
+      if (!(await leave())) return;
       setHistory((h) => {
         if (JSON.stringify(h.views[h.index]) === JSON.stringify(next)) return h;
         // Going somewhere new drops the "forward" pages, like a browser. Keep the last 50.
@@ -103,11 +104,11 @@ export default function App({ initialView, onLanguageChange }: Props) {
 
   const canGoBack = history.index > 0;
   const canGoForward = history.index < history.views.length - 1;
-  const goBack = useCallback(() => {
-    if (history.index > 0 && leave()) setHistory((h) => ({ ...h, index: Math.max(0, h.index - 1) }));
+  const goBack = useCallback(async () => {
+    if (history.index > 0 && (await leave())) setHistory((h) => ({ ...h, index: Math.max(0, h.index - 1) }));
   }, [history.index, leave]);
-  const goForward = useCallback(() => {
-    if (history.index < history.views.length - 1 && leave()) {
+  const goForward = useCallback(async () => {
+    if (history.index < history.views.length - 1 && (await leave())) {
       setHistory((h) => ({ ...h, index: Math.min(h.views.length - 1, h.index + 1) }));
     }
   }, [history.index, history.views.length, leave]);
@@ -156,7 +157,9 @@ export default function App({ initialView, onLanguageChange }: Props) {
 
   // .localflow files: opened by double-click (at startup or while running) or dropped on the window.
   useEffect(() => {
-    api.takePendingImport().then((path) => path && navigate({ kind: "import", path }));
+    api.takePendingImport().then((path) => {
+      if (path) navigate({ kind: "import", path });
+    });
     const unlistenOpen = onOpenFile((path) => navigate({ kind: "import", path }));
     // Drag and drop is a convenience: if it can't be set up, everything else still works.
     let unlistenDrop: Promise<() => void> = Promise.resolve(() => {});

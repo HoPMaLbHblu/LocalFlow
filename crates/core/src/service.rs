@@ -147,6 +147,8 @@ struct Inner {
     backups: Option<Backups>,
     /// What happened while opening the database, for the UI to report.
     startup_notice: Option<StartupNotice>,
+    /// Background loops started by `start`, stopped by `close`.
+    tasks: std::sync::Mutex<Vec<tokio::task::AbortHandle>>,
 }
 
 /// Something the user should hear about after startup.
@@ -214,13 +216,22 @@ impl LocalFlow {
                 events,
                 backups,
                 startup_notice,
+                tasks: Default::default(),
             }),
         })
     }
 
     /// Close the database cleanly (all changes are written first).
+    /// Stop the background loops and close the database, so its files are free.
     pub async fn close(&self) {
+        for task in self.inner.tasks.lock().unwrap_or_else(|e| e.into_inner()).drain(..) {
+            task.abort();
+        }
         self.inner.repo.pool().close().await;
+    }
+
+    fn keep_task(&self, handle: tokio::task::JoinHandle<()>) {
+        self.inner.tasks.lock().unwrap_or_else(|e| e.into_inner()).push(handle.abort_handle());
     }
 
     /// Anything that happened to the database at startup that the user should know about.
@@ -239,20 +250,21 @@ impl LocalFlow {
         self.inner.scheduler.start().await?;
 
         // App start/exit, idle and USB triggers.
-        tokio::spawn(crate::triggers::monitor(self.clone()));
+        self.keep_task(tokio::spawn(crate::triggers::monitor(self.clone())));
 
         // CPU, memory, disk and battery history (stays on this PC).
-        tokio::spawn(crate::metrics::run(self.inner.repo.pool().clone()));
+        self.keep_task(tokio::spawn(crate::metrics::run(self.inner.repo.pool().clone())));
 
         // A backup every day, also when LocalFlow runs for weeks without a restart.
         if self.inner.backups.is_some() {
             let flow = self.clone();
-            tokio::spawn(async move {
+            let handle = tokio::spawn(async move {
                 loop {
                     flow.daily_backup().await;
                     tokio::time::sleep(Duration::from_secs(60 * 60)).await;
                 }
             });
+            self.keep_task(handle);
         }
 
         let startup: Vec<i64> = automations
