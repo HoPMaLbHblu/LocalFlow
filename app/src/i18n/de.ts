@@ -4,12 +4,12 @@ export const de: Dictionary = {
   "app.unsavedConfirm": "Es gibt ungespeicherte Änderungen. Verwerfen?",
   "app.loadError": "Automatisierungen konnten nicht geladen werden: {error}",
 
-  "sidebar.new": "+ Neue Automatisierung",
+  "sidebar.new": "+ Neue Automation",
   "sidebar.search": "Suchen…",
   "sidebar.empty": "Noch keine Automatisierungen.",
   "sidebar.noMatches": "Keine Treffer.",
-  "sidebar.learn": "📘 Lernen",
-  "sidebar.settings": "⚙ Einstellungen",
+  "sidebar.learn": "Lernen",
+  "sidebar.settings": "Einstellungen",
   "sidebar.next": "Nächster Lauf {time}",
   "sidebar.lastRun": "Letzter Lauf: {status}",
 
@@ -193,7 +193,7 @@ export const de: Dictionary = {
   "backend.notFound": "Diese Automatisierung existiert nicht mehr.",
 
   // sharing, risks, time limit, new templates
-  "sidebar.import": "📥 Importieren",
+  "sidebar.import": "Import",
   "view.export": "Exportieren",
   "view.exportTitle": "Diese Automatisierung als Datei teilen",
   "view.exported": "Gespeichert unter {path}. Schicken Sie diese Datei an alle, die LocalFlow verwenden.",
@@ -236,7 +236,7 @@ export const de: Dictionary = {
   "template.zip-backup.description": "Packt jeden Abend Ihren Ordner Documents/Notes mit dem heutigen Datum als ZIP nach Backups.",
 
   // trash, versions, backups
-  "sidebar.trash": "🗑 Papierkorb",
+  "sidebar.trash": "Papierkorb",
   "trash.title": "Papierkorb",
   "trash.intro": "Gelöschte Automatisierungen bleiben hier mit Verlauf, Protokoll und gespeicherten Werten, bis Sie sie endgültig löschen.",
   "trash.empty": "Der Papierkorb ist leer.",

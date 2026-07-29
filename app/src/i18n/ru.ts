@@ -8,8 +8,8 @@ export const ru: Dictionary = {
   "sidebar.search": "Поиск…",
   "sidebar.empty": "Автоматизаций пока нет.",
   "sidebar.noMatches": "Ничего не найдено.",
-  "sidebar.learn": "📘 Обучение",
-  "sidebar.settings": "⚙ Настройки",
+  "sidebar.learn": "Обучение",
+  "sidebar.settings": "Настройки",
   "sidebar.next": "Следующий запуск {time}",
   "sidebar.lastRun": "Последний запуск: {status}",
 
@@ -193,7 +193,7 @@ export const ru: Dictionary = {
   "backend.notFound": "Эта автоматизация больше не существует.",
 
   // sharing, risks, time limit, new templates
-  "sidebar.import": "📥 Импорт",
+  "sidebar.import": "Импорт",
   "view.export": "Экспорт",
   "view.exportTitle": "Поделиться автоматизацией в виде файла",
   "view.exported": "Сохранено в {path}. Отправьте этот файл любому, кто пользуется LocalFlow.",
@@ -236,7 +236,7 @@ export const ru: Dictionary = {
   "template.zip-backup.description": "Каждый вечер архивирует папку Documents/Notes в Backups с сегодняшней датой.",
 
   // trash, versions, backups
-  "sidebar.trash": "🗑 Корзина",
+  "sidebar.trash": "Корзина",
   "trash.title": "Корзина",
   "trash.intro": "Удалённые автоматизации хранятся здесь вместе с историей, журналом и сохранёнными значениями, пока вы не удалите их окончательно.",
   "trash.empty": "Корзина пуста.",

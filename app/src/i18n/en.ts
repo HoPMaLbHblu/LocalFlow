@@ -11,8 +11,8 @@ export const en = {
   "sidebar.search": "Search…",
   "sidebar.empty": "No automations yet.",
   "sidebar.noMatches": "No matches.",
-  "sidebar.learn": "📘 Learn",
-  "sidebar.settings": "⚙ Settings",
+  "sidebar.learn": "Learn",
+  "sidebar.settings": "Settings",
   "sidebar.next": "Next {time}",
   "sidebar.lastRun": "Last run: {status}",
 
@@ -210,7 +210,7 @@ export const en = {
   "backend.notFound": "This automation no longer exists.",
 
   // sharing, risks, time limit, new templates
-  "sidebar.import": "📥 Import",
+  "sidebar.import": "Import",
   "view.export": "Export",
   "view.exportTitle": "Share this automation as a file",
   "view.exported": "Saved to {path}. Send this file to anyone who uses LocalFlow.",
@@ -253,7 +253,7 @@ export const en = {
   "template.zip-backup.description": "Every evening, zip your Documents/Notes folder into Backups with today's date.",
 
   // trash, versions, backups
-  "sidebar.trash": "🗑 Trash",
+  "sidebar.trash": "Trash",
   "trash.title": "Trash",
   "trash.intro": "Deleted automations stay here with their history, logs and saved values until you delete them for good.",
   "trash.empty": "The trash is empty.",
