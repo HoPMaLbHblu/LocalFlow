@@ -95,8 +95,15 @@ fn app_table(lua: &Lua) -> mlua::Result<Table> {
     app.set(
         "shortcuts",
         lua.create_function(|_, ()| {
-            let names: BTreeSet<String> = start_menu_shortcuts().into_iter().map(|(name, _)| name).collect();
-            Ok(names.into_iter().collect::<Vec<_>>())
+            // One entry per name, whatever capital letters each source uses.
+            let mut seen = BTreeSet::new();
+            let mut names: Vec<String> = installed_apps()
+                .into_iter()
+                .map(|(name, _)| name)
+                .filter(|name| seen.insert(name.to_lowercase()))
+                .collect();
+            names.sort_by_key(|n| n.to_lowercase());
+            Ok(names)
         })?,
     )?;
 
@@ -132,9 +139,8 @@ fn open_target(target: &str, args: Vec<String>) -> Result<String, String> {
         return Ok(path.display().to_string());
     }
 
-    if let Some(shortcut) = find_shortcut(target) {
-        open::that_detached(&shortcut).map_err(|e| e.to_string())?;
-        return Ok(shortcut.display().to_string());
+    if let Some(launch) = find_app(target) {
+        return launch.open();
     }
 
     // Finally, a program on the PATH such as "notepad" or "code".
@@ -199,16 +205,113 @@ pub fn start_menu_shortcuts() -> Vec<(String, PathBuf)> {
     out
 }
 
+/// How to start an installed app.
+#[derive(Debug, Clone, PartialEq)]
+enum Launch {
+    /// A shortcut, program or `.app` to open.
+    Path(PathBuf),
+    /// A Start-menu app ID, e.g. a Microsoft Store app like Telegram.
+    AppId(String),
+}
+
+impl Launch {
+    fn open(&self) -> Result<String, String> {
+        match self {
+            Launch::Path(path) => {
+                open::that_detached(path).map_err(|e| e.to_string())?;
+                Ok(path.display().to_string())
+            }
+            Launch::AppId(id) => {
+                Command::new("explorer.exe").arg(format!("shell:AppsFolder\\{id}")).spawn().map_err(|e| e.to_string())?;
+                Ok(id.clone())
+            }
+        }
+    }
+}
+
+/// Every app LocalFlow knows how to start, by name: Start-menu shortcuts (or Mac apps),
+/// and on Windows also the Start menu's own list (Store apps) and registered programs.
+fn installed_apps() -> Vec<(String, Launch)> {
+    let mut apps: Vec<(String, Launch)> =
+        start_menu_shortcuts().into_iter().map(|(name, path)| (name, Launch::Path(path))).collect();
+    if cfg!(windows) {
+        apps.extend(windows_apps());
+    }
+    apps
+}
+
+/// Apps from `Get-StartApps` (includes Microsoft Store apps, which have no shortcut
+/// files) and from the "App Paths" registry list (e.g. chrome, even without a shortcut).
+/// Asking PowerShell takes a moment, so the answer is kept for a minute.
+fn windows_apps() -> Vec<(String, Launch)> {
+    use std::sync::Mutex;
+    static CACHE: Mutex<Option<(Instant, Vec<(String, Launch)>)>> = Mutex::new(None);
+    let mut cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some((at, apps)) = cache.as_ref() {
+        if at.elapsed() < Duration::from_secs(60) {
+            return apps.clone();
+        }
+    }
+    let script = r#"
+$start = @(Get-StartApps | ForEach-Object { @{ n = $_.Name; id = $_.AppID } })
+$paths = @(foreach ($root in 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths', 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths') {
+  Get-ChildItem $root -ErrorAction SilentlyContinue | ForEach-Object {
+    $p = $_.GetValue('')
+    if ($p) { @{ n = [IO.Path]::GetFileNameWithoutExtension($_.PSChildName); p = $p.Trim('"') } }
+  }
+})
+@{ start = $start; paths = $paths } | ConvertTo-Json -Compress -Depth 3
+"#;
+    let apps = super::control::run_program(super::control::powershell_command(script), Duration::from_secs(20))
+        .ok()
+        .filter(|(code, _, _)| *code == 0)
+        .map(|(_, output, _)| parse_windows_apps(&output))
+        .unwrap_or_default();
+    *cache = Some((Instant::now(), apps.clone()));
+    apps
+}
+
+/// The JSON printed by the script in [`windows_apps`].
+fn parse_windows_apps(json: &str) -> Vec<(String, Launch)> {
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(json) else { return Vec::new() };
+    // ConvertTo-Json writes a single item as an object instead of a list.
+    let items = |key: &str| -> Vec<serde_json::Value> {
+        match &value[key] {
+            serde_json::Value::Array(list) => list.clone(),
+            serde_json::Value::Object(_) => vec![value[key].clone()],
+            _ => Vec::new(),
+        }
+    };
+    let text = |item: &serde_json::Value, key: &str| item[key].as_str().map(str::trim).filter(|s| !s.is_empty()).map(String::from);
+    let mut apps = Vec::new();
+    for item in items("start") {
+        if let (Some(name), Some(id)) = (text(&item, "n"), text(&item, "id")) {
+            if !name.to_lowercase().contains("uninstall") {
+                apps.push((name, Launch::AppId(id)));
+            }
+        }
+    }
+    for item in items("paths") {
+        if let (Some(name), Some(path)) = (text(&item, "n"), text(&item, "p")) {
+            let path = PathBuf::from(std::env::var("ProgramFiles").map(|pf| path.replace("%ProgramFiles%", &pf)).unwrap_or(path));
+            if path.is_file() {
+                apps.push((name, Launch::Path(path)));
+            }
+        }
+    }
+    apps
+}
+
 /// Best match for `name`: exact name first, then names starting with it, then names containing it.
-fn find_shortcut(name: &str) -> Option<PathBuf> {
+fn find_app(name: &str) -> Option<Launch> {
     let wanted = name.to_lowercase();
-    let shortcuts = start_menu_shortcuts();
+    let wanted = wanted.strip_suffix(".exe").unwrap_or(&wanted).to_string();
+    let apps = installed_apps();
     let pick = |matches: &dyn Fn(&str) -> bool| {
-        shortcuts
-            .iter()
+        apps.iter()
             .filter(|(n, _)| matches(&n.to_lowercase()))
             .min_by_key(|(n, _)| n.len())
-            .map(|(_, p)| p.clone())
+            .map(|(_, launch)| launch.clone())
     };
     pick(&|n| n == wanted)
         .or_else(|| pick(&|n| n.starts_with(&wanted)))
@@ -550,6 +653,28 @@ mod tests {
     fn process_names_are_normalised() {
         assert_eq!(process_key("Discord.EXE"), "discord");
         assert_eq!(process_key(" notepad "), "notepad");
+    }
+
+    #[test]
+    fn store_apps_and_registered_programs_are_read() {
+        let program = std::env::current_exe().unwrap();
+        let json = serde_json::json!({
+            "start": [
+                { "n": "Telegram Desktop", "id": "TelegramMessengerLLP.TelegramDesktop_t4vj0pshhgkwm!Telegram.TelegramDesktop.Store" },
+                { "n": "Uninstall Something", "id": "x" }
+            ],
+            // A single registry entry comes as an object, not a list.
+            "paths": { "n": "chrome", "p": program.display().to_string() }
+        })
+        .to_string();
+        let apps = parse_windows_apps(&json);
+        assert_eq!(apps.len(), 2, "{apps:?}");
+        assert_eq!(apps[0].0, "Telegram Desktop");
+        assert!(matches!(&apps[0].1, Launch::AppId(id) if id.ends_with("Store")));
+        assert_eq!(apps[1], ("chrome".to_string(), Launch::Path(program)));
+        // Programs that no longer exist, and broken output, are skipped.
+        assert!(parse_windows_apps(r#"{"paths":[{"n":"gone","p":"C:/nope/gone.exe"}]}"#).is_empty());
+        assert!(parse_windows_apps("not json").is_empty());
     }
 
     #[test]
