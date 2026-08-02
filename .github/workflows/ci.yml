@@ -1,14 +1,19 @@
-# Runs the tests and checks the frontend on every push and pull request.
+# Runs the tests on Windows and macOS on every push and pull request,
+# and checks that the Mac app still builds.
 name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, mac-support]
   pull_request:
 
 jobs:
   test:
-    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -32,3 +37,8 @@ jobs:
 
       - name: Run tests
         run: cargo test --workspace
+
+      - name: Build the Mac app
+        if: runner.os == 'macOS'
+        working-directory: app
+        run: npx tauri build --bundles app

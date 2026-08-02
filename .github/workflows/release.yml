@@ -1,4 +1,4 @@
-# Builds the Windows installers and attaches them to a GitHub release.
+# Builds the Windows installers and the Mac disk image and attaches them to a GitHub release.
 # Triggered by pushing a version tag, e.g. `git tag v1.0.0 && git push origin v1.0.0`.
 name: Release
 
@@ -11,8 +11,17 @@ permissions:
   contents: write
 
 jobs:
-  build-windows:
-    runs-on: windows-latest
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            args: ""
+          # One app for both Apple Silicon and Intel Macs.
+          - os: macos-latest
+            args: "--target universal-apple-darwin"
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -23,6 +32,8 @@ jobs:
           cache-dependency-path: app/package-lock.json
 
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ runner.os == 'macOS' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
       - uses: Swatinem/rust-cache@v2
 
@@ -44,10 +55,12 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: app
+          args: ${{ matrix.args }}
           tagName: ${{ github.ref_name }}
           releaseName: LocalFlow ${{ github.ref_name }}
           releaseBody: |
-            Download **LocalFlow_x.y.z_x64-setup.exe** below and run it to install LocalFlow.
+            **Windows:** download **LocalFlow_x.y.z_x64-setup.exe** below and run it.
+            **Mac:** download **LocalFlow_x.y.z_universal.dmg**, open it and drag LocalFlow into Applications. The first time, right-click LocalFlow in Applications and choose **Open** (it isn't notarized by Apple yet).
             See the README for what's new and how to use it.
           releaseDraft: false
           prerelease: false

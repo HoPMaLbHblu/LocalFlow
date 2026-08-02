@@ -4,6 +4,7 @@ pub mod control;
 pub mod data;
 pub mod files;
 pub mod lualib;
+pub mod mac;
 pub mod media;
 pub mod recycle;
 pub mod engine;

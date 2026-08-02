@@ -19,6 +19,7 @@ import RunsTab from "./RunsTab";
 import LogsTab from "./LogsTab";
 import VersionsTab from "./VersionsTab";
 import MoreTriggers from "./MoreTriggers";
+import { shortcut } from "../i18n/mac";
 import HelpPanel from "./HelpPanel";
 import type { EditorView } from "@codemirror/view";
 import { save as saveFileDialog } from "@tauri-apps/plugin-dialog";
@@ -499,7 +500,7 @@ export default function AutomationView({ id, template, setDirty, onSaved, onDele
           </div>
 
           <div className="editor-toolbar">
-            <button className="secondary" onClick={testRun} disabled={busy !== null} title="Ctrl+Enter">
+            <button className="secondary" onClick={testRun} disabled={busy !== null} title={shortcut("Enter")}>
               {busy === "testing" ? t("view.testing") : t("view.testRun")}
             </button>
             <span className="muted small">{t("view.testRunNote")}</span>
@@ -508,7 +509,7 @@ export default function AutomationView({ id, template, setDirty, onSaved, onDele
                 {t("view.showHelp")}
               </button>
             )}
-            <button className="primary push-right" onClick={save} disabled={busy !== null || (!dirty && id !== null)} title="Ctrl+S">
+            <button className="primary push-right" onClick={save} disabled={busy !== null || (!dirty && id !== null)} title={shortcut("S")}>
               {busy === "saving" ? t("view.saving") : id === null ? t("view.create") : t("view.save")}
             </button>
           </div>

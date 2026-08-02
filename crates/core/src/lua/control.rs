@@ -17,8 +17,8 @@
 //! network.wake_on_lan(mac)            -- wake another PC on the network
 //!
 //! -- need "Allow system control"
-//! shell.run(command, { cwd, timeout })        -- cmd.exe: { code, ok, output, error }
-//! shell.powershell(script, { cwd, timeout })  -- same, with PowerShell
+//! shell.run(command, { cwd, timeout })        -- cmd.exe (Terminal's sh on a Mac): { code, ok, output, error }
+//! shell.powershell(script, { cwd, timeout })  -- same, with PowerShell (pwsh on a Mac, if installed)
 //! process.kill(name_or_pid)                   -- stop a program; returns how many were stopped
 //! window.focus/minimize/maximize/restore/close(win)
 //! window.move(win, x, y, width, height)
@@ -140,22 +140,28 @@ fn base64(bytes: &[u8]) -> String {
 pub(crate) fn powershell_command(script: &str) -> Command {
     let full = format!("[Console]::OutputEncoding = [Text.Encoding]::UTF8\n$ProgressPreference = 'SilentlyContinue'\n{script}");
     let utf16: Vec<u8> = full.encode_utf16().flat_map(|u| u.to_le_bytes()).collect();
-    let mut command = Command::new("powershell.exe");
+    // On a Mac, PowerShell is the optional "pwsh" (brew install powershell).
+    let program = if cfg!(windows) { "powershell.exe" } else { "pwsh" };
+    let mut command = Command::new(program);
     command.args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", &base64(&utf16)]);
     command
 }
 
 fn cmd_command(line: &str) -> Command {
-    let mut command = Command::new("cmd.exe");
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
+        let mut command = Command::new("cmd.exe");
         // chcp 65001: UTF-8 output. raw_arg: cmd.exe does its own quoting.
         command.args(["/d", "/s", "/c"]).raw_arg(format!("\"chcp 65001 >nul & {line}\""));
+        command
     }
     #[cfg(not(windows))]
-    command.args(["-c", line]);
-    command
+    {
+        let mut command = Command::new("/bin/sh");
+        command.args(["-c", line]);
+        command
+    }
 }
 
 /// Seconds left before the script's time limit, capped by the caller's own timeout.
@@ -205,6 +211,8 @@ fn shell_table(lua: &Lua, allowed: bool, deadline: Instant) -> mlua::Result<Tabl
 const PROTECTED: &[&str] = &[
     "system", "idle", "registry", "smss", "csrss", "wininit", "winlogon", "services", "lsass", "lsaiso", "svchost",
     "dwm", "fontdrvhost", "memory compression", "secure system", "localflow-desktop", "localflow",
+    // macOS
+    "kernel_task", "launchd", "windowserver", "loginwindow", "systemuiserver", "coreaudiod", "cfprefsd",
 ];
 
 fn process_key(name: &str) -> String {
@@ -423,8 +431,34 @@ fn window_list() -> Vec<WindowInfo> {
                 .unwrap_or_default()
         })
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    {
+        super::mac::windows()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(pid, index, app, title, x, y, width, height, minimized)| WindowInfo {
+                id: mac_window_id(pid, index),
+                title,
+                app: process_key(&app),
+                rect: (x, y, width, height),
+                minimized,
+                maximized: false,
+            })
+            .collect()
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
     Vec::new()
+}
+
+/// On a Mac a window is "app process + its position in the app's window list".
+#[cfg(target_os = "macos")]
+fn mac_window_id(pid: u32, index: u32) -> isize {
+    pid as isize * 1000 + index as isize
+}
+
+#[cfg(target_os = "macos")]
+fn mac_window_parts(id: isize) -> (u32, u32) {
+    ((id / 1000) as u32, (id % 1000) as u32)
 }
 
 fn window_to_lua(lua: &Lua, w: &WindowInfo) -> mlua::Result<Table> {
@@ -501,6 +535,12 @@ fn window_table(lua: &Lua, allowed: bool) -> mlua::Result<Table> {
                     return Ok(Value::Table(window_to_lua(lua, &w)?));
                 }
             }
+            #[cfg(target_os = "macos")]
+            if let Some(pid) = super::mac::frontmost_pid() {
+                if let Some(w) = window_list().into_iter().find(|w| mac_window_parts(w.id).0 == pid) {
+                    return Ok(Value::Table(window_to_lua(lua, &w)?));
+                }
+            }
             let _ = lua;
             Ok(Value::Nil)
         })?,
@@ -521,10 +561,16 @@ fn window_table(lua: &Lua, allowed: bool) -> mlua::Result<Table> {
                 let id = window_id(function, &target)?;
                 #[cfg(windows)]
                 return Ok(win::show(id, action));
-                #[cfg(not(windows))]
+                #[cfg(target_os = "macos")]
+                {
+                    let (pid, index) = mac_window_parts(id);
+                    super::mac::window_action(pid, index, action).map_err(|e| err(function, e))?;
+                    Ok(true)
+                }
+                #[cfg(not(any(windows, target_os = "macos")))]
                 {
                     let _ = id;
-                    Err(err(function, "only available on Windows"))
+                    Err(err(function, "only available on Windows and macOS"))
                 }
             })?,
         )?;
@@ -537,10 +583,16 @@ fn window_table(lua: &Lua, allowed: bool) -> mlua::Result<Table> {
             let id = window_id("window.move", &target)?;
             #[cfg(windows)]
             return Ok(win::move_to(id, x, y, width.max(100), height.max(50)));
-            #[cfg(not(windows))]
+            #[cfg(target_os = "macos")]
+            {
+                let (pid, index) = mac_window_parts(id);
+                super::mac::move_window(pid, index, x, y, width.max(100), height.max(50)).map_err(|e| err("window.move", e))?;
+                Ok(true)
+            }
+            #[cfg(not(any(windows, target_os = "macos")))]
             {
                 let _ = (id, x, y, width, height);
-                Err(err("window.move", "only available on Windows"))
+                Err(err("window.move", "only available on Windows and macOS"))
             }
         })?,
     )?;
@@ -550,7 +602,8 @@ fn window_table(lua: &Lua, allowed: bool) -> mlua::Result<Table> {
 
 // ---- keyboard, mouse, screen -------------------------------------------------------------
 
-#[cfg(windows)]
+// enigo drives the keyboard and mouse on Windows and macOS.
+#[cfg(any(windows, target_os = "macos"))]
 mod input {
     use enigo::{Button, Coordinate, Direction, Enigo, Key, Keyboard, Mouse, Settings};
 
@@ -562,9 +615,9 @@ mod input {
         let lower = name.to_lowercase();
         let key = match lower.as_str() {
             "ctrl" | "control" => Key::Control,
-            "alt" => Key::Alt,
+            "alt" | "option" | "opt" => Key::Alt,
             "shift" => Key::Shift,
-            "win" | "super" | "meta" => Key::Meta,
+            "win" | "super" | "meta" | "cmd" | "command" => Key::Meta,
             "enter" | "return" => Key::Return,
             "tab" => Key::Tab,
             "esc" | "escape" => Key::Escape,
@@ -661,7 +714,7 @@ mod input {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "macos")))]
 mod input {
     const NO: &str = "only available on Windows";
     pub fn press(_: &str) -> Result<(), String> {
@@ -788,7 +841,9 @@ pub fn idle_seconds() -> u64 {
         let now = unsafe { GetTickCount() };
         u64::from(now.wrapping_sub(info.dwTime)) / 1000
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    return super::mac::idle_seconds();
+    #[cfg(not(any(windows, target_os = "macos")))]
     0
 }
 
@@ -833,8 +888,10 @@ fn add_power_functions(lua: &Lua, system: &Table, allowed: bool, policy: Arc<Pat
                 }
                 Ok(())
             }
-            #[cfg(not(windows))]
-            Err(err("system.lock", "only available on Windows"))
+            #[cfg(target_os = "macos")]
+            return super::mac::lock().map_err(|e| err("system.lock", e));
+            #[cfg(not(any(windows, target_os = "macos")))]
+            Err(err("system.lock", "only available on Windows and macOS"))
         })?,
     )?;
 
@@ -848,8 +905,10 @@ fn add_power_functions(lua: &Lua, system: &Table, allowed: bool, policy: Arc<Pat
                 unsafe { windows_sys::Win32::System::Power::SetSuspendState(0, 0, 0) };
                 Ok(())
             }
-            #[cfg(not(windows))]
-            Err(err("system.sleep", "only available on Windows"))
+            #[cfg(target_os = "macos")]
+            return super::mac::sleep().map_err(|e| err("system.sleep", e));
+            #[cfg(not(any(windows, target_os = "macos")))]
+            Err(err("system.sleep", "only available on Windows and macOS"))
         })?,
     )?;
 
@@ -861,9 +920,14 @@ fn add_power_functions(lua: &Lua, system: &Table, allowed: bool, policy: Arc<Pat
                 require(allowed, function)?;
                 // A delay by default, so there's always time to cancel (shutdown /a).
                 let delay = delay.unwrap_or(60).min(3600);
-                let mut command = Command::new("shutdown.exe");
-                command.args([flag, "/t", &delay.to_string(), "/c", "LocalFlow: an automation asked for this. To cancel: shutdown /a"]);
-                run_program(command, Duration::from_secs(20)).map_err(|e| err(function, e))?;
+                #[cfg(target_os = "macos")]
+                super::mac::shutdown(delay, flag == "/r").map_err(|e| err(function, e))?;
+                #[cfg(not(target_os = "macos"))]
+                {
+                    let mut command = Command::new("shutdown.exe");
+                    command.args([flag, "/t", &delay.to_string(), "/c", "LocalFlow: an automation asked for this. To cancel: shutdown /a"]);
+                    run_program(command, Duration::from_secs(20)).map_err(|e| err(function, e))?;
+                }
                 Ok(delay)
             })?,
         )?;
@@ -873,10 +937,7 @@ fn add_power_functions(lua: &Lua, system: &Table, allowed: bool, policy: Arc<Pat
         "cancel_shutdown",
         lua.create_function(move |_, ()| {
             require(allowed, "system.cancel_shutdown")?;
-            let mut command = Command::new("shutdown.exe");
-            command.arg("/a");
-            let (code, _, _) = run_program(command, Duration::from_secs(20)).map_err(|e| err("system.cancel_shutdown", e))?;
-            Ok(code == 0)
+            cancel_shutdown_now().map_err(|e| err("system.cancel_shutdown", e))
         })?,
     )?;
 
@@ -886,8 +947,16 @@ fn add_power_functions(lua: &Lua, system: &Table, allowed: bool, policy: Arc<Pat
             name,
             lua.create_function(move |_, steps: Option<u32>| {
                 require(allowed, function)?;
+                let steps = steps.unwrap_or(5).min(50);
+                #[cfg(target_os = "macos")]
+                {
+                    // Same feel as Windows: about 2% per step.
+                    let delta = steps as i32 * 2 * if key == "volumeup" { 1 } else { -1 };
+                    return super::mac::change_volume(delta).map_err(|e| err(function, e));
+                }
                 // Each step is 2% on most PCs.
-                for _ in 0..steps.unwrap_or(5).min(50) {
+                #[cfg(not(target_os = "macos"))]
+                for _ in 0..steps {
                     input::press(key).map_err(|e| err(function, e))?;
                 }
                 Ok(())
@@ -899,7 +968,11 @@ fn add_power_functions(lua: &Lua, system: &Table, allowed: bool, policy: Arc<Pat
         "mute",
         lua.create_function(move |_, ()| {
             require(allowed, "system.mute")?;
-            input::press("mute").map_err(|e| err("system.mute", e))
+            #[cfg(target_os = "macos")]
+            let result = super::mac::toggle_mute();
+            #[cfg(not(target_os = "macos"))]
+            let result = input::press("mute");
+            result.map_err(|e| err("system.mute", e))
         })?,
     )?;
 
@@ -908,6 +981,9 @@ fn add_power_functions(lua: &Lua, system: &Table, allowed: bool, policy: Arc<Pat
         lua.create_function(move |_, percent: u32| {
             require(allowed, "system.brightness")?;
             let percent = percent.min(100);
+            if cfg!(target_os = "macos") {
+                return Err(err("system.brightness", "macOS doesn't let apps change the brightness; use the brightness keys"));
+            }
             let script = format!(
                 "(Get-CimInstance -Namespace root/WMI -ClassName WmiMonitorBrightnessMethods -ErrorAction Stop) | \
                  Invoke-CimMethod -MethodName WmiSetBrightness -Arguments @{{Timeout=1; Brightness={percent}}} | Out-Null"
@@ -945,8 +1021,10 @@ fn add_power_functions(lua: &Lua, system: &Table, allowed: bool, policy: Arc<Pat
                 }
                 Ok(())
             }
-            #[cfg(not(windows))]
-            Err(err("system.set_wallpaper", "only available on Windows"))
+            #[cfg(target_os = "macos")]
+            return super::mac::set_wallpaper(&resolved).map_err(|e| err("system.set_wallpaper", e));
+            #[cfg(not(any(windows, target_os = "macos")))]
+            Err(err("system.set_wallpaper", "only available on Windows and macOS"))
         })?,
     )?;
 
@@ -955,19 +1033,7 @@ fn add_power_functions(lua: &Lua, system: &Table, allowed: bool, policy: Arc<Pat
         lua.create_function(move |_, when: Value| {
             require(allowed, "system.wake_at")?;
             let time = wake_time(&when).map_err(|e| err("system.wake_at", e))?;
-            // A Windows task that is allowed to wake the PC from sleep.
-            let script = format!(
-                "$trigger = New-ScheduledTaskTrigger -Once -At '{}'\n\
-                 $settings = New-ScheduledTaskSettingsSet -WakeToRun -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries\n\
-                 $action = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument '/c exit 0'\n\
-                 Register-ScheduledTask -TaskName '{WAKE_TASK}' -Trigger $trigger -Settings $settings -Action $action -Force | Out-Null",
-                time.format("%Y-%m-%dT%H:%M:%S")
-            );
-            let (code, _, error) = run_program(powershell_command(&script), time_budget(deadline, Some(30.0))?)
-                .map_err(|e| err("system.wake_at", e))?;
-            if code != 0 {
-                return Err(err("system.wake_at", format!("could not set the wake timer: {error}")));
-            }
+            set_wake_timer(&time, time_budget(deadline, Some(60.0))?).map_err(|e| err("system.wake_at", e))?;
             Ok(time.format("%Y-%m-%d %H:%M").to_string())
         })?,
     )?;
@@ -976,13 +1042,60 @@ fn add_power_functions(lua: &Lua, system: &Table, allowed: bool, policy: Arc<Pat
         "cancel_wake",
         lua.create_function(move |_, ()| {
             require(allowed, "system.cancel_wake")?;
-            let script = format!("Unregister-ScheduledTask -TaskName '{WAKE_TASK}' -Confirm:$false -ErrorAction SilentlyContinue");
-            run_program(powershell_command(&script), time_budget(deadline, Some(30.0))?)
-                .map_err(|e| err("system.cancel_wake", e))?;
-            Ok(())
+            cancel_wake_timer(time_budget(deadline, Some(60.0))?).map_err(|e| err("system.cancel_wake", e))
         })?,
     )?;
 
+    Ok(())
+}
+
+// Each operating system does these its own way.
+
+#[cfg(target_os = "macos")]
+fn cancel_shutdown_now() -> Result<bool, String> {
+    Ok(super::mac::cancel_shutdown())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn cancel_shutdown_now() -> Result<bool, String> {
+    let mut command = Command::new("shutdown.exe");
+    command.arg("/a");
+    let (code, _, _) = run_program(command, Duration::from_secs(20))?;
+    Ok(code == 0)
+}
+
+/// macOS asks for an administrator password to set a wake timer.
+#[cfg(target_os = "macos")]
+fn set_wake_timer(time: &chrono::DateTime<Local>, _budget: Duration) -> Result<(), String> {
+    super::mac::wake_at(time)
+}
+
+/// A Windows task that is allowed to wake the PC from sleep.
+#[cfg(not(target_os = "macos"))]
+fn set_wake_timer(time: &chrono::DateTime<Local>, budget: Duration) -> Result<(), String> {
+    let script = format!(
+        "$trigger = New-ScheduledTaskTrigger -Once -At '{}'\n\
+         $settings = New-ScheduledTaskSettingsSet -WakeToRun -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries\n\
+         $action = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument '/c exit 0'\n\
+         Register-ScheduledTask -TaskName '{WAKE_TASK}' -Trigger $trigger -Settings $settings -Action $action -Force | Out-Null",
+        time.format("%Y-%m-%dT%H:%M:%S")
+    );
+    let (code, _, error) = run_program(powershell_command(&script), budget)?;
+    if code != 0 {
+        return Err(format!("could not set the wake timer: {error}"));
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn cancel_wake_timer(_budget: Duration) -> Result<(), String> {
+    super::mac::cancel_wake()
+}
+
+#[cfg(not(target_os = "macos"))]
+fn cancel_wake_timer(budget: Duration) -> Result<(), String> {
+    let script = format!("Unregister-ScheduledTask -TaskName '{WAKE_TASK}' -Confirm:$false -ErrorAction SilentlyContinue");
+    run_program(powershell_command(&script), budget)?;
     Ok(())
 }
 

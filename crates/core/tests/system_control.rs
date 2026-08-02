@@ -64,21 +64,33 @@ async fn shell_commands_run_with_utf8_output() {
     assert_eq!(messages(&r), ["hello 0 true", "Привет", "3 false"]);
 }
 
+/// A command that waits 30 seconds without using the network.
+#[cfg(windows)]
+const SLOW_COMMAND: &str = "waitfor /t 30 LocalFlowTestSignal";
+#[cfg(not(windows))]
+const SLOW_COMMAND: &str = "sleep 30";
+
+/// A process the operating system can't do without.
+#[cfg(windows)]
+const SYSTEM_PROCESS: &str = "svchost";
+#[cfg(not(windows))]
+const SYSTEM_PROCESS: &str = "launchd";
+
 #[tokio::test]
 async fn slow_commands_are_stopped_at_their_timeout() {
     let dir = TempDir::new().unwrap();
     let flow = flow(&dir).await;
     let r = flow
-        .test_run_with("shell.run('waitfor /t 30 LocalFlowTestSignal', { timeout = 1 })".into(), "t".into(), true)
+        .test_run_with(format!("shell.run('{SLOW_COMMAND}', {{ timeout = 1 }})"), "t".into(), true)
         .await;
     assert!(r.error.unwrap().contains("stopped after"));
 }
 
 #[tokio::test]
-async fn windows_processes_are_protected() {
+async fn system_processes_are_protected() {
     let dir = TempDir::new().unwrap();
     let flow = flow(&dir).await;
-    let r = flow.test_run_with("process.kill('svchost')".into(), "t".into(), true).await;
+    let r = flow.test_run_with(format!("process.kill('{SYSTEM_PROCESS}')"), "t".into(), true).await;
     assert!(r.error.unwrap().contains("protected"));
     let r = flow
         .test_run_with("log(process.kill('definitely-not-running-3f9c'))".into(), "t".into(), true)

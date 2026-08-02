@@ -4,6 +4,7 @@
 import { en, type Key, type Dictionary } from "./en";
 import { ru } from "./ru";
 import { de } from "./de";
+import { IS_MAC, MAC_OVERRIDES } from "./mac";
 
 export type Lang = "en" | "ru" | "de";
 export type LanguageSetting = "auto" | Lang;
@@ -19,7 +20,7 @@ const CACHE_KEY = "localflow.language";
 
 let current: Lang = "en";
 
-/** "auto" becomes the Windows/browser language if we have it, otherwise English. */
+/** "auto" becomes the system language if we have it, otherwise English. */
 export function resolveLanguage(setting: LanguageSetting | string | null | undefined): Lang {
   const wanted = !setting || setting === "auto" ? navigator.language : setting;
   const prefix = wanted.split("-")[0].toLowerCase();
@@ -56,7 +57,7 @@ export function locale(): string {
 }
 
 export function t(key: Key, vars?: Record<string, string | number>): string {
-  let text = DICTIONARIES[current][key] ?? en[key] ?? key;
+  let text = (IS_MAC ? MAC_OVERRIDES[current][key] : undefined) ?? DICTIONARIES[current][key] ?? en[key] ?? key;
   if (vars) {
     for (const [name, value] of Object.entries(vars)) text = text.split(`{${name}}`).join(String(value));
   }

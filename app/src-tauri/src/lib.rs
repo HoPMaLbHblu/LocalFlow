@@ -146,8 +146,9 @@ fn init(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 /// Tell the user why LocalFlow couldn't start, and where their data is.
 fn show_fatal_error(error: &str) {
     tracing::error!("LocalFlow could not start: {error}");
-    let data_dir = std::env::var("APPDATA")
-        .map(|d| format!(r"{d}\com.hopmalbhblu.localflow"))
+    // Where Tauri keeps app data: %APPDATA% on Windows, ~/Library/Application Support on a Mac.
+    let data_dir = dirs::data_dir()
+        .map(|d| d.join("com.hopmalbhblu.localflow").display().to_string())
         .unwrap_or_default();
     rfd::MessageDialog::new()
         .set_title("LocalFlow could not start")
@@ -241,6 +242,23 @@ pub fn run() {
             windows::open_guide,
             windows::show_main,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running LocalFlow");
+        .build(tauri::generate_context!())
+        .expect("error while building LocalFlow")
+        .run(|app, event| {
+            // macOS hands double-clicked files to the running app as an event, not as arguments.
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Opened { urls } = &event {
+                for url in urls {
+                    if let Ok(path) = url.to_file_path() {
+                        sharing::open_file(app, path.to_string_lossy().into_owned());
+                    }
+                }
+            }
+            // Clicking the Dock icon brings the hidden window back.
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen { .. } = &event {
+                show_main_window(app);
+            }
+            let _ = (app, event);
+        });
 }
