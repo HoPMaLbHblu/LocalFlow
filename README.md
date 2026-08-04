@@ -1,24 +1,26 @@
 # LocalFlow
 
-Automate chores on your computer with small **Lua** scripts: tidy your Downloads folder, back up notes, move screenshots. Run them with one click or on a schedule. LocalFlow lives in the system tray (the icons next to the clock on the taskbar) and keeps your schedules running in the background. Available in English, Russian and German, with light and dark themes.
+Automate chores on your computer with small **Lua** scripts: tidy your Downloads folder, back up notes, move screenshots. Run them with one click or on a schedule. LocalFlow lives in the system tray on Windows (the icons next to the clock on the taskbar) or the menu bar on a Mac, and keeps your schedules running in the background. Available in English, Russian and German, with light and dark themes.
 
 LocalFlow comes in two flavours that share the same engine:
 
-- **Desktop app** (Windows): a native window with a code editor, test runs, live logs, a system tray icon, desktop notifications, "start with Windows", light/dark themes and English/Russian/German.
+- **Desktop app** (Windows and macOS): a native window with a code editor, test runs, live logs, a system tray / menu bar icon, desktop notifications, start at sign-in, light/dark themes and English/Russian/German.
 - **Web server**: the basics (create, edit, schedule, run, logs) in your browser at `http://127.0.0.1:3000`, for headless machines. Folder watching, extra triggers, system control, import/export and backups are desktop-only.
 
 ## Install the desktop app
 
-Download `LocalFlow_x.y.z_x64-setup.exe` from the [latest release](../../releases/latest) and run it. No administrator rights are needed.
+**Windows:** download `LocalFlow_x.y.z_x64-setup.exe` from the [latest release](../../releases/latest) and run it. No administrator rights are needed.
+
+**Mac** (macOS 11 or newer, Apple Silicon or Intel): download `LocalFlow_x.y.z_universal.dmg` from the [latest release](../../releases/latest), open it and drag **LocalFlow** into **Applications**. LocalFlow isn't notarized by Apple yet, so the first time, right-click (or Control-click) LocalFlow in Applications and choose **Open**, then **Open** again. If macOS still refuses, go to **System Settings › Privacy & Security** and click **Open Anyway**. After that it opens normally.
 
 After installing:
 
 1. Click **+ New automation** and pick one of the 34 templates, for example *Hello world*, or start from a blank one.
-2. Press **Test run** (Ctrl+Enter) to try it without saving.
-3. Press **Save** (Ctrl+S). Choose a **schedule** to run it automatically.
-4. Close the window whenever you like. LocalFlow keeps running in the system tray (the icons next to the clock on the taskbar; click **^** if you don't see it). Right-click its icon there and choose **Quit** to exit.
+2. Press **Test run** (Ctrl+Enter, or ⌘ Enter on a Mac) to try it without saving.
+3. Press **Save** (Ctrl+S, or ⌘ S). Choose a **schedule** to run it automatically.
+4. Close the window whenever you like. LocalFlow keeps running in the system tray (the icons next to the clock on the taskbar; click **^** if you don't see it). Right-click its icon there and choose **Quit** to exit. On a Mac, LocalFlow's icon is in the menu bar at the top right of the screen; click it for the menu, or press ⌘ Q to quit.
 
-Turn on **Settings → Start with Windows** so schedules survive a reboot. **Settings → Appearance** switches between light, dark and system theme, and between English, Русский and Deutsch.
+Turn on **Settings → Start with Windows** (**Open at login** on a Mac) so schedules survive a reboot. **Settings → Appearance** switches between light, dark and system theme, and between English, Русский and Deutsch.
 
 ## Writing automations
 
@@ -103,7 +105,7 @@ The editor autocompletes these functions, shows what they do when you hover over
 | **When LocalFlow starts** | Tick *Run when LocalFlow starts*. With **Settings › Start with Windows** this runs every time you sign in, which is perfect for opening your apps. |
 | **New file in a folder** | Tick *Run when a new file appears in a folder* and choose the folder and, optionally, a pattern such as `*.pdf`. The automation runs once per new file, after it has finished downloading, with the file in `ctx.file`. |
 | **After another automation** | Under *More triggers and permissions*, pick an automation and whether to run when it worked, failed, or either way. |
-| **Hotkey, app, idle, USB** | See *Controlling Windows* below. |
+| **Hotkey, app, idle, USB** | See *Controlling the computer* below. |
 
 Example: open your apps when you sign in.
 
@@ -122,7 +124,7 @@ automation {
 }
 ```
 
-### Controlling Windows
+### Controlling the computer
 
 These functions control the whole PC. Everything marked 🔒 only works when **Allow system control** is switched on for that automation (under *More triggers and permissions* in the editor). Imported automations never have it switched on.
 
@@ -139,6 +141,15 @@ These functions control the whole PC. Everything marked 🔒 only works when **A
 | 🔒 `system.volume_up/down(steps)` / `system.mute()` / `system.brightness(percent)` / `system.set_wallpaper(path)` | Sound and display. |
 | 🔒 `system.wake_at("07:30")` / `system.cancel_wake()` | Wake the PC from **sleep** at a time (a shut-down PC can only be switched on by the BIOS). Windows must allow wake timers. |
 | `system.idle_seconds()` · `network.wake_on_lan(mac)` | Time since the last input; wake another PC on the network. |
+
+**On a Mac** the same functions work, with a few differences:
+
+- The first time an automation controls windows, the keyboard, the mouse or locks the screen, macOS asks you to allow LocalFlow under **System Settings › Privacy & Security › Accessibility** (and to let it control "System Events"). Allow it once and run again.
+- `shell.run` uses the Mac's shell (`sh`), so write Mac commands (`ls`, `open`, `say`). `shell.powershell` needs PowerShell installed (`brew install powershell`).
+- `app.open("Safari")` opens apps from Applications; `app.shortcuts()` lists them.
+- `system.wake_at` asks for your administrator password (macOS requires it for wake timers). `system.brightness` isn't available: macOS doesn't let apps change it.
+- `ask`, `sound.beep`, `sound.play`, the battery, idle time, volume, mute, wallpaper, sleep, lock, shutdown and restart all work.
+- `fs.delete` and replaced files go to the Mac's Trash.
 
 More triggers, also under *More triggers and permissions*: a global **hotkey** (e.g. `Ctrl+Alt+K`), **when an app starts** or **closes** (`ctx.app`), **when the PC is idle** for some minutes, and **when a USB drive is plugged in** (`ctx.drive`; that run may read and write the drive).
 

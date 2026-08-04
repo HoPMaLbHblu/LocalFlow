@@ -70,6 +70,12 @@ const SLOW_COMMAND: &str = "waitfor /t 30 LocalFlowTestSignal";
 #[cfg(not(windows))]
 const SLOW_COMMAND: &str = "sleep 30";
 
+/// A harmless program that runs for a while: (command, trigger name as typed, arguments, name LocalFlow reports).
+#[cfg(windows)]
+const TEST_PROGRAM: (&str, &str, &[&str], &str) = ("ping", "PING.EXE", &["-n", "15", "127.0.0.1"], "ping");
+#[cfg(not(windows))]
+const TEST_PROGRAM: (&str, &str, &[&str], &str) = ("sleep", "Sleep", &["20"], "sleep");
+
 /// A process the operating system can't do without.
 #[cfg(windows)]
 const SYSTEM_PROCESS: &str = "svchost";
@@ -119,10 +125,10 @@ async fn app_start_trigger_runs_with_the_app_name() {
     let flow = flow(&dir).await;
     let a = flow
         .create(&AutomationInput {
-            name: "When ping starts".into(),
+            name: "When a program starts".into(),
             lua_code: "log(ctx.trigger .. ':' .. ctx.app)".into(),
             enabled: true,
-            triggers: ExtraTriggers { app_start: Some("PING.EXE".into()), ..Default::default() },
+            triggers: ExtraTriggers { app_start: Some(TEST_PROGRAM.1.into()), ..Default::default() },
             ..Default::default()
         })
         .await
@@ -132,7 +138,7 @@ async fn app_start_trigger_runs_with_the_app_name() {
     // Let the monitor take its first snapshot of running programs (slow in debug
     // builds), then start a harmless program.
     tokio::time::sleep(Duration::from_secs(8)).await;
-    let mut child = std::process::Command::new("ping").args(["-n", "15", "127.0.0.1"]).spawn().unwrap();
+    let mut child = std::process::Command::new(TEST_PROGRAM.0).args(TEST_PROGRAM.2).spawn().unwrap();
 
     let mut logs = Vec::new();
     for _ in 0..60 {
@@ -143,7 +149,7 @@ async fn app_start_trigger_runs_with_the_app_name() {
         tokio::time::sleep(Duration::from_millis(250)).await;
     }
     let _ = child.kill();
-    assert_eq!(logs.first().map(|l| l.message.as_str()), Some("app_start:ping"));
+    assert_eq!(logs.first().map(|l| l.message.as_str()), Some(format!("app_start:{}", TEST_PROGRAM.3).as_str()));
 }
 
 #[tokio::test]
