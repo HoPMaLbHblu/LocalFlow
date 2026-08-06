@@ -5,6 +5,7 @@
 //! registered in [`lua::api`]. Front-ends (the web server and the desktop app)
 //! talk to the [`LocalFlow`] service.
 
+pub mod ai;
 pub mod backup;
 pub mod config;
 pub mod db;

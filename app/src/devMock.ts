@@ -90,6 +90,19 @@ export function installDevMock() {
         { file_name: "localflow-2026-09-29_09-00-00-daily.db", created_at: iso(-3_600_000), size: 61440, kind: "daily" },
         { file_name: "localflow-2026-09-28_18-30-00-before-update.db", created_at: iso(-86_400_000), size: 53248, kind: "before-update" },
       ];
+      case "get_ai_settings": return { configured: false, scope: "GIGACHAT_API_PERS", model: "GigaChat-2",
+        scopes: ["GIGACHAT_API_PERS", "GIGACHAT_API_B2B", "GIGACHAT_API_CORP"], models: ["GigaChat-2", "GigaChat-2-Pro", "GigaChat-2-Max"] };
+      case "set_ai_settings": case "clear_ai_key": return null;
+      case "test_ai": return "Привет! Рад помочь.";
+      case "ai_write_automation": return `automation {
+    name = "From AI",
+
+    run = function(ctx)
+        -- ${(args as { description: string }).description}
+        log("Hello from the AI draft")
+    end
+}
+`;
       case "list_trash": return [{
         ...automations[0], id: 99, name: "Old experiment", enabled: false,
         deleted_at: iso(-2 * 86_400_000), last_run: null, next_run: null,

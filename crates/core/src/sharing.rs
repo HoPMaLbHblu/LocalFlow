@@ -127,6 +127,8 @@ pub enum Risk {
     WritesFiles,
     OpensApps,
     UsesInternet,
+    /// Sends text to GigaChat (the AI), which may cost tokens.
+    UsesAi,
     UsesClipboard,
     RunsOnStartup,
     WatchesFolder,
@@ -185,6 +187,7 @@ pub fn risks(shared: &SharedAutomation) -> Vec<Risk> {
     check(Risk::WritesFiles, &["fs.write", "fs.append", "fs.copy", "fs.mkdir", "zip.create", "zip.extract"]);
     check(Risk::OpensApps, &["app.open"]);
     check(Risk::UsesInternet, &["http.get", "http.post"]);
+    check(Risk::UsesAi, &["ai.ask", "ai.chat"]);
     check(Risk::UsesClipboard, &["clipboard.get", "clipboard.set"]);
     check(Risk::RunsCommands, &["shell.run", "shell.powershell"]);
     check(Risk::ControlsInput, &["keyboard.press", "keyboard.type", "mouse.move", "mouse.click"]);

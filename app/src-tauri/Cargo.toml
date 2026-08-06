@@ -28,4 +28,6 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 chrono.workspace = true
 dirs.workspace = true
+# The GigaChat key lives in Windows Credential Manager / the macOS Keychain.
+keyring = { version = "3", features = ["windows-native", "apple-native"] }
 sys-locale = "0.3"

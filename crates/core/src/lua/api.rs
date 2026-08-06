@@ -109,6 +109,7 @@ pub fn register(
     super::files::register(lua, &fs, policy.clone(), deadline)?;
     super::media::register(lua, &fs, policy, deadline)?;
     crate::metrics::register(lua)?;
+    crate::ai::register(lua, deadline)?;
     super::lualib::register(lua)?;
     globals.set("fs", fs)?;
     Ok(())
