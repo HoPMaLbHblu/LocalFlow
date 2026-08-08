@@ -119,7 +119,7 @@ pub async fn test_ai(language: String) -> Result<String, CommandError> {
 
 /// "Write with AI": Lua code for a description, for the user to review and test.
 #[tauri::command]
-pub async fn ai_write_automation(description: String, language: String) -> Result<String, CommandError> {
+pub async fn ai_write_automation(description: String, language: String) -> Result<ai::WrittenCode, CommandError> {
     tauri::async_runtime::spawn_blocking(move || ai::write_automation(&description, &language, Duration::from_secs(120)))
         .await
         .map_err(error)?

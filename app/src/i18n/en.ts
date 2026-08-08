@@ -258,6 +258,8 @@ export const en = {
   "ai.cancel": "Cancel",
   "ai.writeNote": "AI can make mistakes: read the code and do a test run before saving.",
   "ai.replaceConfirm": "Replace the code in the editor with the AI's version?",
+  "ai.stillWrong": "The code is in the editor, but it still has problems. Fix them by hand or press Write the code again:",
+  "ai.needsSystem": "This code uses functions that need Allow system control (under More triggers and permissions). Read it first, then switch it on for this automation.",
   "risk.uses_ai": "Sends text to the AI (GigaChat), using your key",
   "risk.uses_clipboard": "Reads or changes your clipboard",
   "risk.runs_on_startup": "Runs by itself when LocalFlow starts",

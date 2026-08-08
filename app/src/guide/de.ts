@@ -16,6 +16,7 @@ export const de: GuideTranslation = {
     "fs.size": { summary: "Die Größe einer Datei in Bytes. Teilen Sie durch `1024 * 1024` für Megabytes.", returns: "eine Anzahl Bytes" },
     "fs.modified": { summary: "Wann eine Datei zuletzt geändert wurde, als Zeitstempel. Vergleichen Sie mit `time.now()`, um alte Dateien zu finden.", returns: "einen Zeitstempel (Sekunden seit 1970)" },
     "app.open": { summary: "Öffnet eine App über ihren Namen im Startmenü (z. B. `\"Spotify\"`), eine Datei oder einen Ordner mit dem passenden Programm, eine Website oder ein Programm über seinen Pfad. `args` ist eine optionale Liste mit Optionen für ein Programm.", returns: "was geöffnet wurde" },
+    "app.close": { summary: "Schließt alle Fenster einer App höflich, wie ein Klick auf ✕, damit sie noch zum Speichern auffordern kann. Braucht **Systemsteuerung erlauben**. Um ein Programm sofort zu beenden, nutze `process.kill`.", returns: "wie viele Fenster geschlossen wurden" },
     "app.running": { summary: "Prüft, ob ein Programm läuft. Verwenden Sie den Programmnamen, z. B. `\"Discord\"` oder `\"chrome\"`; Groß-/Kleinschreibung und `.exe` sind egal.", returns: "`true` oder `false`" },
     "app.list": { summary: "Die Namen aller gerade laufenden Programme. Praktisch, um den Namen für `app.running` herauszufinden.", returns: "eine Liste von Namen" },
     "app.shortcuts": { summary: "Die Namen der Apps im Startmenü, also genau die Namen, die `app.open` versteht.", returns: "eine Liste von Namen" },

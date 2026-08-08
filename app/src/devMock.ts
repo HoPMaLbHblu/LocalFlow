@@ -94,7 +94,7 @@ export function installDevMock() {
         scopes: ["GIGACHAT_API_PERS", "GIGACHAT_API_B2B", "GIGACHAT_API_CORP"], models: ["GigaChat-2", "GigaChat-2-Pro", "GigaChat-2-Max"] };
       case "set_ai_settings": case "clear_ai_key": return null;
       case "test_ai": return "Привет! Рад помочь.";
-      case "ai_write_automation": return `automation {
+      case "ai_write_automation": return { warnings: [], needs_system_control: false, code: `automation {
     name = "From AI",
 
     run = function(ctx)
@@ -102,7 +102,7 @@ export function installDevMock() {
         log("Hello from the AI draft")
     end
 }
-`;
+` };
       case "list_trash": return [{
         ...automations[0], id: 99, name: "Old experiment", enabled: false,
         deleted_at: iso(-2 * 86_400_000), last_run: null, next_run: null,

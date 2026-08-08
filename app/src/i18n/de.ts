@@ -241,6 +241,8 @@ export const de: Dictionary = {
   "ai.cancel": "Abbrechen",
   "ai.writeNote": "KI kann Fehler machen: Lies den Code und mache einen Testlauf, bevor du speicherst.",
   "ai.replaceConfirm": "Den Code im Editor durch die Version der KI ersetzen?",
+  "ai.stillWrong": "Der Code steht im Editor, hat aber noch Fehler. Behebe sie von Hand oder drücke noch einmal „Code schreiben“:",
+  "ai.needsSystem": "Dieser Code nutzt Funktionen, die „Systemsteuerung erlauben“ brauchen (unter „Weitere Auslöser und Berechtigungen“). Lies ihn zuerst und schalte es dann für diese Automatisierung ein.",
   "risk.uses_ai": "Sendet Text an die KI (GigaChat) mit deinem Schlüssel",
   "risk.uses_clipboard": "Liest oder ändert die Zwischenablage",
   "risk.runs_on_startup": "Läuft von selbst, wenn LocalFlow startet",

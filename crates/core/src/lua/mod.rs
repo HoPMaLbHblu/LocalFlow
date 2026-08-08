@@ -1,4 +1,5 @@
 pub mod api;
+pub mod catalog;
 pub mod chain;
 pub mod control;
 pub mod data;

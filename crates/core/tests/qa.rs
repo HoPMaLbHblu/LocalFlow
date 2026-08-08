@@ -286,6 +286,7 @@ async fn powerful_functions_need_permission() {
         "shell.run('echo hi')",
         "shell.powershell('Get-Date')",
         "process.kill('notepad')",
+        "app.close('notepad')",
         "keyboard.type('x')",
         "keyboard.press('ctrl+s')",
         "mouse.move(1, 1)",

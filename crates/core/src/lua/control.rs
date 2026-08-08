@@ -20,6 +20,7 @@
 //! shell.run(command, { cwd, timeout })        -- cmd.exe (Terminal's sh on a Mac): { code, ok, output, error }
 //! shell.powershell(script, { cwd, timeout })  -- same, with PowerShell (pwsh on a Mac, if installed)
 //! process.kill(name_or_pid)                   -- stop a program; returns how many were stopped
+//! app.close(name)                             -- close an app's windows politely (like clicking X)
 //! window.focus/minimize/maximize/restore/close(win)
 //! window.move(win, x, y, width, height)
 //! keyboard.press("ctrl+shift+esc")  keyboard.type("text")
@@ -69,6 +70,7 @@ pub fn register(lua: &Lua, allowed: bool, policy: Arc<PathPolicy>, deadline: Ins
     globals.set("mouse", mouse_table(lua, allowed)?)?;
     globals.set("screen", screen_table(lua)?)?;
     globals.set("network", network_table(lua)?)?;
+    add_app_close(lua, allowed)?;
     // Adds to the `system` table made in system.rs.
     let system: Table = globals.get("system")?;
     add_power_functions(lua, &system, allowed, policy, deadline)?;
@@ -559,19 +561,7 @@ fn window_table(lua: &Lua, allowed: bool) -> mlua::Result<Table> {
             lua.create_function(move |_, target: Value| {
                 require(allowed, function)?;
                 let id = window_id(function, &target)?;
-                #[cfg(windows)]
-                return Ok(win::show(id, action));
-                #[cfg(target_os = "macos")]
-                {
-                    let (pid, index) = mac_window_parts(id);
-                    super::mac::window_action(pid, index, action).map_err(|e| err(function, e))?;
-                    Ok(true)
-                }
-                #[cfg(not(any(windows, target_os = "macos")))]
-                {
-                    let _ = id;
-                    Err(err(function, "only available on Windows and macOS"))
-                }
+                window_action(id, action).map_err(|e| err(function, e))
             })?,
         )?;
     }
@@ -598,6 +588,49 @@ fn window_table(lua: &Lua, allowed: bool) -> mlua::Result<Table> {
     )?;
 
     Ok(window)
+}
+
+/// Focus, minimize, maximize, restore or close one window.
+fn window_action(id: isize, action: &str) -> Result<bool, String> {
+    #[cfg(windows)]
+    return Ok(win::show(id, action));
+    #[cfg(target_os = "macos")]
+    {
+        let (pid, index) = mac_window_parts(id);
+        super::mac::window_action(pid, index, action)?;
+        Ok(true)
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
+    {
+        let _ = (id, action);
+        Err("only available on Windows and macOS".into())
+    }
+}
+
+/// `app.close(name)`: close every window of an app the polite way (like clicking X),
+/// so it can still ask to save. Returns how many windows were closed.
+fn add_app_close(lua: &Lua, allowed: bool) -> mlua::Result<()> {
+    let app: Table = lua.globals().get("app")?;
+    app.set(
+        "close",
+        lua.create_function(move |_, name: String| {
+            require(allowed, "app.close")?;
+            let wanted = process_key(&name);
+            if PROTECTED.contains(&wanted.as_str()) {
+                return Err(err("app.close", format!("{wanted} is protected; LocalFlow won't close it")));
+            }
+            let mut closed = 0;
+            // Mac windows are numbered within their app, so close from the last one back.
+            let mut windows: Vec<WindowInfo> = window_list().into_iter().filter(|w| w.app == wanted).collect();
+            windows.reverse();
+            for w in windows {
+                if window_action(w.id, "close").map_err(|e| err("app.close", e))? {
+                    closed += 1;
+                }
+            }
+            Ok(closed)
+        })?,
+    )
 }
 
 // ---- keyboard, mouse, screen -------------------------------------------------------------
