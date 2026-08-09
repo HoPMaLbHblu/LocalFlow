@@ -54,6 +54,8 @@ pub struct AiSettings {
     model: String,
     scopes: Vec<&'static str>,
     models: Vec<&'static str>,
+    /// How many answers are saved in the cache.
+    cache_entries: usize,
 }
 
 #[tauri::command]
@@ -64,6 +66,7 @@ pub async fn get_ai_settings(state: State<'_, AppState>) -> Result<AiSettings, C
         model: saved(&state.flow, MODEL, ai::DEFAULT_MODEL, ai::MODELS).await,
         scopes: ai::SCOPES.to_vec(),
         models: ai::MODELS.to_vec(),
+        cache_entries: ai::cache_size(),
     })
 }
 
@@ -117,10 +120,25 @@ pub async fn test_ai(language: String) -> Result<String, CommandError> {
     .map_err(error)
 }
 
-/// "Write with AI": Lua code for a description, for the user to review and test.
+/// Forget every saved AI answer. Returns how many there were.
 #[tauri::command]
-pub async fn ai_write_automation(description: String, language: String) -> Result<ai::WrittenCode, CommandError> {
-    tauri::async_runtime::spawn_blocking(move || ai::write_automation(&description, &language, Duration::from_secs(120)))
+pub fn clear_ai_cache() -> usize {
+    ai::clear_cache()
+}
+
+/// "Write with AI": Lua code for a description, for the user to review and test.
+/// With `current_code`, the AI changes that code instead of starting over.
+#[tauri::command]
+pub async fn ai_write_automation(
+    description: String,
+    language: String,
+    current_code: Option<String>,
+    history: Option<Vec<ai::ChatTurn>>,
+) -> Result<ai::WrittenCode, CommandError> {
+    let history = history.unwrap_or_default();
+    tauri::async_runtime::spawn_blocking(move || {
+        ai::write_automation(&description, &language, current_code.as_deref(), &history, Duration::from_secs(120))
+    })
         .await
         .map_err(error)?
         .map_err(error)

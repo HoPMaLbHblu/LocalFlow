@@ -103,6 +103,8 @@ fn init(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let data_dir = app.path().app_data_dir()?;
     std::fs::create_dir_all(&data_dir)?;
     let db_path = data_dir.join("localflow.db");
+    // Saved AI answers (ai.ask with cache_hours) live next to the database.
+    localflow_core::ai::set_cache_file(data_dir.join("ai_cache.json"));
     let config = CoreConfig::new(format!(
         "sqlite://{}",
         db_path.to_string_lossy().replace('\\', "/")
@@ -245,6 +247,7 @@ pub fn run() {
             ai::set_ai_settings,
             ai::clear_ai_key,
             ai::test_ai,
+            ai::clear_ai_cache,
             ai::ai_write_automation,
             windows::open_guide,
             windows::show_main,

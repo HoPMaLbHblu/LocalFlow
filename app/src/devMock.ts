@@ -91,10 +91,13 @@ export function installDevMock() {
         { file_name: "localflow-2026-09-28_18-30-00-before-update.db", created_at: iso(-86_400_000), size: 53248, kind: "before-update" },
       ];
       case "get_ai_settings": return { configured: false, scope: "GIGACHAT_API_PERS", model: "GigaChat-2",
-        scopes: ["GIGACHAT_API_PERS", "GIGACHAT_API_B2B", "GIGACHAT_API_CORP"], models: ["GigaChat-2", "GigaChat-2-Pro", "GigaChat-2-Max"] };
+        scopes: ["GIGACHAT_API_PERS", "GIGACHAT_API_B2B", "GIGACHAT_API_CORP"], models: ["GigaChat-2", "GigaChat-2-Pro", "GigaChat-2-Max"], cache_entries: 12 };
+      case "clear_ai_cache": return 12;
       case "set_ai_settings": case "clear_ai_key": return null;
       case "test_ai": return "Привет! Рад помочь.";
-      case "ai_write_automation": return { warnings: [], needs_system_control: false, code: `automation {
+      case "ai_write_automation": return (args as { description: string }).description.trim().endsWith("?")
+        ? { warnings: [], needs_system_control: false, answer: "fs.move never overwrites, so nothing is lost.", code: (args as { currentCode?: string }).currentCode ?? "" }
+        : { warnings: [], needs_system_control: false, answer: null, code: `automation {
     name = "From AI",
 
     run = function(ctx)

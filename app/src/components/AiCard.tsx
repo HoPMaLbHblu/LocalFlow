@@ -99,6 +99,15 @@ export default function AiCard() {
         >
           {busy ? t("ai.working") : t("ai.test")}
         </button>
+        {settings.cache_entries > 0 && (
+          <button
+            className="link small"
+            disabled={busy}
+            onClick={() => act(async () => String(await api.clearAiCache()), (n) => t("ai.cacheCleared", { n: String(n) }))}
+          >
+            {t("ai.clearCache", { n: settings.cache_entries })}
+          </button>
+        )}
         {settings.configured && (
           <button className="link small" disabled={busy} onClick={() => act(api.clearAiKey, () => t("ai.removed"))}>
             {t("ai.remove")}
