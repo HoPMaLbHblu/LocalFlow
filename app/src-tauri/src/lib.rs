@@ -250,6 +250,7 @@ pub fn run() {
             ai::clear_ai_cache,
             ai::ai_write_automation,
             windows::open_guide,
+            windows::open_ai_chat,
             windows::show_main,
         ])
         .build(tauri::generate_context!())

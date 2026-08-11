@@ -21,6 +21,7 @@ import VersionsTab from "./VersionsTab";
 import MoreTriggers from "./MoreTriggers";
 import { shortcut } from "../i18n/mac";
 import AiChat from "./AiChat";
+import { inDesktopApp, onAiApplyCode, onAiContextRequest, openAiChatWindow, publishAiContext } from "../windowing";
 import HelpPanel from "./HelpPanel";
 import type { EditorView } from "@codemirror/view";
 import { save as saveFileDialog } from "@tauri-apps/plugin-dialog";
@@ -114,7 +115,9 @@ export default function AutomationView({ id, template, setDirty, onSaved, onDele
   };
   const [scheduleError, setScheduleError] = useState<string | null>(null);
   const [busy, setBusy] = useState<"saving" | "running" | "testing" | null>(null);
+  // The docked chat is only for the browser preview; the app has a separate AI chat window.
   const [aiOpen, setAiOpen] = useState(false);
+  const chatId = id === null ? "draft" : String(id);
   const [console_, setConsole] = useState<ConsoleState | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [historyVersion, setHistoryVersion] = useState(0);
@@ -221,6 +224,34 @@ export default function AutomationView({ id, template, setDirty, onSaved, onDele
   }, [form.schedule]);
 
   const update = (patch: Partial<AutomationInput>) => setForm((f) => ({ ...f, ...patch }));
+
+  // Keep the AI chat window in step with this editor: what's open, and its code.
+  const aiContext = useRef({ chatId, name: form.name, code: form.lua_code });
+  aiContext.current = { chatId, name: form.name, code: form.lua_code };
+  useEffect(() => {
+    const timer = setTimeout(() => publishAiContext(aiContext.current), 250);
+    return () => clearTimeout(timer);
+  }, [chatId, form.name, form.lua_code]);
+  useEffect(() => {
+    const asked = onAiContextRequest(() => publishAiContext(aiContext.current));
+    const applied = onAiApplyCode(({ chatId: target, code }) => {
+      if (target === aiContext.current.chatId) update({ lua_code: code });
+    });
+    return () => {
+      asked.then((f) => f());
+      applied.then((f) => f());
+      // Leaving the editor: the chat has nothing to work on.
+      publishAiContext(null);
+    };
+  }, []);
+
+  const openAi = () => {
+    if (inDesktopApp()) {
+      openAiChatWindow(t("ai.chat.windowTitle")).catch(() => setAiOpen(true));
+    } else {
+      setAiOpen(true);
+    }
+  };
 
   const save = useCallback(async () => {
     setBusy("saving");
@@ -500,7 +531,7 @@ export default function AutomationView({ id, template, setDirty, onSaved, onDele
             </div>
             {aiOpen ? (
               <AiChat
-                chatId={id === null ? "draft" : String(id)}
+                chatId={chatId}
                 currentCode={form.lua_code}
                 onCode={(code) => update({ lua_code: code })}
                 onClose={() => setAiOpen(false)}
@@ -516,7 +547,7 @@ export default function AutomationView({ id, template, setDirty, onSaved, onDele
             </button>
             <span className="muted small">{t("view.testRunNote")}</span>
             {!aiOpen && (
-              <button className="link small" onClick={() => setAiOpen(true)}>
+              <button className="link small" onClick={openAi}>
                 {t("ai.button")}
               </button>
             )}
