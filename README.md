@@ -141,6 +141,15 @@ These functions control the whole PC. Everything marked 🔒 only works when **A
 | 🔒 `system.volume_up/down(steps)` / `system.mute()` / `system.brightness(percent)` / `system.set_wallpaper(path)` | Sound and display. |
 | 🔒 `system.wake_at("07:30")` / `system.cancel_wake()` | Wake the PC from **sleep** at a time (a shut-down PC can only be switched on by the BIOS). Windows must allow wake timers. |
 | `system.idle_seconds()` · `network.wake_on_lan(mac)` | Time since the last input; wake another PC on the network. |
+| `desktop.dark_mode()` / 🔒 `desktop.set_dark_mode(on)` | Dark or light mode for Windows and apps. |
+| `desktop.transparency()` / 🔒 `desktop.set_transparency(on)` | Transparency effects. |
+| `desktop.accent_color()` / 🔒 `desktop.set_accent_color("#0078d4")` | The accent colour. |
+| `desktop.wallpaper()` / 🔒 `desktop.set_wallpaper(path, "fill")` | The wallpaper, with fill, fit, stretch, center, tile or span. |
+| `system.volume()` / 🔒 `system.set_volume(35)` · `system.muted()` / 🔒 `system.set_mute(on)` | Exact volume and mute. |
+| `power.plans()` / `power.plan()` / 🔒 `power.set_plan("power saver")` | Power plans, by the same English names in every language. |
+| 🔒 `power.set_screen_off(minutes)` / 🔒 `power.set_sleep(minutes)` | Screen-off and sleep timers (0 = never), optionally just `"plugged"` or `"battery"`. |
+| `mouse.speed()` / 🔒 `mouse.set_speed(10)` | Pointer speed, 1 to 20. |
+| `explorer.hidden_files()` / 🔒 `explorer.set_hidden_files(on)` · `explorer.file_extensions()` / 🔒 `explorer.set_file_extensions(on)` | What File Explorer shows. |
 
 **On a Mac** the same functions work, with a few differences:
 

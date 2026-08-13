@@ -33,7 +33,7 @@ const EXPECTED: &[&str] = &[
 const NOT_RUN: &[&str] = &[
     "app.open", "ask(", "shell.", "keyboard.", "mouse.", "window.", "process.kill", "system.lock", "system.sleep",
     "system.shutdown", "system.restart", "system.mute", "system.volume", "system.brightness", "system.set_wallpaper",
-    "system.wake_at", "network.", "http.", "clipboard.set", "sound.", "wait(", "ai.ask", "ai.chat", "ai.conversation",
+    "system.wake_at", "network.", "http.", "clipboard.set", "sound.", "wait(", "ai.ask", "ai.chat", "ai.conversation", "desktop.set_", "system.set_", "power.set_", "mouse.set_", "explorer.set_",
 ];
 
 #[tokio::test]
