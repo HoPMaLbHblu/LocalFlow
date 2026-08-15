@@ -141,7 +141,7 @@ These functions control the whole PC. Everything marked 🔒 only works when **A
 | 🔒 `system.volume_up/down(steps)` / `system.mute()` / `system.brightness(percent)` / `system.set_wallpaper(path)` | Sound and display. |
 | 🔒 `system.wake_at("07:30")` / `system.cancel_wake()` | Wake the PC from **sleep** at a time (a shut-down PC can only be switched on by the BIOS). Windows must allow wake timers. |
 | `system.idle_seconds()` · `network.wake_on_lan(mac)` | Time since the last input; wake another PC on the network. |
-| `desktop.dark_mode()` / 🔒 `desktop.set_dark_mode(on)` | Dark or light mode for Windows and apps. |
+| `desktop.dark_mode()` / 🔒 `desktop.set_dark_mode(on, part)` | Dark or light mode. Windows keeps apps and the taskbar separately: `dark_mode()` returns both, and `part` is `"apps"`, `"system"` (taskbar) or left out for both. |
 | `desktop.transparency()` / 🔒 `desktop.set_transparency(on)` | Transparency effects. |
 | `desktop.accent_color()` / 🔒 `desktop.set_accent_color("#0078d4")` | The accent colour. |
 | `desktop.wallpaper()` / 🔒 `desktop.set_wallpaper(path, "fill")` | The wallpaper, with fill, fit, stretch, center, tile or span. |
