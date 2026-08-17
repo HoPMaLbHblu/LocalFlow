@@ -66,6 +66,20 @@ export interface AiSettings {
   cache_entries: number;
 }
 
+/** Settings › Telegram and Discord. Secrets never reach the window. */
+export interface BotSettings {
+  telegram_token: boolean;
+  telegram_chat: string | null;
+  discord_webhook: boolean;
+  remote: boolean;
+  remote_power: boolean;
+}
+
+export interface FoundChat {
+  id: string;
+  name: string;
+}
+
 /** One minute of system history; values are percentages. */
 export interface MetricSample {
   at: number;
@@ -135,6 +149,8 @@ export interface LogLine {
 
 export interface Template {
   slug: string;
+  /** Where it's listed in the picker (files, photos, system, ...). */
+  category?: string;
   title: string;
   description: string;
   schedule: string;
@@ -301,6 +317,12 @@ export const api = {
       history,
     }),
   clearAiCache: () => invoke<number>("clear_ai_cache"),
+  getBotSettings: () => invoke<BotSettings>("get_bot_settings"),
+  setBotSettings: (token: string | null, chat: string | null, webhook: string | null, remote: boolean, remotePower: boolean) =>
+    invoke<void>("set_bot_settings", { token, chat, webhook, remote, remotePower }),
+  clearBot: (which: "telegram" | "discord") => invoke<void>("clear_bot", { which }),
+  findTelegramChats: (token: string | null) => invoke<[string, FoundChat[]]>("find_telegram_chats", { token }),
+  testBots: () => invoke<string>("test_bots"),
   backupNow: () => invoke<BackupInfo>("backup_now"),
   restoreBackup: (fileName: string) => invoke<void>("restore_backup", { fileName }),
   openBackupsFolder: () => invoke<void>("open_backups_folder"),

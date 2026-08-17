@@ -6,6 +6,7 @@
 
 mod commands;
 mod ai;
+mod bots;
 mod hotkeys;
 mod i18n;
 mod safety;
@@ -64,6 +65,11 @@ fn notify(app: &AppHandle, title: &str, body: &str) {
 
 /// Forward core events to the UI, and turn some of them into desktop notifications.
 fn handle_event(app: &AppHandle, prefs: &Prefs, event: CoreEvent) {
+    // Always shown, even with notifications off: remote control must never be silent.
+    if let CoreEvent::Notice { message } = &event {
+        notify(app, "LocalFlow", message);
+        return;
+    }
     if prefs.notifications.load(Ordering::Relaxed) {
         let texts = prefs.texts();
         match &event {
@@ -122,6 +128,7 @@ fn init(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         let flow = LocalFlow::open(config, Some(on_event)).await?;
         let theme = settings::apply_saved(&flow, &prefs).await?;
         ai::load(&flow).await;
+        bots::load(&flow).await;
         flow.start().await?;
         Ok::<_, localflow_core::CoreError>((flow, theme))
     })?;
@@ -249,6 +256,11 @@ pub fn run() {
             ai::test_ai,
             ai::clear_ai_cache,
             ai::ai_write_automation,
+            bots::get_bot_settings,
+            bots::set_bot_settings,
+            bots::clear_bot,
+            bots::find_telegram_chats,
+            bots::test_bots,
             windows::open_guide,
             windows::open_ai_chat,
             windows::show_main,

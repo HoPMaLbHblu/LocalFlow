@@ -40,6 +40,8 @@ pub enum CoreEvent {
     RunFinished { automation_id: i64, name: String, trigger: String, run: AutomationRun },
     /// Automations were created, changed or deleted.
     AutomationsChanged,
+    /// Something the user should see on the desktop (e.g. a remote command arrived).
+    Notice { message: String },
 }
 
 pub type EventHandler = Arc<dyn Fn(CoreEvent) + Send + Sync>;
@@ -255,6 +257,9 @@ impl LocalFlow {
         // CPU, memory, disk and battery history (stays on this PC).
         self.keep_task(tokio::spawn(crate::metrics::run(self.inner.repo.pool().clone())));
 
+        // Telegram remote control (idle until switched on in Settings).
+        self.keep_task(tokio::spawn(crate::remote::serve(self.clone())));
+
         // A backup every day, also when LocalFlow runs for weeks without a restart.
         if self.inner.backups.is_some() {
             let flow = self.clone();
@@ -290,6 +295,13 @@ impl LocalFlow {
     pub async fn metrics(&self, minutes: i64, points: usize) -> CoreResult<Vec<crate::metrics::Sample>> {
         let samples = crate::metrics::load(self.inner.repo.pool(), minutes.clamp(1, 30 * 24 * 60)).await?;
         Ok(crate::metrics::downsample(&samples, points.clamp(10, 1000)))
+    }
+
+    /// Show a desktop notification (in the desktop app).
+    pub fn notify_desktop(&self, message: &str) {
+        if let Some(events) = &self.inner.events {
+            events(CoreEvent::Notice { message: message.to_string() });
+        }
     }
 
     pub fn repo(&self) -> &Repository {

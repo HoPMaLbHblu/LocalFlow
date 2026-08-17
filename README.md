@@ -150,6 +150,16 @@ These functions control the whole PC. Everything marked 🔒 only works when **A
 | 🔒 `power.set_screen_off(minutes)` / 🔒 `power.set_sleep(minutes)` | Screen-off and sleep timers (0 = never), optionally just `"plugged"` or `"battery"`. |
 | `mouse.speed()` / 🔒 `mouse.set_speed(10)` | Pointer speed, 1 to 20. |
 | `explorer.hidden_files()` / 🔒 `explorer.set_hidden_files(on)` · `explorer.file_extensions()` / 🔒 `explorer.set_file_extensions(on)` | What File Explorer shows. |
+| `screen.capture(path)` | Saves a screenshot (`.png` or `.jpg`); never overwrites. |
+| `speak(text)` | Reads text aloud. |
+| `network.online()` · `network.ping(host, port)` · `network.port_open(host, port)` · `network.wifi()` · `network.local_ip()` | Internet and home-network checks. |
+| `http.download(url, path)` | Downloads a file safely (no half files, no overwriting). |
+| `process.top(count, "cpu" \| "memory")` | The busiest programs. |
+| `env.get(name)` | An environment variable. |
+| `service.list()` / `service.status(name)` / 🔒 `service.start` · `stop` · `restart(name)` | Windows services. |
+| `packages.updates()` / 🔒 `packages.install(id)` / 🔒 `packages.upgrade(id \| "all")` | App updates with winget. |
+| `telegram.send(text)` · `telegram.send_photo(path, caption)` · `telegram.send_file(path, caption)` · `telegram.commands()` | Your own Telegram bot (set up in Settings). |
+| `discord.send(text)` · `discord.send_file(path, text)` | A Discord channel's webhook (set up in Settings). |
 
 **On a Mac** the same functions work, with a few differences:
 
@@ -269,6 +279,21 @@ end
 ```
 
 `require` only loads these built-in modules; it can't load files from disk.
+
+## Control your PC from Telegram
+
+1. In Telegram, open **@BotFather**, send `/newbot`, and copy the token.
+2. Send your new bot any message.
+3. In LocalFlow, open **Settings › Telegram and Discord**, paste the token, press **Find my chat**, pick yourself, switch on **Remote control from Telegram** and save.
+
+Then send `/help` to the bot. It answers `/status`, `/screenshot`, `/top`, `/apps`, `/open <app>`, `/lock`, `/volume <0-100>`, `/mute`, `/say <text>`, `/clipboard`, `/list` and `/run <automation>`. With **Allow shutdown, restart, sleep and closing apps** on, also `/close <app>`, `/sleep`, `/shutdown`, `/restart` and `/cancel` (shutdown and restart wait a minute).
+
+- Only the chat you picked is obeyed; messages from anyone else are ignored.
+- Every command shows a notification on the PC, so remote use is never silent.
+- The token is kept in Windows Credential Manager (the macOS Keychain), never in LocalFlow's files, exports or scripts.
+- The commands are a Lua script ([`remote_commands.lua`](crates/core/scripts/remote_commands.lua)), easy to read and extend.
+
+Discord works for messages only: create a webhook in a channel and paste it in the same card, then use `discord.send`.
 
 ## Your data is safe
 
