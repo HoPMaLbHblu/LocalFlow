@@ -129,6 +129,9 @@ export default function AutomationView({ id, template, setDirty, onSaved, onDele
     }
   });
   const editorView = useRef<EditorView | null>(null);
+  const consoleBox = useRef<HTMLDivElement>(null);
+  // Bring the output into view when a run starts, however small the window is.
+  const showConsole = () => requestAnimationFrame(() => consoleBox.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }));
   const [watchOpen, setWatchOpen] = useState(false);
 
   const toggleHelp = () => {
@@ -278,6 +281,7 @@ export default function AutomationView({ id, template, setDirty, onSaved, onDele
     setBusy("testing");
     liveTarget.current = "test";
     setConsole({ title: t("view.testRun"), status: "running", lines: [], error: null, duration: null });
+    showConsole();
     try {
       const result = await api.testRun(form.lua_code, form.name || t("view.untitled"), form.allow_system);
       setConsole({
@@ -303,6 +307,7 @@ export default function AutomationView({ id, template, setDirty, onSaved, onDele
     setBusy("running");
     liveTarget.current = id;
     setConsole({ title: t("view.run"), status: "running", lines: [], error: null, duration: null });
+    showConsole();
     try {
       const run = await api.runAutomation(id);
       setConsole({
@@ -561,7 +566,9 @@ export default function AutomationView({ id, template, setDirty, onSaved, onDele
             </button>
           </div>
 
-          <Console state={console_} onClear={() => setConsole(null)} />
+          <div ref={consoleBox}>
+            <Console state={console_} onClear={() => setConsole(null)} />
+          </div>
         </div>
       )}
 

@@ -296,7 +296,10 @@ section.card label.check.nested { margin-left: 1.6rem; }
 }
 .tabs button.active { color: var(--text); border-bottom-color: var(--accent); }
 
-.editor-layout { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 1rem 2rem 1.25rem; gap: .6rem; }
+.editor-layout { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 1rem 2rem 1.25rem; gap: .6rem; overflow-y: auto; }
+/* In a small window the page scrolls instead of squeezing the editor and hiding the output. */
+.editor-layout > * { flex-shrink: 0; }
+.editor-layout > .editor-row { flex-shrink: 1; }
 .fields { display: flex; gap: .75rem; flex-wrap: wrap; }
 .fields label { min-width: 170px; }
 .fields label.grow { flex: 1; min-width: 220px; }
@@ -405,7 +408,7 @@ section.card label.check.nested { margin-left: 1.6rem; }
 .api-doc h3 { margin: 0 0 .3rem; font-size: 1rem; }
 .api-doc p { margin: .2rem 0; }
 
-.editor-row { flex: 1; min-height: 180px; display: flex; gap: .6rem; }
+.editor-row { flex: 1; min-height: 260px; display: flex; gap: .6rem; }
 .editor-row .editor-area { flex: 1; min-width: 0; }
 .help-panel {
   width: 270px; flex-shrink: 0;
