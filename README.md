@@ -15,7 +15,7 @@ LocalFlow comes in two flavours that share the same engine:
 
 After installing:
 
-1. Click **+ New automation** and pick one of the 34 templates, for example *Hello world*, or start from a blank one.
+1. Click **+ New automation** and pick one of the 55 templates (search them or browse by category), for example *Hello world*, or start from a blank one.
 2. Press **Test run** (Ctrl+Enter, or ⌘ Enter on a Mac) to try it without saving.
 3. Press **Save** (Ctrl+S, or ⌘ S). Choose a **schedule** to run it automatically.
 4. Close the window whenever you like. LocalFlow keeps running in the system tray (the icons next to the clock on the taskbar; click **^** if you don't see it). Right-click its icon there and choose **Quit** to exit. On a Mac, LocalFlow's icon is in the menu bar at the top right of the screen; click it for the menu, or press ⌘ Q to quit.
@@ -368,8 +368,8 @@ LOCALFLOW_GUIDE_EXAMPLES=app/guide_examples.json cargo test -p localflow-core --
 Bump the version in `Cargo.toml` (`[workspace.package]`), `app/package.json` and `app/src-tauri/tauri.conf.json`, then push a tag:
 
 ```bash
-git tag v1.0.1
-git push origin v1.0.1
+git tag v1.2.0
+git push origin v1.2.0
 ```
 
 GitHub Actions ([`release.yml`](.github/workflows/release.yml)) runs the tests, builds the Windows installers and attaches them to a GitHub release.
@@ -389,7 +389,7 @@ crates/
 │   ├── src/watcher/   folder watching
 │   ├── src/service.rs LocalFlow: create/update/run/test automations, live events
 │   ├── migrations/    database schema (applied automatically)
-│   ├── scripts/       the 34 built-in templates
+│   ├── scripts/       the 55 built-in templates and the Telegram commands
 │   └── tests/         Rust tests (including qa.rs: hand-written automations and things scripts must not be able to do)
 └── server/        localflow: Axum + HTMX web interface
 app/

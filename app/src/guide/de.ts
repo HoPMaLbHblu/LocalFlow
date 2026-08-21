@@ -405,6 +405,22 @@ export const de: GuideTranslation = {
         tip("Probiere die Vorlagen *Doppelte Dateien finden*, *Fotos nach Aufnahmedatum sortieren*, *Wöchentlicher Downloads-Bericht*, *Monatliche Ausgabenübersicht* und *PC-Gesundheitscheck*: Jede nutzt diese Helfer, und sie zu lesen ist eine gute Übung."),
       ],
     },
+    {
+      id: "phone",
+      title: "16. Handy, Internet und Updates",
+      summary: "Telegram und Discord, Fernsteuerung, Internet-Checks, Sprache, Screenshots und App-Updates.",
+      blocks: [
+        t("LocalFlow kann mit deinem Handy reden. Richte deinen eigenen Telegram-Bot (und wenn du willst einen Discord-Kanal) unter **Einstellungen › Telegram und Discord** ein; die Karte führt dich in drei Schritten durch. Danach kann jede Automatisierung dir Nachrichten, Screenshots und Dateien schicken:"),
+        code("telegram.send(\"Backup finished\")\nlocal shot = screen.capture(\"~/Pictures/now.png\")\ntelegram.send_photo(shot, \"My screen right now\")\ndiscord.send(\"The server is back online\")\n"),
+        t("**Fernsteuerung.** Schalte *Fernsteuerung über Telegram* in derselben Karte ein und sende `/help` an deinen Bot. Er beantwortet `/status`, `/screenshot`, `/top`, `/apps`, `/open`, `/lock`, `/volume`, `/say`, `/list` und `/run <Automatisierung>`, das jede deiner Automatisierungen startet, egal wo du bist."),
+        warning("Nur dein eigener Chat wird befolgt, jeder Befehl zeigt eine Benachrichtigung auf dem PC, und Herunterfahren, Neustart und Schließen von Apps sind ein eigener Schalter, der zuerst aus ist. Das Bot-Token ist wie ein Schlüssel zu deinem PC: gib es nie weiter."),
+        t("**Das Internet und deine Programme.** Prüfe die Verbindung, deinen Router oder einen Server, und finde das Programm, das den PC bremst:"),
+        code("if not network.online() then\n    log(\"No internet\")\nelseif network.ping(\"192.168.1.1\", 80) == nil then\n    log(\"The router does not answer\")\nend\nfor _, p in ipairs(process.top(3, \"cpu\")) do\n    log(p.name .. \": \" .. p.cpu .. \"%\")\nend\n"),
+        t("**Updates und Sprache.** `packages.updates()` listet Apps mit Updates (aus winget, das in Windows enthalten ist); `packages.upgrade(\"all\")` installiert sie. `speak` liest Text vor und `screen.capture` speichert einen Screenshot:"),
+        code("local updates = packages.updates()\nlog(#updates .. \" apps can be updated\")\nspeak(\"You have \" .. #updates .. \" updates\")\n"),
+        tip("Schau in die neuen Vorlagen-Kategorien *Telegram und Discord*, *Internet* und *PC-Zustand und Apps*: *Täglicher PC-Bericht an Telegram*, *Internet-Wächter*, *Nach App-Updates suchen*, *Schneller Screenshot* und *Sprechende Uhr* sind ein guter Anfang."),
+      ],
+    },
   ],
 
   hints: {
