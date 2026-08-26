@@ -4,6 +4,7 @@ pub mod chain;
 pub mod control;
 pub mod data;
 pub mod desktop;
+pub mod dota_api;
 pub mod files;
 pub mod lualib;
 pub mod mac;
@@ -20,7 +21,7 @@ use serde::Serialize;
 #[derive(Debug, Clone, Serialize)]
 pub struct Example {
     pub slug: &'static str,
-    /// Where the template is listed: start, files, photos, apps, system, look, internet, phone, daily, ai.
+    /// Where the template is listed: start, files, photos, apps, system, look, internet, phone, daily, ai, games.
     pub category: &'static str,
     pub title: &'static str,
     pub description: &'static str,
@@ -754,6 +755,45 @@ pub const EXAMPLES: &[Example] = &[
         watch_pattern: "",
         allow_system: false,
         triggers: "",
+    },
+    Example {
+        slug: "dota-launch-page",
+        category: "games",
+        title: "Dota 2: open my page at launch",
+        description: "When Dota 2 reaches its menu, opens your page (e.g. your Dotabuff profile) once per launch.",
+        schedule: "",
+        code: include_str!("../../scripts/dota_launch_page.lua"),
+        run_on_startup: false,
+        watch_path: "",
+        watch_pattern: "",
+        allow_system: false,
+        triggers: r#"{"app_start":"dota2"}"#,
+    },
+    Example {
+        slug: "dota-draft-assistant",
+        category: "games",
+        title: "Dota 2: draft assistant",
+        description: "Press Ctrl+Alt+D during the draft: recognises the heroes on screen and suggests picks for you.",
+        schedule: "",
+        code: include_str!("../../scripts/dota_draft_assistant.lua"),
+        run_on_startup: false,
+        watch_path: "",
+        watch_pattern: "",
+        allow_system: false,
+        triggers: r#"{"hotkey":"Ctrl+Alt+D"}"#,
+    },
+    Example {
+        slug: "dota-item-build",
+        category: "games",
+        title: "Dota 2: item build",
+        description: "Press Ctrl+Alt+B for an item plan for your hero against this enemy draft.",
+        schedule: "",
+        code: include_str!("../../scripts/dota_item_build.lua"),
+        run_on_startup: false,
+        watch_path: "",
+        watch_pattern: "",
+        allow_system: false,
+        triggers: r#"{"hotkey":"Ctrl+Alt+B"}"#,
     },
 ];
 

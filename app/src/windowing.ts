@@ -1,4 +1,4 @@
-// The app window and the separate guide and AI chat windows, and how they talk to each other.
+// The app window and the separate guide, AI chat and Dota 2 windows, and how they talk to each other.
 
 import { invoke } from "@tauri-apps/api/core";
 import { emit, emitTo, listen, type UnlistenFn } from "@tauri-apps/api/event";
@@ -25,6 +25,16 @@ export function isGuideWindow(): boolean {
 export function isAiChatWindow(): boolean {
   const label = (window as any).__TAURI_INTERNALS__?.metadata?.currentWindow?.label;
   return label ? label === "aichat" : window.location.hash === "#aichat";
+}
+
+/** True when this page is the Dota 2 companion window ("#dota" in the browser preview). */
+export function isDotaWindow(): boolean {
+  const label = (window as any).__TAURI_INTERNALS__?.metadata?.currentWindow?.label;
+  return label ? label === "dota" : window.location.hash === "#dota";
+}
+
+export function openDotaWindow(title: string): Promise<void> {
+  return invoke("open_dota", { title });
 }
 
 export function openAiChatWindow(title: string): Promise<void> {

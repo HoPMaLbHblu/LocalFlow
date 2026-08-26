@@ -4,9 +4,10 @@ import App, { type View } from "./App";
 import { api } from "./api";
 import { cachedLanguageSetting, setLanguage } from "./i18n";
 import { applyTheme, cachedTheme } from "./theme";
-import { inDesktopApp, isAiChatWindow, isGuideWindow, onPrefsChanged } from "./windowing";
+import { inDesktopApp, isAiChatWindow, isDotaWindow, isGuideWindow, onPrefsChanged } from "./windowing";
 import GuideWindow from "./components/GuideWindow";
 import AiChatWindow from "./components/AiChatWindow";
+import DotaWindow from "./components/DotaWindow";
 import "./styles.css";
 
 /**
@@ -29,7 +30,7 @@ function Root() {
         .catch(() => {});
     load();
     // The guide window follows theme and language changes made in the app window.
-    if (!inDesktopApp() || !(isGuideWindow() || isAiChatWindow())) return;
+    if (!inDesktopApp() || !(isGuideWindow() || isAiChatWindow() || isDotaWindow())) return;
     const unlisten = onPrefsChanged(load);
     return () => {
       unlisten.then((f) => f());
@@ -38,6 +39,7 @@ function Root() {
 
   if (isGuideWindow()) return <GuideWindow key={lang} />;
   if (isAiChatWindow()) return <AiChatWindow key={lang} />;
+  if (isDotaWindow()) return <DotaWindow key={lang} />;
 
   const changeLanguage = (setting: string) => {
     setInitialView({ kind: "settings" });

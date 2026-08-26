@@ -76,3 +76,17 @@ async fn remote_commands_answer() {
         assert!(out.iter().any(|l| l.starts_with("REPLY") || l.starts_with("PHOTO")), "{command}: no reply");
     }
 }
+
+/// Reading the volume (Core Audio, COM) and then opening a link on the same thread must still
+/// open the link. Needs a counter at 127.0.0.1:8765 that records visits.
+#[tokio::test]
+#[ignore = "opens a browser tab to a local test page"]
+async fn link_opens_after_reading_the_volume() {
+    let dir = TempDir::new().unwrap();
+    let config = CoreConfig { database_url: "sqlite::memory:".into(), allowed_dirs: vec![dir.path().to_path_buf()], script_timeout: Duration::from_secs(30) };
+    let flow = LocalFlow::open(config, None).await.unwrap();
+    let code = r#"log("volume " .. system.volume()); app.open("http://127.0.0.1:8765/after-volume")"#;
+    let result = flow.test_run(code.into(), "com".into()).await;
+    println!("{:?} {:?}", result.error, result.logs.iter().map(|l| &l.message).collect::<Vec<_>>());
+    assert!(result.success);
+}

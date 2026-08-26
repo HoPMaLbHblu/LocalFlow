@@ -7,6 +7,7 @@
 mod commands;
 mod ai;
 mod bots;
+mod dota;
 mod hotkeys;
 mod i18n;
 mod safety;
@@ -70,6 +71,16 @@ fn handle_event(app: &AppHandle, prefs: &Prefs, event: CoreEvent) {
         notify(app, "LocalFlow", message);
         return;
     }
+    // dota.show() in a script: open the companion window (it names itself once loaded).
+    if matches!(event, CoreEvent::ShowDota) {
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move {
+            if let Err(e) = windows::open_dota(app, "Dota 2".into()).await {
+                tracing::warn!("{e:?}");
+            }
+        });
+        return;
+    }
     if prefs.notifications.load(Ordering::Relaxed) {
         let texts = prefs.texts();
         match &event {
@@ -111,6 +122,8 @@ fn init(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let db_path = data_dir.join("localflow.db");
     // Saved AI answers (ai.ask with cache_hours) live next to the database.
     localflow_core::ai::set_cache_file(data_dir.join("ai_cache.json"));
+    // The Dota 2 companion's cache, draft and settings.
+    dota::init(&data_dir);
     let config = CoreConfig::new(format!(
         "sqlite://{}",
         db_path.to_string_lossy().replace('\\', "/")
@@ -261,8 +274,26 @@ pub fn run() {
             bots::clear_bot,
             bots::find_telegram_chats,
             bots::test_bots,
+            dota::dota_get_settings,
+            dota::dota_set_settings,
+            dota::dota_status,
+            dota::dota_install_gsi,
+            dota::dota_uninstall_gsi,
+            dota::dota_draft,
+            dota::dota_capture,
+            dota::dota_correct,
+            dota::dota_set_hero,
+            dota::dota_set_team,
+            dota::dota_set_role,
+            dota::dota_reset,
+            dota::dota_suggest,
+            dota::dota_build,
+            dota::dota_heroes,
+            dota::dota_key_saved,
+            dota::dota_set_key,
             windows::open_guide,
             windows::open_ai_chat,
+            windows::open_dota,
             windows::show_main,
         ])
         .build(tauri::generate_context!())

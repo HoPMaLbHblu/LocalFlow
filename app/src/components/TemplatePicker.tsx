@@ -13,7 +13,7 @@ const BLANK_CODE = `automation {
 `;
 
 /** The order categories are shown in. */
-const CATEGORIES = ["start", "files", "photos", "apps", "system", "look", "internet", "phone", "daily", "ai"];
+const CATEGORIES = ["start", "files", "photos", "apps", "system", "look", "internet", "phone", "daily", "ai", "games"];
 
 interface Props {
   templates: Template[];

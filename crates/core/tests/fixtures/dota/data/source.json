@@ -1,0 +1,1 @@
+{"name":"OpenDota (recorded fixture)","fetched_at":1790785260,"note":"Recorded from the public OpenDota API on 2026-09-30 for offline tests: heroes, items (trimmed to id/dname/cost), patch list, matchups and item popularity for a few heroes."}

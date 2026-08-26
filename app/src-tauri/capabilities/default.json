@@ -1,11 +1,12 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Permissions for LocalFlow's windows (the app, the guide and the AI chat). Everything else goes through LocalFlow's own commands.",
+  "description": "Permissions for LocalFlow's windows (the app, the guide, the AI chat and the Dota 2 companion). Everything else goes through LocalFlow's own commands.",
   "windows": [
     "main",
     "guide",
-    "aichat"
+    "aichat",
+    "dota"
   ],
   "permissions": [
     "core:default",

@@ -6,6 +6,7 @@ import { applyTheme, type Theme } from "../theme";
 import BackupsCard from "./BackupsCard";
 import AiCard from "./AiCard";
 import BotsCard from "./BotsCard";
+import DotaCard from "./DotaCard";
 import { announcePrefsChanged } from "../windowing";
 
 interface Props {
@@ -203,6 +204,7 @@ export default function SettingsView({ onLanguageChange }: Props) {
 
       <AiCard />
       <BotsCard />
+      <DotaCard />
 
       <BackupsCard />
 

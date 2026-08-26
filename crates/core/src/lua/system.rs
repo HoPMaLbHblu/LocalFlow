@@ -124,7 +124,7 @@ fn open_target(target: &str, args: Vec<String>) -> Result<String, String> {
         && scheme.len() > 1
         && scheme.chars().all(|c| c.is_ascii_alphanumeric() || "+.-".contains(c));
     if is_link {
-        open::that_detached(target).map_err(|e| e.to_string())?;
+        shell_open(target)?;
         return Ok(target.to_string());
     }
 
@@ -134,7 +134,7 @@ fn open_target(target: &str, args: Vec<String>) -> Result<String, String> {
         if is_program {
             Command::new(&path).args(&args).spawn().map_err(|e| e.to_string())?;
         } else {
-            open::that_detached(&path).map_err(|e| e.to_string())?;
+            shell_open(&path)?;
         }
         return Ok(path.display().to_string());
     }
@@ -224,11 +224,21 @@ enum Launch {
     AppId(String),
 }
 
+/// Open a link, document or shortcut with its default program. Done on a fresh thread: the
+/// Windows shell can silently ignore the request on a thread where other code already set
+/// COM up in multithreaded mode (seen with web links from LocalFlow's background tasks).
+pub(crate) fn shell_open(target: impl AsRef<std::ffi::OsStr>) -> Result<(), String> {
+    let target = target.as_ref().to_os_string();
+    std::thread::spawn(move || open::that_detached(&target).map_err(|e| e.to_string()))
+        .join()
+        .unwrap_or_else(|_| Err("could not open it".into()))
+}
+
 impl Launch {
     fn open(&self) -> Result<String, String> {
         match self {
             Launch::Path(path) => {
-                open::that_detached(path).map_err(|e| e.to_string())?;
+                shell_open(path)?;
                 Ok(path.display().to_string())
             }
             Launch::AppId(id) => {
