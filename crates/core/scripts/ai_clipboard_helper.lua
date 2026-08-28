@@ -1,4 +1,4 @@
--- Copy some text, press Ctrl+Alt+A, and GigaChat explains it in simple words.
+-- Copy some text, press Ctrl+Alt+E, and GigaChat explains it in simple words.
 -- The answer is shown and copied, so you can paste it.
 -- Set up GigaChat in Settings first.
 

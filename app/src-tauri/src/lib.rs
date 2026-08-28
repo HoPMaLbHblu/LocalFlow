@@ -7,6 +7,7 @@
 mod commands;
 mod ai;
 mod bots;
+mod links;
 mod dota;
 mod hotkeys;
 mod i18n;
@@ -124,6 +125,8 @@ fn init(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     localflow_core::ai::set_cache_file(data_dir.join("ai_cache.json"));
     // The Dota 2 companion's cache, draft and settings.
     dota::init(&data_dir);
+    // Link sets and other small data files.
+    localflow_core::appdata::set_dir(data_dir.clone());
     let config = CoreConfig::new(format!(
         "sqlite://{}",
         db_path.to_string_lossy().replace('\\', "/")
@@ -269,6 +272,14 @@ pub fn run() {
             ai::test_ai,
             ai::clear_ai_cache,
             ai::ai_write_automation,
+            links::links_list,
+            links::links_trash,
+            links::links_save,
+            links::links_delete,
+            links::links_restore,
+            links::links_open,
+            links::links_parse,
+            links::links_import_bookmarks,
             bots::get_bot_settings,
             bots::set_bot_settings,
             bots::clear_bot,

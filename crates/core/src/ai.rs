@@ -416,7 +416,7 @@ pub struct WrittenCode {
 /// Functions that only work with "Allow system control" switched on.
 const SYSTEM_CONTROL: &[&str] = &[
     "desktop.set_dark_mode", "desktop.set_transparency", "desktop.set_accent_color", "desktop.set_wallpaper", "system.set_volume", "system.set_mute", "power.set_plan", "power.set_screen_off", "power.set_sleep", "mouse.set_speed", "explorer.set_hidden_files", "explorer.set_file_extensions",
-    "service.start", "service.stop", "service.restart", "packages.install", "packages.upgrade",
+    "service.start", "service.stop", "service.restart", "packages.install", "packages.upgrade", "process.set_efficiency", "process.set_priority",
     "app.close", "shell.run", "shell.powershell", "process.kill", "window.focus", "window.minimize", "window.maximize", "window.restore",
     "window.close", "window.move", "keyboard.press", "keyboard.type", "mouse.move", "mouse.click", "system.lock",
     "system.sleep", "system.shutdown", "system.restart", "system.cancel_shutdown", "system.volume_up", "system.volume_down",

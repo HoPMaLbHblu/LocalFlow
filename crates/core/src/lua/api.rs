@@ -66,6 +66,7 @@ pub fn register(
     super::system::register(lua, policy.clone(), deadline)?;
     super::control::register(lua, allow_system, policy.clone(), deadline)?;
     super::desktop::register(lua, allow_system, policy.clone())?;
+    super::efficiency::register(lua, allow_system)?;
     super::data::register(lua, store, deadline)?;
     super::tools::register(lua, allow_system, policy.clone(), deadline)?;
 
@@ -113,6 +114,7 @@ pub fn register(
     crate::metrics::register(lua)?;
     crate::ai::register(lua, deadline)?;
     crate::messaging::register(lua, policy, deadline)?;
+    crate::links::register(lua)?;
     super::dota_api::register(lua, deadline)?;
     super::lualib::register(lua)?;
     globals.set("fs", fs)?;

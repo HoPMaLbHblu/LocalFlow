@@ -15,6 +15,7 @@ interface Props {
   onGuide: () => void;
   onImport: () => void;
   onTrash: () => void;
+  onLinks: () => void;
   canGoBack: boolean;
   canGoForward: boolean;
   onBack: () => void;
@@ -103,6 +104,9 @@ export default function Sidebar(props: Props) {
         {props.automations.length > 0 && filtered.length === 0 && <p className="muted small pad">{t("sidebar.noMatches")}</p>}
       </nav>
 
+      <button className={`sidebar-footer ${props.view === "links" ? "selected" : ""}`} onClick={props.onLinks}>
+        {t("sidebar.links")}
+      </button>
       <button className={`sidebar-footer ${props.view === "trash" ? "selected" : ""}`} onClick={props.onTrash}>
         {t("sidebar.trash")}
       </button>

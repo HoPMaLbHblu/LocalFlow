@@ -51,6 +51,11 @@ async fn helpers() {
 }
 
 #[tokio::test]
+async fn plan() {
+    run_suite("plan_test.lua").await;
+}
+
+#[tokio::test]
 async fn media() {
     run_suite("media_test.lua").await;
 }
@@ -58,7 +63,7 @@ async fn media() {
 /// Every file in lua_tests/ must have a test above.
 #[test]
 fn every_suite_is_listed() {
-    let listed = ["strings_test.lua", "tables_test.lua", "paths_dates_test.lua", "helpers_test.lua", "media_test.lua"];
+    let listed = ["strings_test.lua", "tables_test.lua", "paths_dates_test.lua", "helpers_test.lua", "media_test.lua", "plan_test.lua"];
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("lua_tests");
     for entry in std::fs::read_dir(dir).unwrap() {
         let name = entry.unwrap().file_name().to_string_lossy().into_owned();
