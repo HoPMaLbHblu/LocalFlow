@@ -5,8 +5,13 @@
 use std::time::Duration;
 
 use localflow_core::{
-    dota::{self, launch, DotaSettings, Hero, HeroSuggestion, ItemPlan, Role},
-    lua::dota_api::{self, CaptureReport, DraftView, Status},
+    dota::{
+        self, launch,
+        lookup::HeroLookup,
+        review::{MatchReview, MatchSummary},
+        DotaSettings, Hero, HeroSuggestion, ItemPlan, Role,
+    },
+    lua::dota_api::{self, CaptureReport, DraftView, LiveView, Status},
 };
 use serde::Serialize;
 
@@ -62,6 +67,9 @@ pub struct DotaSettingsView {
     role: Option<Role>,
     gsi_port: u16,
     launch_assistant: bool,
+    /// The player's Dota account id (Steam32) for the post-game review.
+    account_id: Option<u64>,
+    live_helper: bool,
     /// The .cfg file's text, to copy by hand when LocalFlow can't write it.
     cfg_text: String,
 }
@@ -76,6 +84,8 @@ pub async fn dota_get_settings() -> Result<DotaSettingsView, CommandError> {
             role: s.role,
             gsi_port: s.gsi_port,
             launch_assistant: launch::launch_assistant_enabled(),
+            account_id: s.account_id,
+            live_helper: s.live_helper,
         })
     })
     .await
@@ -211,3 +221,43 @@ pub async fn dota_heroes() -> Result<Vec<Hero>, CommandError> {
     .await
 }
 
+
+// ---- live helper, hero lookup, post-game review ----------------------------------------------
+
+/// The Live panel: gold, next item and upcoming reminders; `None` outside a match.
+#[tauri::command]
+pub async fn dota_live() -> Result<Option<LiveView>, CommandError> {
+    blocking(|| Ok(dota_api::live_view())).await
+}
+
+#[tauri::command]
+pub async fn dota_lookup(hero: String, count: Option<usize>) -> Result<HeroLookup, CommandError> {
+    blocking(move || dota_api::lookup(&hero, count.unwrap_or(8))).await
+}
+
+#[tauri::command]
+pub async fn dota_last_match() -> Result<MatchReview, CommandError> {
+    blocking(dota_api::last_match).await
+}
+
+#[tauri::command]
+pub async fn dota_recent_matches(count: Option<usize>) -> Result<Vec<MatchSummary>, CommandError> {
+    blocking(move || dota_api::recent_matches(count.unwrap_or(10))).await
+}
+
+/// Check a pasted profile link or id without saving it.
+#[tauri::command]
+pub fn dota_parse_account(text: String) -> Result<u64, CommandError> {
+    dota_api::parse_account(&text).map_err(error)
+}
+
+/// Save the account id from a link or id; `None`/"" forgets it.
+#[tauri::command]
+pub async fn dota_set_account(text: Option<String>) -> Result<Option<u64>, CommandError> {
+    blocking(move || dota_api::set_account(text.as_deref())).await
+}
+
+#[tauri::command]
+pub async fn dota_set_live_helper(enabled: bool) -> Result<(), CommandError> {
+    blocking(move || dota_api::set_live_helper(enabled)).await
+}

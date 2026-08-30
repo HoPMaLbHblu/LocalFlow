@@ -477,7 +477,7 @@ fn window_to_lua(lua: &Lua, w: &WindowInfo) -> mlua::Result<Table> {
     Ok(t)
 }
 
-fn find_window(text: &str) -> Option<WindowInfo> {
+pub(crate) fn find_window(text: &str) -> Option<WindowInfo> {
     let wanted = text.trim().to_lowercase();
     let list = window_list();
     list.iter()

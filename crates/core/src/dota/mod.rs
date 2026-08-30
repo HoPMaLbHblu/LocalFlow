@@ -12,12 +12,18 @@
 //! - `recommend.rs`  hero suggestions and item plans (research)
 //! - `vision.rs`     screen layouts, hero portraits, recognition (vision)
 //! - `draft.rs`      draft state: merging captures, corrections, saving (vision)
-//! - `launch.rs`     Game State Integration and the once-per-launch browser tab (integration)
+//! - `launch.rs`     Game State Integration and the once-per-launch browser tab (live agent)
+//! - `live.rs`       live match helper: next item, gold, timing reminders (live agent)
+//! - `review.rs`     post-game review from OpenDota (review agent)
+//! - `lookup.rs`     look up any hero: matchups and common items (lookup agent)
 
 pub mod data;
 pub mod draft;
 pub mod launch;
+pub mod live;
+pub mod lookup;
 pub mod recommend;
+pub mod review;
 pub mod traits;
 pub mod vision;
 
@@ -261,11 +267,21 @@ pub struct DotaSettings {
     pub role: Option<Role>,
     /// Port for Game State Integration (127.0.0.1 only).
     pub gsi_port: u16,
+    /// The player's Dota account id (Steam32), for the post-game review. `None` = not set.
+    pub account_id: Option<u64>,
+    /// Live match helper notifications (next item, timings). Needs Game State Integration.
+    pub live_helper: bool,
 }
 
 impl Default for DotaSettings {
     fn default() -> Self {
-        DotaSettings { launch_url: "https://www.dotabuff.com/heroes/meta".into(), role: None, gsi_port: 3417 }
+        DotaSettings {
+            launch_url: "https://www.dotabuff.com/heroes/meta".into(),
+            role: None,
+            gsi_port: 3417,
+            account_id: None,
+            live_helper: false,
+        }
     }
 }
 

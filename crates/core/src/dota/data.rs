@@ -7,6 +7,9 @@
 //!   and league matches OpenDota has parsed, over the last 12 months (all patches in that window).
 //! - `/heroes/{id}/itemPopularity`: purchase counts from the hero's last 100 parsed
 //!   professional matches, split into start / early (<10 min) / mid / late game.
+//! - Post-game review (see `review.rs`): `/players/{id}/recentMatches` (last 20 matches,
+//!   cached 2 min), `/players/{id}` (profile), `/benchmarks?hero_id=&bracket=` (percentile
+//!   curves from recent public matches, cached 1 day), `/matches/{id}` (trimmed, cached 7 days).
 //!
 //! Anonymous use is rate limited (OpenDota reports 60 requests a minute and a daily cap in its
 //! `X-Rate-Limit-*` headers), so requests are spaced out, cached on disk and fetched lazily:
@@ -196,6 +199,10 @@ const SOURCE_NAME: &str = "OpenDota";
 const DAY: i64 = 24 * 3600;
 const CONSTANTS_TTL: i64 = 7 * DAY;
 const STATS_TTL: i64 = DAY;
+/// Recent matches change after every game: refresh after 2 minutes.
+pub const RECENT_TTL: i64 = 120;
+/// Finished matches never change.
+pub const MATCH_TTL: i64 = 7 * DAY;
 /// At most ~40 requests a minute, well under the anonymous 60.
 const MIN_INTERVAL: Duration = Duration::from_millis(1500);
 /// After a network failure, don't try again for this long (serve cache instead).
@@ -318,6 +325,12 @@ impl OpenDotaSource {
 
     /// Cached body for `key`, refreshed from `path` when older than `ttl`.
     fn fetch(&self, key: &str, path: &str, ttl: i64, what: &str) -> Result<Value, String> {
+        self.fetch_with(key, path, ttl, what, &|body| body)
+    }
+
+    /// Like `fetch`, but `trim` shrinks a fresh download before it is cached and returned
+    /// (used for large responses such as full match details).
+    fn fetch_with(&self, key: &str, path: &str, ttl: i64, what: &str, trim: &dyn Fn(Value) -> Value) -> Result<Value, String> {
         let now = super::now();
         let cached = self.read_cache(key);
         if let Some((body, at)) = &cached {
@@ -326,7 +339,7 @@ impl OpenDotaSource {
                 return Ok(body.clone());
             }
         }
-        match self.download(path) {
+        match self.download(path).map(trim) {
             Ok(body) => {
                 self.write_cache(key, &body, now);
                 self.state.lock().unwrap().used.insert(key.into(), now);
@@ -354,6 +367,55 @@ impl OpenDotaSource {
                 }
             }
         }
+    }
+
+    /// Any OpenDota body through the rate limiter and the cache (same offline rules as the
+    /// built-in endpoints). `key` names the cache file, `what` is used in notes and errors.
+    pub fn fetch_json(&self, key: &str, path: &str, ttl: i64, what: &str) -> Result<Value, String> {
+        self.fetch(key, path, ttl, what)
+    }
+
+    /// `/players/{account_id}/recentMatches`: the player's last 20 matches (OpenDota caps it
+    /// at 20). Cached for [`RECENT_TTL`] seconds.
+    pub fn recent_matches_body(&self, account_id: u64) -> Result<Value, String> {
+        self.fetch(
+            &format!("recentMatches_{account_id}"),
+            &format!("/players/{account_id}/recentMatches"),
+            RECENT_TTL,
+            "your recent matches",
+        )
+    }
+
+    /// `/players/{account_id}`: the profile (used only to explain an empty match list).
+    pub fn player_body(&self, account_id: u64) -> Result<Value, String> {
+        self.fetch(&format!("player_{account_id}"), &format!("/players/{account_id}"), STATS_TTL, "the player profile")
+    }
+
+    /// `/benchmarks?hero_id=..[&bracket=1-8]`: percentile curves for a hero, from recent public
+    /// matches (all ranks, or one rank bracket). Cached for a day.
+    pub fn benchmarks_body(&self, hero_id: u32, bracket: Option<u8>) -> Result<Value, String> {
+        let (key, path) = match bracket.filter(|b| (1..=8).contains(b)) {
+            Some(b) => (format!("benchmarks_{hero_id}_b{b}"), format!("/benchmarks?hero_id={hero_id}&bracket={b}")),
+            None => (format!("benchmarks_{hero_id}"), format!("/benchmarks?hero_id={hero_id}")),
+        };
+        self.fetch(&key, &path, STATS_TTL, &format!("benchmarks for hero {hero_id}"))
+    }
+
+    /// `/matches/{match_id}`, shrunk by `trim` before caching (a parsed match is ~200 KB).
+    /// Match results never change, so it is cached for [`MATCH_TTL`].
+    pub fn match_body(&self, match_id: u64, trim: &dyn Fn(Value) -> Value) -> Result<Value, String> {
+        self.fetch_with(&format!("match_{match_id}"), &format!("/matches/{match_id}"), MATCH_TTL, "the match details", trim)
+    }
+
+    /// When the cache entry `key` served in this source was fetched (Unix seconds).
+    pub fn fetched_at(&self, key: &str) -> Option<i64> {
+        self.state.lock().unwrap().used.get(key).copied()
+    }
+
+    /// Whether any request fell back to cache (or failed), and the notes explaining it.
+    pub fn offline_notes(&self) -> (bool, Vec<String>) {
+        let state = self.state.lock().unwrap();
+        (state.offline, state.notes.clone())
     }
 
     fn patch(&self) -> Option<String> {

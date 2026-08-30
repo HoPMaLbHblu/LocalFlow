@@ -5,6 +5,9 @@ import { renderInline } from "../guide/GuideText";
 import { t, type Key } from "../i18n";
 import { openDotaWindow } from "../windowing";
 
+/** The Steam launch option Dota 2 needs before it sends Game State Integration data. */
+const LAUNCH_OPTION = "-gamestateintegration";
+
 export const DOTA_ROLES: DotaRole[] = ["carry", "mid", "offlane", "soft_support", "hard_support"];
 
 export function roleName(role: DotaRole | null): string {
@@ -33,6 +36,9 @@ export default function DotaCard() {
   const [manual, setManual] = useState(false);
   const [key, setKey] = useState("");
   const [keySaved, setKeySaved] = useState(false);
+  const [account, setAccount] = useState("");
+  /** What the pasted link resolves to: an id, or why it doesn't. */
+  const [accountCheck, setAccountCheck] = useState<{ id?: number; error?: string } | null>(null);
 
   const load = async () => {
     try {
@@ -76,6 +82,21 @@ export default function DotaCard() {
     const ok = await act(api.dotaInstallGsi, t("dota.gsi.installedOk"));
     setManual(!ok);
   };
+
+  const checkAccount = async (text: string) => {
+    if (!text.trim()) return setAccountCheck(null);
+    try {
+      setAccountCheck({ id: await api.dotaParseAccount(text.trim()) });
+    } catch (e) {
+      setAccountCheck({ error: errorMessages(e).join(" ") });
+    }
+  };
+
+  const copyLaunchOption = () =>
+    navigator.clipboard
+      .writeText(LAUNCH_OPTION)
+      .then(() => setMessage({ tone: "ok", text: t("dota.launchOpt.copied") }))
+      .catch(() => {});
 
   const copy = () =>
     navigator.clipboard
@@ -175,7 +196,16 @@ export default function DotaCard() {
           </button>
         )}
       </div>
-      <p className="muted small">{renderInline(t("dota.gsi.launchOption"))}</p>
+      <div className="dota-launch-option">
+        <strong className="small">{t("dota.launchOpt.title")}</strong>
+        <p className="muted small">{renderInline(t("dota.launchOpt.steps"))}</p>
+        <div className="dota-row">
+          <code className="dota-launch-text">{LAUNCH_OPTION}</code>
+          <button className="secondary" onClick={copyLaunchOption}>
+            {t("dota.launchOpt.copy")}
+          </button>
+        </div>
+      </div>
       {manual && (
         <div className="dota-manual">
           <p className="small">{t("dota.gsi.manual")}</p>
@@ -186,6 +216,65 @@ export default function DotaCard() {
           </button>
         </div>
       )}
+
+      {/* ---- live match helper ---- */}
+      <h3 className="bots-heading">{t("dota.liveHelper.title")}</h3>
+      <label className="check">
+        <input
+          type="checkbox"
+          checked={settings.live_helper}
+          disabled={busy}
+          onChange={(e) => {
+            const on = e.target.checked;
+            act(() => api.dotaSetLiveHelper(on), on ? t("dota.liveHelper.on") : t("dota.liveHelper.off"));
+          }}
+        />
+        <span>
+          {t("dota.liveHelper.label")}
+          <span className="muted small block">{t("dota.liveHelper.help")}</span>
+        </span>
+      </label>
+      {settings.live_helper && status && !status.gsi_installed && <p className="field-error small">{t("dota.liveHelper.needsGsi")}</p>}
+      {/* ---- post-game review ---- */}
+      <h3 className="bots-heading">{t("dota.account.title")}</h3>
+      <p className="muted small">{t("dota.account.help")}</p>
+      {settings.account_id != null && <p className="small">{t("dota.account.current", { id: settings.account_id })}</p>}
+      <label htmlFor="dota-account">
+        {t("dota.account.label")}
+        <input
+          id="dota-account"
+          spellCheck={false}
+          value={account}
+          placeholder="https://www.dotabuff.com/players/123456789"
+          onChange={(e) => {
+            setAccount(e.target.value);
+            setAccountCheck(null);
+          }}
+          onBlur={() => checkAccount(account)}
+        />
+      </label>
+      {accountCheck?.id != null && <p className="muted small">{t("dota.account.valid", { id: accountCheck.id })}</p>}
+      {accountCheck?.error && <p className="field-error small">{accountCheck.error}</p>}
+      <div className="actions">
+        <button
+          className="secondary"
+          disabled={busy || !account.trim() || !!accountCheck?.error}
+          onClick={async () => {
+            if (await act(() => api.dotaSetAccount(account.trim()), t("dota.account.saved"))) {
+              setAccount("");
+              setAccountCheck(null);
+            }
+          }}
+        >
+          {t("dota.account.save")}
+        </button>
+        {settings.account_id != null && (
+          <button className="link small" disabled={busy} onClick={() => act(() => api.dotaSetAccount(null), t("dota.account.removed"))}>
+            {t("dota.account.remove")}
+          </button>
+        )}
+      </div>
+      <p className="muted small">{t("dota.account.privateHelp")}</p>
 
       <h3 className="bots-heading">{t("dota.data.title")}</h3>
       {source ? (

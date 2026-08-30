@@ -60,6 +60,8 @@ let dotaDraft = {
   player_hero_id: 2, player_hero: "Axe", team: "radiant", team_assumed: true, role: "offlane", captures: 2,
   updated_at: dotaNow, complete: false, uncertain: ["enemies 2"], note: null,
 };
+let dotaAccount: number | null = null;
+let dotaLiveHelper = false;
 const dotaSourced = (detail: string) => ({ kind: "sourced", source: "OpenDota", detail, fetched_at: dotaNow - 7200 });
 
 type MockLinkSet = { name: string; links: { url: string; title: string }[]; browser: string; new_window: boolean; updated_at: number };
@@ -158,6 +160,7 @@ export function installDevMock() {
         return a;
       }
       case "dota_get_settings": return { launch_url: "https://www.dotabuff.com/heroes/meta", role: "offlane", gsi_port: 3417, launch_assistant: true,
+        account_id: dotaAccount, live_helper: dotaLiveHelper,
         cfg_text: '"LocalFlow Dota 2 companion"\n{\n    "uri"  "http://127.0.0.1:3417/"\n    ...\n}\n' };
       case "dota_status": return { gsi_installed: true, dota_found: true, dota_dir: "C:\\Steam\\steamapps\\common\\dota 2 beta",
         cfg_path: "C:\\Steam\\steamapps\\common\\dota 2 beta\\game\\dota\\cfg\\gamestate_integration\\gamestate_integration_localflow.cfg",
@@ -183,6 +186,29 @@ export function installDevMock() {
       case "dota_set_settings": case "dota_set_role": case "open_dota": return null;
       case "dota_install_gsi": throw { kind: "error", message: "Could not write C:\\Steam\\...\\gamestate_integration_localflow.cfg (access denied). Create that file yourself and paste the text shown below into it." };
       case "dota_uninstall_gsi": return true;
+      case "dota_live": return { hero: "Axe", next_note: null,
+        state: { clock: 734, gold: 1840, items: ["tango", "vanguard"], hero_id: 2, alive: true, updated_at: dotaNow },
+        next_item: { advice: { item: "Blink Dagger", key: "blink", priority: 1, why: "Starts fights with Berserker's Call", evidence: dotaSourced("bought in 88% of games"), alternatives: [] }, missing_gold: 410, affordable: false },
+        reminders: [{ clock: 840, text: "Wisdom runes at 14:00", kind: "wisdom" }, { clock: 780, text: "Power rune at 13:00", kind: "rune" }] };
+      case "dota_lookup": return { hero_id: 2, hero: "Axe", traits: ["Initiator", "Durable", "Disabler"], data_note: "OpenDota, fetched 2 h ago",
+        strong_against: [{ hero_id: 44, hero: "Phantom Assassin", reason: { text: "Counter Helix punishes her", evidence: dotaSourced("54.1% win rate over 3,812 games") } },
+          { hero_id: 8, hero: "Juggernaut", reason: { text: "Call interrupts Blade Fury's setup", evidence: { kind: "heuristic", rule: "taunt stops melee carries" } } }],
+        weak_against: [{ hero_id: 26, hero: "Lion", reason: { text: "Hex before the Blink", evidence: dotaSourced("46.2% win rate over 2,904 games") } },
+          { hero_id: 11, hero: "Shadow Fiend", reason: { text: "Kites and out-damages in lane", evidence: { kind: "heuristic", rule: "ranged mid heroes beat melee without sustain" } } }],
+        common_items: [{ item: "Blink Dagger", key: "blink", priority: 1, why: "Core", evidence: dotaSourced("bought in 88% of games"), alternatives: [] },
+          { item: "Blade Mail", key: "blade_mail", priority: 2, why: "Mid game", evidence: dotaSourced("bought in 61% of games"), alternatives: [] }] };
+      case "dota_last_match":
+        if (!dotaAccount) throw { kind: "error", message: "your Dota account isn't set. Paste your Dotabuff or OpenDota profile link in Settings › Dota 2 companion" };
+        return { data_note: "OpenDota, match parsed 3 min ago",
+          summary: { match_id: 8012345678, hero_id: 2, hero: "Axe", won: true, kills: 9, deaths: 4, assists: 17, gpm: 512, xpm: 640, last_hits: 212, duration_secs: 2531, start_time: dotaNow - 3200, items: ["Blink Dagger", "Blade Mail", "Black King Bar"] },
+          benchmarks: [{ metric: "gold per minute", value: 512, percentile: 0.71 }, { metric: "last hits per minute", value: 5.0, percentile: 0.48 }, { metric: "hero damage per minute", value: 610, percentile: 0.22 }],
+          notes: [{ text: "Blink Dagger at 13:10 is a little late", evidence: dotaSourced("median 11:45 over 12,000 Axe games") },
+            { text: "4 deaths is fine for an initiator", evidence: { kind: "heuristic", rule: "offlaners die more often" } }] };
+      case "dota_recent_matches": return [0, 1, 2, 3].map((i) => ({ match_id: 8012345678 - i, hero_id: [2, 129, 26, 2][i], hero: ["Axe", "Mars", "Lion", "Axe"][i], won: i !== 2,
+        kills: 9 - i, deaths: 4 + i, assists: 17 - i, gpm: 512 - i * 40, xpm: 640 - i * 30, last_hits: 212, duration_secs: 2531 - i * 200, start_time: dotaNow - 3200 - i * 7200, items: [] }));
+      case "dota_parse_account": { const m = String(args.text).match(/\d{3,}/); if (!m) throw { kind: "error", message: `couldn't find a Dota account id in "${args.text}"` }; return Number(m[0]); }
+      case "dota_set_account": { const m = String(args.text ?? "").match(/\d{3,}/); dotaAccount = m ? Number(m[0]) : null; return dotaAccount; }
+      case "dota_set_live_helper": dotaLiveHelper = !!args.enabled; return null;
       case "links_list": return linkSets;
       case "links_trash": return linkTrash;
       case "links_save": {

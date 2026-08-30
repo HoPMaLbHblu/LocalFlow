@@ -302,28 +302,38 @@ Discord works for messages only: create a webhook in a channel and paste it in t
 
 ## Dota 2 companion
 
-Opens your page (for example your Dotabuff profile) when Dota 2 starts, recognises the heroes in the draft from a screenshot, and suggests heroes and items with the reasons behind them.
+Opens your page (for example your Dotabuff profile) when Dota 2 starts, recognises the heroes in the draft from a screenshot, suggests heroes and items with the reasons behind them, helps during a match (next item, timings), looks up any hero, and reviews your last match.
 
 **Setup**
 
 1. Open **Settings › Dota 2 companion**. Enter the page to open (e.g. `https://www.dotabuff.com/players/<your id>`, or leave it empty) and your position.
 2. Press **Install** under *Game State Integration*. LocalFlow finds the game through Steam and writes one file, `game/dota/cfg/gamestate_integration/gamestate_integration_localflow.cfg`, and nothing else. If the folder can't be written, the card shows the path and the text to paste in yourself. **Remove** deletes only that file.
-3. In Steam: right-click Dota 2 › **Properties** › **Launch options**, add `-gamestateintegration` (the game only sends its state with this option), and restart Dota 2.
-4. Switch on **Open this page when Dota 2 reaches its menu**, or use the templates in the *Games* category: *Dota 2: open my page at launch*, *Dota 2: draft assistant* (Ctrl+Alt+D) and *Dota 2: item build* (Ctrl+Alt+B).
+3. In Steam: **Library** › right-click **Dota 2** › **Properties** › **General** › **Launch Options**, add `-gamestateintegration` (the game only sends its state with this option; the settings card has a Copy button for it), and restart Dota 2.
+4. Switch on **Open this page when Dota 2 reaches its menu**, or use the templates in the *Games* category: *Dota 2: open my page at launch*, *Dota 2: draft assistant* (Ctrl+Alt+D), *Dota 2: item build* (Ctrl+Alt+B) and *Dota 2: post-game review* (when the game closes).
+5. Optional: switch on **Live match helper** (next item with the gold still missing, reminders for runes, wisdom runes, lotuses and Tormentor; needs steps 2 and 3).
+6. Optional, for the post-game review: under **Post-game review**, paste your Dotabuff, OpenDota or STRATZ profile link (or your Steam id). In Dota 2, turn on **Expose Public Match Data** (Settings › Options › Social), or OpenDota can't see your matches; only matches played after that are visible.
 
-The page opens once per launch of the game (identified by the game's process and start time), also if LocalFlow restarts meanwhile. Scripts use the `dota` table: `dota.capture_draft()`, `dota.suggest(3)`, `dota.build()`, `dota.correct("enemies", 2, "Axe")` and more (see the guide).
+The Dota 2 window has four tabs: **Draft** (heroes and suggestions), **Items** (the item plan, plus a **Live** panel with gold, the next item and upcoming timings during a match), **Lookup** (any hero: strong and weak matchups labelled *Data* or *Rule of thumb*, common items) and **Review** (last match with KDA, GPM, XPM, duration and result, benchmark bars against other players of the hero, takeaways, recent matches).
+
+The page opens once per launch of the game (identified by the game's process and start time), also if LocalFlow restarts meanwhile. Scripts use the `dota` table: `dota.capture_draft()`, `dota.suggest(3)`, `dota.build()`, `dota.correct("enemies", 2, "Axe")`, `dota.live()`, `dota.next_item()`, `dota.reminders(from, to)`, `dota.lookup("Axe")`, `dota.last_match()`, `dota.recent_matches(10)`, `dota.set_account(link)` and more (see the guide).
+
+**From Telegram** (with the remote control on): `/draft` (the draft and 3 suggested heroes), `/build [hero]` (compact item plan), `/counter <hero>` (the 5 heroes strongest against it), `/lastmatch` (compact review).
 
 **Privacy and fair play**
 
+- Dota 2 sends Game State Integration data only once hero selection or a match starts, not in the main menu; the launch page therefore uses window detection (about 25 s after the Dota 2 window appears).
 - Game State Integration is Valve's official feature: the game posts its state (menu or match phase, your team and hero) to `127.0.0.1` only, with a secret token that LocalFlow checks on every post.
 - Nothing reads the game's memory, injects anything, or presses keys in the game. The draft comes from screenshots you ask for; they stay on this PC and only the last 10 are kept.
 - Hero statistics are downloaded from public sources; nothing about you is uploaded.
+- Your account id is stored only on this PC (in the companion's `settings.json`). The review requests only public match data for that id from OpenDota; nothing is posted anywhere.
+- The live helper uses only what Game State Integration sends (clock, gold, items, hero).
 
 **Limitations**
 
 - Recognition needs the draft screen or the top bar to be visible; it works best at 16:9 and may need a correction (slots with low confidence are marked *check*).
 - Without Game State Integration, your team is assumed to be Radiant (switch it in the Dota 2 window), your hero must be picked by hand, and the menu is assumed a minute after the game starts.
 - Suggestions support your decisions; they don't promise wins. Each reason is labelled *Data* (statistics, with source and age) or *Rule of thumb*.
+- The post-game review needs a public match history. OpenDota may take a few minutes to list a finished match; the template waits about a minute (within the script's time limit) and says when the newest match is older.
 
 ## Your data is safe
 

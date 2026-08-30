@@ -50,8 +50,9 @@ fn config_text_has_the_address_token_and_sections() {
         assert!(text.contains(&format!("\"{section}\"")), "missing {section}: {text}");
     }
     assert!(text.contains(r#""token"     "abc123""#), "{text}");
-    // Only what the companion needs: no items, abilities or other players' data.
-    for extra in ["items", "abilities", "allplayers", "draft", "wearables"] {
+    // Only what the companion needs: the player's own items (live helper), but no abilities
+    // or other players' data.
+    for extra in ["abilities", "allplayers", "draft", "wearables"] {
         assert!(!text.contains(&format!("\"{extra}\"")), "{extra} should not be requested");
     }
     assert_eq!(text.matches('{').count(), text.matches('}').count());
