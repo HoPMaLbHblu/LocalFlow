@@ -1,0 +1,21 @@
+{% macro status_badge(status) -%}
+<span class="badge status-{{ status }}">{{ status }}</span>
+{%- endmacro %}
+
+{% macro time(ts) -%}
+{% if ts %}<time datetime="{{ ts }}">{{ ts[:19]|replace("T", " ") }}</time>{% else %}—{% endif %}
+{%- endmacro %}
+
+{% macro run_row(run) -%}
+<tr>
+  <td>#{{ run.id }}</td>
+  <td>{{ status_badge(run.status) }}</td>
+  <td>{{ time(run.started_at) }}</td>
+  <td>{{ run.duration or "—" }}</td>
+  <td>
+    {% if run.error %}<details><summary class="text-error">Error</summary><pre class="error-box">{{ run.error }}</pre></details>{% endif %}
+    {% if run.output %}<details><summary>Output</summary><pre>{{ run.output }}</pre></details>{% endif %}
+    {% if not run.error and not run.output %}<span class="muted">no output</span>{% endif %}
+  </td>
+</tr>
+{%- endmacro %}

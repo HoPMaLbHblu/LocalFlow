@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<h1>Automations</h1>
+
+<div class="stats">
+  <div class="stat"><span class="stat-value">{{ rows|length }}</span><span class="muted">total</span></div>
+  <div class="stat"><span class="stat-value">{{ enabled }}</span><span class="muted">enabled</span></div>
+  <div class="stat"><span class="stat-value">{{ scheduled }}</span><span class="muted">scheduled</span></div>
+</div>
+
+{% if rows %}
+<div class="card table-wrap">
+  <table>
+    <thead>
+      <tr><th>Name</th><th>Schedule</th><th>State</th><th>Last run</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td>
+          <a href="/automations/{{ row.id }}"><strong>{{ row.name }}</strong></a>
+          {% if row.description %}<div class="muted small">{{ row.description }}</div>{% endif %}
+        </td>
+        <td>{% if row.schedule %}<code>{{ row.schedule }}</code>{% else %}<span class="muted">manual</span>{% endif %}</td>
+        <td>{% if row.enabled %}<span class="badge on">enabled</span>{% else %}<span class="badge off">disabled</span>{% endif %}</td>
+        <td>
+          {% if row.last_run %}{{ m.status_badge(row.last_run.status) }} <span class="small muted">{{ m.time(row.last_run.started_at) }}</span>
+          {% else %}<span class="muted">never</span>{% endif %}
+        </td>
+        <td class="actions">
+          <form method="post" action="/automations/{{ row.id }}/run"><button class="small">Run</button></form>
+          <form method="post" action="/automations/{{ row.id }}/toggle">
+            <input type="hidden" name="next" value="/">
+            <button class="small secondary">{% if row.enabled %}Disable{% else %}Enable{% endif %}</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="card empty">
+  <p><strong>No automations yet.</strong> Start from a template:</p>
+  <ul class="template-list">
+    {% for example in examples %}
+    <li><a href="/automations/new?template={{ example.slug }}">{{ example.title }}</a> <span class="muted">— {{ example.description }}</span></li>
+    {% endfor %}
+  </ul>
+  <p><a class="button" href="/automations/new">Create from scratch</a></p>
+</div>
+{% endif %}
+{% endblock %}

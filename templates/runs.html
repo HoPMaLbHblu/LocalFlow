@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Runs · {{ automation.name }}{% endblock %}
+{% block content %}
+<p><a href="/automations/{{ automation.id }}">← {{ automation.name }}</a></p>
+<h1>Execution history</h1>
+
+{% if runs %}
+<div class="card table-wrap">
+  <table>
+    <thead><tr><th>Run</th><th>Status</th><th>Started</th><th>Duration</th><th>Result</th></tr></thead>
+    <tbody>{% for run in runs %}{{ m.run_row(run) }}{% endfor %}</tbody>
+  </table>
+</div>
+<p class="small muted">Showing the latest {{ runs|length }} runs.</p>
+{% else %}
+<div class="card"><p class="muted">No runs yet.</p></div>
+{% endif %}
+{% endblock %}

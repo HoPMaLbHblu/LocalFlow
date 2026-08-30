@@ -1,0 +1,9 @@
+{% import "macros.html" as m %}
+<div class="card run-result status-border-{{ run.status }}">
+  <p>
+    Run #{{ run.id }} {{ m.status_badge(run.status) }}
+    {% if run.duration %}<span class="muted">in {{ run.duration }}</span>{% endif %}
+  </p>
+  {% if run.error %}<pre class="error-box">{{ run.error }}</pre>{% endif %}
+  {% if run.output %}<pre>{{ run.output }}</pre>{% elif not run.error %}<p class="muted">The script produced no output.</p>{% endif %}
+</div>
