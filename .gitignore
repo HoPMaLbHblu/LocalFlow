@@ -3,3 +3,9 @@
 *.db
 *.db-shm
 *.db-wal
+
+# Desktop app
+app/node_modules
+app/dist
+app/src-tauri/target
+app/src-tauri/gen

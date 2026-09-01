@@ -1,0 +1,22 @@
+[package]
+name = "localflow"
+description = "LocalFlow web server: manage Lua automations from the browser."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+localflow-core.workspace = true
+axum = "0.8"
+minijinja = "2"
+tokio.workspace = true
+serde.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+thiserror.workspace = true
+dotenvy.workspace = true
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
+tempfile.workspace = true

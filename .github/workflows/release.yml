@@ -1,0 +1,53 @@
+# Builds the Windows installers and attaches them to a GitHub release.
+# Triggered by pushing a version tag, e.g. `git tag v2.0.0 && git push origin v2.0.0`.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install frontend dependencies
+        working-directory: app
+        run: npm ci
+
+      # The desktop crate embeds app/dist when it compiles, so build it before testing.
+      - name: Build frontend
+        working-directory: app
+        run: npm run build
+
+      - name: Run tests
+        run: cargo test --workspace
+
+      - name: Build installers and publish release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: app
+          tagName: ${{ github.ref_name }}
+          releaseName: LocalFlow ${{ github.ref_name }}
+          releaseBody: |
+            Download **LocalFlow_x.y.z_x64-setup.exe** below and run it to install LocalFlow.
+            See the README for what's new and how to use it.
+          releaseDraft: false
+          prerelease: false

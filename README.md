@@ -1,31 +1,24 @@
 # LocalFlow
 
-A local automation server. You write small automations in **Lua**, and LocalFlow runs them when you click a button or on a schedule: tidying your Downloads folder, backing up notes, moving screenshots.
+Automate chores on your computer with small **Lua** scripts: tidy your Downloads folder, back up notes, move screenshots. Run them with one click or on a schedule. LocalFlow lives in the system tray and keeps your schedules running in the background.
 
-Rust handles the server, database, scheduler and file access. Lua scripts run in a sandbox and can only use the functions LocalFlow gives them.
+LocalFlow comes in two flavours that share the same engine:
 
-## Quick start
+- **Desktop app** (Windows): a native window with a code editor, test runs, live logs, tray icon, desktop notifications and "start with Windows".
+- **Web server**: the same features in your browser at `http://127.0.0.1:3000`, for headless machines.
 
-1. Install Rust from <https://rustup.rs>.
-   - On **Windows** you also need the "Desktop development with C++" workload from the Visual Studio Build Tools (the Lua interpreter is compiled from C).
-2. Run:
+## Install the desktop app
 
-   ```bash
-   cargo run
-   ```
+Download `LocalFlow_x.y.z_x64-setup.exe` from the [latest release](../../releases/latest) and run it. No administrator rights are needed.
 
-3. Open <http://127.0.0.1:3000>.
+After installing:
 
-The database (`localflow.db`) is created and migrated automatically on first start.
+1. Click **+ New automation** and pick a template, for example *Hello world*.
+2. Press **Test run** (Ctrl+Enter) to try it without saving.
+3. Press **Save** (Ctrl+S). Choose a **schedule** to run it automatically.
+4. Close the window whenever you like. LocalFlow keeps running in the tray; use **Quit** in the tray menu to exit.
 
-## Using it
-
-1. Click **+ New automation** and pick a template (for example *Hello world*).
-2. Click **Create automation**, then **Run now** on the next page.
-3. The result, the log and the run history show up on the same page.
-4. To run it automatically, edit it and add a **schedule** (see below).
-
-The dashboard lists every automation with its schedule, whether it is enabled, and how its last run went.
+Turn on **Settings → Start with Windows** so schedules survive a reboot.
 
 ## Writing automations
 
@@ -40,6 +33,8 @@ automation {
             fs.move(file, "~/Documents/PDF/" .. fs.basename(file))
             log("Moved file: " .. file)
         end
+
+        notify("Organized " .. #files .. " PDF file(s)")
     end
 }
 ```
@@ -59,17 +54,17 @@ automation {
 | `fs.basename(path)` | The file name: `"report.pdf"` for `"~/Downloads/report.pdf"`. |
 | `fs.join(a, b, ...)` | Joins path parts. |
 | `log(message)` / `print(...)` | Writes a line to the automation's log. |
-| `notify(message)` | Writes a highlighted `notify` line to the log (and the server console). |
+| `notify(message)` | Shows a desktop notification (desktop app) and writes a `notify` log line. |
 
-`ctx` contains `ctx.id`, `ctx.name` and `ctx.trigger` (`"manual"` or `"schedule"`).
+`ctx` contains `ctx.id`, `ctx.name` and `ctx.trigger` (`"manual"`, `"schedule"` or `"test"`).
 
 Paths: `~` is your home folder, and relative paths are relative to it. `/` works as a separator on every OS.
 
-More examples are in [`examples/`](examples/) and offered as templates in the app.
+The editor autocompletes these functions and marks syntax errors as you type.
 
 ### Schedules
 
-Schedules are cron expressions with **six** fields, the first being seconds, evaluated in the server's local time zone:
+Pick a preset in the editor (every 5 minutes, every hour, weekdays at 9:00, ...) or choose **Custom** and write a cron expression with **six** fields, seconds first, in your local time zone:
 
 ```
 ┌ second (0-59)
@@ -81,86 +76,77 @@ Schedules are cron expressions with **six** fields, the first being seconds, eva
 0 */5 * * * *
 ```
 
-| Expression | Meaning |
-|---|---|
-| `0 */5 * * * *` | every 5 minutes |
-| `0 0 * * * *` | every hour |
-| `0 0 18 * * *` | every day at 18:00 |
-| `0 0 9 * * Mon-Fri` | weekdays at 9:00 |
-
-Leave the schedule empty to run the automation only by hand. Disabling an automation pauses its schedule; you can still run it manually.
+Disabling an automation pauses its schedule; you can still run it manually.
 
 ## Safety
 
-- **Local only.** LocalFlow listens on `127.0.0.1` by default. If you set a non-loopback address it falls back to `127.0.0.1` unless you also set `LOCALFLOW_ALLOW_REMOTE=true`. There is no login, so only do that on a network you trust.
 - **Sandboxed Lua.** Scripts get Lua's `string`, `table`, `math`, `utf8` and `coroutine` libraries plus the API above. `os`, `io`, `package`, `debug`, `require`, `load`, `dofile` and `loadfile` are not available.
-- **Limited folders.** File functions only work inside the allowed folders (your home folder by default, see `LOCALFLOW_ALLOWED_DIRS`). `..` and symlinks cannot be used to get out.
-- **Limits.** Scripts are stopped after `LOCALFLOW_SCRIPT_TIMEOUT_SECS` (default 30 s) and may use at most 64 MB of memory.
+- **Limited folders.** File functions only work inside the allowed folders: your home folder by default, changeable in **Settings**. `..` and symlinks cannot be used to get out.
+- **Limits.** Scripts are stopped after 30 seconds and may use at most 64 MB of memory.
+- **Test runs are real.** A test run doesn't save the automation or its history, but file operations really happen.
+- **Local only.** The desktop app opens no network ports. The web server listens on `127.0.0.1` unless you explicitly allow otherwise.
 
-## Configuration
+## Web server
 
-Settings come from environment variables or a `.env` file. Copy [`.env.example`](.env.example) to `.env` to change them.
+```bash
+cargo run -p localflow
+```
+
+Then open <http://127.0.0.1:3000>. Settings come from environment variables or a `.env` file (see [`.env.example`](.env.example)):
 
 | Variable | Default | Meaning |
 |---|---|---|
 | `LOCALFLOW_HOST` | `127.0.0.1` | Address to listen on |
 | `LOCALFLOW_PORT` | `3000` | Port |
-| `LOCALFLOW_ALLOW_REMOTE` | `false` | Allow non-loopback `LOCALFLOW_HOST` |
+| `LOCALFLOW_ALLOW_REMOTE` | `false` | Allow a non-loopback `LOCALFLOW_HOST` (there is no login, so be careful) |
 | `DATABASE_URL` | `sqlite://localflow.db` | SQLite database |
 | `LOCALFLOW_ALLOWED_DIRS` | home folder | Folders scripts may access (`;`-separated on Windows, `:` elsewhere) |
 | `LOCALFLOW_SCRIPT_TIMEOUT_SECS` | `30` | Maximum run time per script |
 | `RUST_LOG` | `localflow=info` | Log level |
 
-## HTTP routes
-
-| Method | Path | Purpose |
-|---|---|---|
-| GET | `/` | Dashboard |
-| GET | `/automations` | List automations |
-| GET | `/automations/new` | Create form (`?template=<slug>` to prefill) |
-| POST | `/automations` | Create |
-| GET | `/automations/{id}` | Details, recent runs and logs |
-| GET | `/automations/{id}/edit` | Edit form |
-| PUT | `/automations/{id}` | Update |
-| POST | `/automations/{id}/run` | Run now |
-| POST | `/automations/{id}/toggle` | Enable / disable |
-| GET | `/automations/{id}/runs` | Execution history |
-| GET | `/automations/{id}/logs` | Log viewer (auto-refreshes) |
-| DELETE | `/automations/{id}` | Delete |
-
-`POST /automations/{id}` and `POST /automations/{id}/delete` do the same as `PUT` and `DELETE`, so the pages still work if the HTMX script (loaded from unpkg.com) is unavailable.
-
-## Project layout
-
-```
-src/
-├── main.rs            startup: config, database, scheduler, server
-├── lib.rs
-├── api/
-│   ├── routes.rs      URL → handler table
-│   ├── automations.rs dashboard, create/edit/delete, run, toggle
-│   └── runs.rs        run history and log viewer
-├── db/
-│   ├── models.rs      table rows as Rust structs
-│   └── repository.rs  every SQL query
-├── lua/
-│   ├── engine.rs      validate and execute scripts, record runs
-│   ├── sandbox.rs     restricted Lua state and folder rules
-│   └── api.rs         fs.*, log, notify, automation
-├── scheduler/mod.rs   cron jobs for enabled automations
-├── errors.rs          AppError → HTTP error page
-└── state.rs           configuration and shared state
-migrations/            SQL schema (applied automatically)
-templates/             HTML pages (MiniJinja)
-static/style.css
-examples/              example automations
-tests/                 repository, Lua engine and API tests
-```
-
 ## Development
 
+Requirements: [Rust](https://rustup.rs), [Node.js 20+](https://nodejs.org), and on Windows the "Desktop development with C++" workload from the Visual Studio Build Tools.
+
 ```bash
-cargo test
+cd app
+npm install
+npm run tauri dev      # desktop app with hot reload
+npm run tauri build    # installers in target/release/bundle/
 ```
 
-The tests use an in-memory database and temporary folders, so they never touch your files.
+`npm run dev` alone opens the interface in a normal browser with made-up sample data, which is handy for working on the UI.
+
+```bash
+cargo test --workspace
+```
+
+The desktop crate embeds `app/dist`, so run `npm run build` in `app/` once before testing the whole workspace.
+
+### Releasing
+
+Bump the version in `Cargo.toml` (`[workspace.package]`), `app/package.json` and `app/src-tauri/tauri.conf.json`, then push a tag:
+
+```bash
+git tag v2.0.1
+git push origin v2.0.1
+```
+
+GitHub Actions ([`release.yml`](.github/workflows/release.yml)) runs the tests, builds the Windows installers and attaches them to a GitHub release.
+
+### Project layout
+
+```
+crates/
+├── core/          localflow-core: the engine, shared by both front-ends
+│   ├── src/db/        SQLite models and every SQL query
+│   ├── src/lua/       sandbox, Lua API (fs.*, log, notify) and script execution
+│   ├── src/scheduler/ cron jobs
+│   ├── src/service.rs LocalFlow: create/update/run/test automations, live events
+│   ├── migrations/    database schema (applied automatically)
+│   └── scripts/       built-in templates
+└── server/        localflow: Axum + HTMX web interface
+app/
+├── src/           React + TypeScript interface (CodeMirror editor)
+└── src-tauri/     Tauri shell: commands, tray, notifications, autostart, settings
+```
