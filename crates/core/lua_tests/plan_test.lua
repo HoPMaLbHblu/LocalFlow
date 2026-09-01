@@ -101,6 +101,24 @@ test.group("plan: log", function()
     end)
 end)
 
+test.group("plan: streak", function()
+    test.case("entries from before the program started don't count", function()
+        local log_file = TEST_DIR .. "/log3.csv"
+        local yesterday = time.format("%Y-%m-%d", time.now() - 86400)
+        fs.write(log_file, "date,time,program,status,note\n" .. yesterday .. ",18:00,Fresh,done,\n")
+        local fresh = plan.new({ name = "Fresh", start = time.format("%Y-%m-%d"), daily = "A",
+            workouts = { A = { title = "A", exercises = { { "Squats", reps = 5 } } } } })
+        test.equal(plan.done(fresh, { log = log_file }), "Workout logged. Streak: 1")
+    end)
+    test.case("notes with line breaks stay in one row", function()
+        local log_file = TEST_DIR .. "/log4.csv"
+        plan.done("Notes", { log = log_file, note = "line one\r\nline two, done" })
+        local rows = csv.read(log_file, { header = true })
+        test.equal(#rows, 1)
+        test.equal(rows[1].note, "line one\r\nline two, done")
+    end)
+end)
+
 test.group("plan: mistakes are explained", function()
     test.case("unknown workout, day or time", function()
         local ok, e = pcall(plan.new, { days = { mon = "X" }, workouts = {} })

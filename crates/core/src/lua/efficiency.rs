@@ -11,7 +11,9 @@
 //! Windows' power throttling ("EcoQoS"), so it runs on efficient cores at lower clock speeds.
 //! It applies to every process with that name (browsers and chat apps run many). Some apps
 //! (Chrome, Edge) switch their own tabs in and out of it, which may undo the setting for a tab.
-//! Only affects running processes; it is gone when the app restarts.
+//! Only affects running processes; it is gone when the app restarts. Switching it off gives
+//! each process back the priority it had before and lets Windows and the app manage
+//! throttling again.
 
 use mlua::{Lua, Table, Value};
 
@@ -49,8 +51,21 @@ fn targets(function: &str, target: &Value) -> mlua::Result<(String, Vec<u32>)> {
     let mut system = sysinfo::System::new();
     system.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
     match target {
-        Value::Integer(pid) => Ok((pid.to_string(), vec![*pid as u32])),
-        Value::Number(pid) => Ok((pid.to_string(), vec![*pid as u32])),
+        Value::Integer(_) | Value::Number(_) => {
+            let pid = match target {
+                Value::Integer(n) => *n as u32,
+                Value::Number(n) => *n as u32,
+                _ => unreachable!(),
+            };
+            let Some(p) = system.process(sysinfo::Pid::from_u32(pid)) else {
+                return Ok((pid.to_string(), Vec::new()));
+            };
+            let name = process_key(&p.name().to_string_lossy());
+            if PROTECTED.contains(&name.as_str()) || pid == std::process::id() {
+                return Err(err(function, format!("{name} is part of Windows; LocalFlow won't change it")));
+            }
+            Ok((name, vec![pid]))
+        }
         Value::String(name) => {
             let wanted = process_key(&name.to_str()?);
             if PROTECTED.contains(&wanted.as_str()) {
@@ -96,20 +111,61 @@ mod win {
         (!h.is_null()).then_some(Handle(h))
     }
 
+    /// Priority classes processes had before LocalFlow put them into efficiency mode, by pid,
+    /// so switching it off gives each process its own priority back (apps such as browsers
+    /// set different priorities for their own processes).
+    /// Keyed by pid and the process's start time, because Windows reuses pids.
+    static BEFORE: std::sync::Mutex<Option<std::collections::HashMap<(u32, u64), u32>>> = std::sync::Mutex::new(None);
+
+    /// When the process started (a FILETIME), to tell a reused pid from the original process.
+    fn started(h: HANDLE) -> u64 {
+        use windows_sys::Win32::{Foundation::FILETIME, System::Threading::GetProcessTimes};
+        let zero = FILETIME { dwLowDateTime: 0, dwHighDateTime: 0 };
+        let (mut created, mut exited, mut kernel, mut user) = (zero, zero, zero, zero);
+        // SAFETY: valid handle with query rights; all four outputs are valid FILETIMEs.
+        if unsafe { GetProcessTimes(h, &mut created, &mut exited, &mut kernel, &mut user) } == 0 {
+            return 0;
+        }
+        ((created.dwHighDateTime as u64) << 32) | created.dwLowDateTime as u64
+    }
+
     /// Returns false when Windows refused (usually a program running as administrator).
     pub fn set_efficiency(pid: u32, on: bool) -> bool {
         let Some(h) = open(pid, true) else { return false };
         let state = PROCESS_POWER_THROTTLING_STATE {
             Version: PROCESS_POWER_THROTTLING_CURRENT_VERSION,
-            ControlMask: PROCESS_POWER_THROTTLING_EXECUTION_SPEED,
-            // On: throttle. Off: explicitly not throttled, like Task Manager does.
+            // On: throttle. Off: no control bits, which hands the decision back to Windows and
+            // the app (instead of forcing "never throttle", which would override apps that
+            // manage this themselves).
+            ControlMask: if on { PROCESS_POWER_THROTTLING_EXECUTION_SPEED } else { 0 },
             StateMask: if on { PROCESS_POWER_THROTTLING_EXECUTION_SPEED } else { 0 },
         };
         // SAFETY: the struct and its size match what ProcessPowerThrottling expects.
         let throttled = unsafe {
             SetProcessInformation(h.0, ProcessPowerThrottling, &state as *const _ as *const _, std::mem::size_of::<PROCESS_POWER_THROTTLING_STATE>() as u32)
         } != 0;
-        let class = if on { IDLE_PRIORITY_CLASS } else { NORMAL_PRIORITY_CLASS };
+        let mut before = BEFORE.lock().unwrap_or_else(|e| e.into_inner());
+        let before = before.get_or_insert_with(Default::default);
+        // SAFETY: valid handle with query rights.
+        let current = unsafe { GetPriorityClass(h.0) };
+        let key = (pid, started(h.0));
+        // Forget processes that have ended, so the list doesn't grow forever.
+        if before.len() > 256 {
+            before.retain(|(p, s), _| open(*p, false).is_some_and(|h2| started(h2.0) == *s));
+        }
+        let class = if on {
+            if current != 0 && current != IDLE_PRIORITY_CLASS {
+                before.entry(key).or_insert(current);
+            }
+            IDLE_PRIORITY_CLASS
+        } else {
+            match before.remove(&key) {
+                Some(original) => original,
+                // Not ours: only undo the lowest priority, leave anything else as the app set it.
+                None if current == IDLE_PRIORITY_CLASS => NORMAL_PRIORITY_CLASS,
+                None => return throttled,
+            }
+        };
         // SAFETY: valid handle with PROCESS_SET_INFORMATION.
         let prioritised = unsafe { SetPriorityClass(h.0, class) } != 0;
         throttled && prioritised
@@ -294,12 +350,20 @@ mod tests {
     fn efficiency_mode_on_our_own_child() {
         let mut child = std::process::Command::new("cmd").args(["/c", "ping -n 30 127.0.0.1 >nul"]).spawn().unwrap();
         let pid = child.id();
+        // Build machines may run everything at a lower priority: compare with what it started at.
+        let original = win::priority(pid);
         assert_eq!(win::efficiency(pid), Some(false));
         assert!(win::set_efficiency(pid, true));
         assert_eq!(win::efficiency(pid), Some(true));
         assert_eq!(win::priority(pid), Some("low"));
         assert!(win::set_efficiency(pid, false));
         assert_eq!(win::efficiency(pid), Some(false));
+        assert_eq!(win::priority(pid), original);
+        // A priority the process had before comes back, not "normal".
+        assert!(win::set_priority(pid, "above_normal"));
+        assert!(win::set_efficiency(pid, true));
+        assert!(win::set_efficiency(pid, false));
+        assert_eq!(win::priority(pid), Some("above_normal"));
         assert!(win::set_priority(pid, "below_normal"));
         assert_eq!(win::priority(pid), Some("below_normal"));
         let _ = child.kill();

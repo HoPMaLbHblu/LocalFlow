@@ -26,13 +26,15 @@ pub fn links_trash() -> Vec<LinkSet> {
 /// Save a set. `old_name` renames it first (when it changed).
 #[tauri::command]
 pub async fn links_save(set: LinkSet, old_name: Option<String>) -> Result<LinkSet, CommandError> {
-    blocking(move || {
-        if let Some(old) = old_name.filter(|o| !o.eq_ignore_ascii_case(&set.name)) {
-            if links::get(&old).is_some() {
+    blocking(move || match old_name {
+        // A new set: never replace an existing one with the same name.
+        None => links::create(set),
+        Some(old) => {
+            if !old.eq_ignore_ascii_case(&set.name) && links::get(&old).is_some() {
                 links::rename(&old, &set.name)?;
             }
+            links::save(set)
         }
-        links::save(set)
     })
     .await
 }

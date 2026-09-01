@@ -15,7 +15,7 @@ LocalFlow comes in two flavours that share the same engine:
 
 After installing:
 
-1. Click **+ New automation** and pick one of the 55 templates (search them or browse by category), for example *Hello world*, or start from a blank one.
+1. Click **+ New automation** and pick one of the 78 templates (search them or browse by category), for example *Hello world*, or start from a blank one.
 2. Press **Test run** (Ctrl+Enter, or ⌘ Enter on a Mac) to try it without saving.
 3. Press **Save** (Ctrl+S, or ⌘ S). Choose a **schedule** to run it automatically.
 4. Close the window whenever you like. LocalFlow keeps running in the system tray (the icons next to the clock on the taskbar; click **^** if you don't see it). Right-click its icon there and choose **Quit** to exit. On a Mac, LocalFlow's icon is in the menu bar at the top right of the screen; click it for the menu, or press ⌘ Q to quit.
@@ -309,7 +309,7 @@ Opens your page (for example your Dotabuff profile) when Dota 2 starts, recognis
 1. Open **Settings › Dota 2 companion**. Enter the page to open (e.g. `https://www.dotabuff.com/players/<your id>`, or leave it empty) and your position.
 2. Press **Install** under *Game State Integration*. LocalFlow finds the game through Steam and writes one file, `game/dota/cfg/gamestate_integration/gamestate_integration_localflow.cfg`, and nothing else. If the folder can't be written, the card shows the path and the text to paste in yourself. **Remove** deletes only that file.
 3. In Steam: **Library** › right-click **Dota 2** › **Properties** › **General** › **Launch Options**, add `-gamestateintegration` (the game only sends its state with this option; the settings card has a Copy button for it), and restart Dota 2.
-4. Switch on **Open this page when Dota 2 reaches its menu**, or use the templates in the *Games* category: *Dota 2: open my page at launch*, *Dota 2: draft assistant* (Ctrl+Alt+D), *Dota 2: item build* (Ctrl+Alt+B) and *Dota 2: post-game review* (when the game closes).
+4. Switch on **Open this page when Dota 2 reaches its menu**, or use the templates in the *Games* category: *Dota 2: open my page at launch*, *Dota 2: draft assistant* (Ctrl+Alt+D), *Dota 2: item build* (Ctrl+Alt+B), *Dota 2: live match helper* (Ctrl+Alt+H) and *Dota 2: post-game review* (when the game closes).
 5. Optional: switch on **Live match helper** (next item with the gold still missing, reminders for runes, wisdom runes, lotuses and Tormentor; needs steps 2 and 3).
 6. Optional, for the post-game review: under **Post-game review**, paste your Dotabuff, OpenDota or STRATZ profile link (or your Steam id). In Dota 2, turn on **Expose Public Match Data** (Settings › Options › Social), or OpenDota can't see your matches; only matches played after that are visible.
 
@@ -408,8 +408,8 @@ LOCALFLOW_GUIDE_EXAMPLES=app/guide_examples.json cargo test -p localflow-core --
 Bump the version in `Cargo.toml` (`[workspace.package]`), `app/package.json` and `app/src-tauri/tauri.conf.json`, then push a tag:
 
 ```bash
-git tag v1.2.0
-git push origin v1.2.0
+git tag v1.3.0
+git push origin v1.3.0
 ```
 
 GitHub Actions ([`release.yml`](.github/workflows/release.yml)) runs the tests, builds the Windows installers and attaches them to a GitHub release.
@@ -429,7 +429,7 @@ crates/
 │   ├── src/watcher/   folder watching
 │   ├── src/service.rs LocalFlow: create/update/run/test automations, live events
 │   ├── migrations/    database schema (applied automatically)
-│   ├── scripts/       the 55 built-in templates and the Telegram commands
+│   ├── scripts/       the 78 built-in templates and the Telegram commands
 │   └── tests/         Rust tests (including qa.rs: hand-written automations and things scripts must not be able to do)
 └── server/        localflow: Axum + HTMX web interface
 app/

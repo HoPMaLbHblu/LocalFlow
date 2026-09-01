@@ -66,17 +66,33 @@ fn file() -> PathBuf {
     appdata::dir().join("links.json")
 }
 
-fn load() -> Store {
+/// One change to links.json at a time (the Links page and automations can run together).
+static WRITING: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// The saved sets. Only a missing file counts as "no sets yet": any other read problem
+/// (the file locked by an antivirus, a disk error) is an error, so a later save can never
+/// replace the real file with an empty list.
+fn try_load() -> Result<Store, String> {
     let path = file();
-    let Ok(text) = std::fs::read_to_string(&path) else { return Store::default() };
-    match serde_json::from_str(&text) {
-        Ok(store) => store,
+    let bytes = match std::fs::read(&path) {
+        Ok(bytes) => bytes,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Store::default()),
+        Err(e) => return Err(format!("could not read the link sets ({e}); nothing was changed")),
+    };
+    match serde_json::from_slice(&bytes) {
+        Ok(store) => Ok(store),
         Err(_) => {
-            // Never throw a damaged file away: keep it next to the new one.
-            let _ = std::fs::copy(&path, path.with_extension(format!("damaged-{}.json", chrono::Local::now().format("%Y%m%d-%H%M%S"))));
-            Store::default()
+            // Never throw a damaged file away: keep a copy next to the new one first.
+            let copy = path.with_extension(format!("damaged-{}.json", chrono::Local::now().format("%Y%m%d-%H%M%S")));
+            std::fs::copy(&path, &copy).map_err(|e| format!("the link sets file is damaged and could not be kept aside ({e}); nothing was changed"))?;
+            Ok(Store::default())
         }
     }
+}
+
+/// For reading only: problems show as "no sets".
+fn load() -> Store {
+    try_load().unwrap_or_default()
 }
 
 fn save_store(store: &Store) -> Result<(), String> {
@@ -119,6 +135,14 @@ pub fn normalize_url(text: &str) -> Result<String, String> {
     }
 }
 
+/// "example.com", "sub.example.co.uk/path": a host whose last part is 2+ letters.
+fn looks_like_domain(token: &str) -> bool {
+    let host = token.split(['/', '?', '#']).next().unwrap_or("");
+    let host = host.split(':').next().unwrap_or("");
+    let Some((name, tld)) = host.rsplit_once('.') else { return false };
+    !name.is_empty() && !name.ends_with('.') && tld.len() >= 2 && tld.chars().all(|c| c.is_alphabetic())
+}
+
 /// Links from pasted text: one per line, optionally with a title ("Title | url", "Title - url",
 /// "title,url", or just the address). Lines without an address are skipped.
 pub fn parse_links(text: &str) -> Vec<Link> {
@@ -139,12 +163,19 @@ pub fn parse_links(text: &str) -> Vec<Link> {
         });
         let (raw, url) = match found {
             Some(hit) => hit,
-            // Bare domains only when the whole line is one.
-            None if tokens.len() == 1 => match normalize_url(tokens[0]) {
-                Ok(u) => (tokens[0], u),
-                Err(_) => continue,
-            },
-            None => continue,
+            // A bare domain ("Tracker - tracker.example.com"): only when exactly one word on the
+            // line looks like one, so sentences with "e.g." or a version like "1.2" aren't links.
+            None => {
+                let domains: Vec<(&str, String)> = tokens
+                    .iter()
+                    .filter(|t| looks_like_domain(t))
+                    .filter_map(|t| normalize_url(t).ok().map(|u| (*t, u)))
+                    .collect();
+                match domains.as_slice() {
+                    [(raw, url)] => (*raw, url.clone()),
+                    _ => continue,
+                }
+            }
         };
         let title = line.replacen(raw, "", 1);
         let title = title.trim().trim_matches(|c: char| c == '|' || c == '-' || c == ',' || c == ';' || c == ':' || c.is_whitespace()).to_string();
@@ -245,7 +276,7 @@ pub fn open_urls(urls: &[String], browser: &str, new_window: bool) -> Result<usi
         for (i, url) in urls.iter().enumerate() {
             crate::lua::system::shell_open(url)?;
             // The first one may have to start the browser; give it a moment.
-            std::thread::sleep(Duration::from_millis(if i == 0 { 1500 } else { 150 }));
+            std::thread::sleep(Duration::from_millis(if i == 0 { 1200 } else { 80 }));
         }
         return Ok(urls.len());
     }
@@ -421,8 +452,19 @@ fn check_name(name: &str) -> Result<String, String> {
     Ok(name.to_string())
 }
 
+/// Create a set that must not exist yet (the Links page's "New link set"), so a typo in a
+/// name never replaces another set.
+pub fn create(set: LinkSet) -> Result<LinkSet, String> {
+    save_inner(set, true)
+}
+
 /// Create or replace a set. Addresses are checked; bad ones are an error listing them.
-pub fn save(mut set: LinkSet) -> Result<LinkSet, String> {
+pub fn save(set: LinkSet) -> Result<LinkSet, String> {
+    save_inner(set, false)
+}
+
+fn save_inner(mut set: LinkSet, must_be_new: bool) -> Result<LinkSet, String> {
+    let _writing = WRITING.lock().unwrap_or_else(|e| e.into_inner());
     set.name = check_name(&set.name)?;
     set.browser = browser_key(&set.browser)?.to_string();
     let mut bad = Vec::new();
@@ -437,7 +479,10 @@ pub fn save(mut set: LinkSet) -> Result<LinkSet, String> {
         return Err(format!("not web addresses: {}", bad.join(", ")));
     }
     set.updated_at = now();
-    let mut store = load();
+    let mut store = try_load()?;
+    if must_be_new && store.sets.iter().any(|s| s.name.eq_ignore_ascii_case(&set.name)) {
+        return Err(format!("there is already a link set called \"{}\"; pick another name or open that one", set.name));
+    }
     match store.sets.iter_mut().find(|s| s.name.eq_ignore_ascii_case(&set.name)) {
         Some(existing) => *existing = set.clone(),
         None => store.sets.push(set.clone()),
@@ -448,7 +493,8 @@ pub fn save(mut set: LinkSet) -> Result<LinkSet, String> {
 
 pub fn rename(old: &str, new: &str) -> Result<(), String> {
     let new = check_name(new)?;
-    let mut store = load();
+    let _writing = WRITING.lock().unwrap_or_else(|e| e.into_inner());
+    let mut store = try_load()?;
     if !old.eq_ignore_ascii_case(&new) && store.sets.iter().any(|s| s.name.eq_ignore_ascii_case(&new)) {
         return Err(format!("there is already a set called \"{new}\""));
     }
@@ -460,7 +506,8 @@ pub fn rename(old: &str, new: &str) -> Result<(), String> {
 
 /// Move a set to the trash (it can be restored).
 pub fn delete(name: &str) -> Result<bool, String> {
-    let mut store = load();
+    let _writing = WRITING.lock().unwrap_or_else(|e| e.into_inner());
+    let mut store = try_load()?;
     let Some(i) = store.sets.iter().position(|s| s.name.eq_ignore_ascii_case(name.trim())) else { return Ok(false) };
     let set = store.sets.remove(i);
     store.trash.insert(0, set);
@@ -470,7 +517,8 @@ pub fn delete(name: &str) -> Result<bool, String> {
 }
 
 pub fn restore(name: &str) -> Result<(), String> {
-    let mut store = load();
+    let _writing = WRITING.lock().unwrap_or_else(|e| e.into_inner());
+    let mut store = try_load()?;
     let i = store.trash.iter().position(|s| s.name.eq_ignore_ascii_case(name.trim())).ok_or_else(|| format!("no deleted set called \"{name}\""))?;
     let mut set = store.trash.remove(i);
     while store.sets.iter().any(|s| s.name.eq_ignore_ascii_case(&set.name)) {
@@ -673,11 +721,15 @@ mod tests {
         let text = "# work\nMail | https://mail.example.com\nhttps://docs.example.com/page\nTracker - tracker.example.com\nnotes,https://n.example.com\nnothing here\n\nexample.org";
         let links = parse_links(text);
         let urls: Vec<&str> = links.iter().map(|l| l.url.as_str()).collect();
-        assert_eq!(urls, ["https://mail.example.com", "https://docs.example.com/page", "https://n.example.com", "https://example.org"]);
+        assert_eq!(urls, ["https://mail.example.com", "https://docs.example.com/page", "https://tracker.example.com", "https://n.example.com", "https://example.org"]);
         assert_eq!(links[0].title, "Mail");
-        // "Tracker - tracker.example.com" has no http/www token and more than one word: skipped.
         let links = parse_links("notes,https://n.example.com");
         assert_eq!(links[0].title, "notes");
+        // A title with a bare domain works; sentences and version numbers aren't links.
+        let links = parse_links("Tracker - tracker.example.com/board\nSee e.g. version 1.2 here\nfile.txt and other.doc");
+        assert_eq!(links.len(), 1, "{links:?}");
+        assert_eq!(links[0].url, "https://tracker.example.com/board");
+        assert_eq!(links[0].title, "Tracker");
     }
 
     #[test]
@@ -718,11 +770,23 @@ mod tests {
         // A second save keeps the first version as a backup.
         save(LinkSet { name: "Work".into(), links: parse_links("c.example.com"), browser: "edge".into(), new_window: false, updated_at: 0 }).unwrap();
         assert!(dir.path().join("links.bak").exists());
+        // "New link set" with a taken name is refused; the existing set stays as it was.
+        let copy = LinkSet { name: "work".into(), links: parse_links("x.example.com"), browser: "default".into(), new_window: true, updated_at: 0 };
+        assert!(create(copy).unwrap_err().contains("already"));
+        assert_eq!(get("Work").unwrap().links[0].url, "https://c.example.com");
         assert!(delete("WORK").unwrap());
         assert!(get("Work").is_none());
         assert_eq!(trash().len(), 1);
         restore("Work").unwrap();
         assert_eq!(get("Work").unwrap().links[0].url, "https://c.example.com");
+        // Saves from many threads at once all land.
+        let threads: Vec<_> = (0..8)
+            .map(|i| std::thread::spawn(move || save(LinkSet { name: format!("T{i}"), links: parse_links("t.example.com"), browser: "default".into(), new_window: true, updated_at: 0 }).unwrap()))
+            .collect();
+        for t in threads {
+            t.join().unwrap();
+        }
+        assert_eq!(list().iter().filter(|s| s.name.starts_with('T')).count(), 8);
         // A damaged file is kept, not thrown away.
         std::fs::write(dir.path().join("links.json"), "{ not json").unwrap();
         assert!(list().is_empty());

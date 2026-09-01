@@ -241,7 +241,7 @@ end
 
 local function quote(v)
     v = tostring(v or "")
-    if v:find('[,"\n]') then v = '"' .. v:gsub('"', '""') .. '"' end
+    if v:find('[,"\r\n]') then v = '"' .. v:gsub('"', '""') .. '"' end
     return v
 end
 
@@ -282,6 +282,8 @@ function plan.done(program, options)
         elseif not (options.program and options.program:session(day) == nil) then
             break
         end
+        -- Days before the program started don't count, even if the log has older entries.
+        if options.program and day <= options.program.start then break end
         day = add_days(day, -1)
     end
     return string.format("Workout logged. Streak: %d", streak)
