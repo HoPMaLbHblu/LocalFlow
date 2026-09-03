@@ -352,7 +352,8 @@ The page opens once per launch of the game (identified by the game's process and
 - **System control is opt-in.** Commands, keystrokes, mouse, closing programs and power functions only work in automations where you switch on *Allow system control*. Imports never get it.
 - **Limits.** Scripts are stopped after their time limit (30 seconds by default, adjustable in Settings) and may use at most 64 MB of memory.
 - **Test runs are real.** A test run doesn't save the automation or its history, but file operations really happen.
-- **Local only.** The desktop app opens no network ports. The web server listens on `127.0.0.1` unless you explicitly allow otherwise.
+- **Local only.** The desktop app opens no network ports, except `127.0.0.1:3417` (this PC only) while the Dota 2 companion's Game State Integration is installed. The web server listens on `127.0.0.1` unless you explicitly allow otherwise.
+- **Update check.** Once a day the desktop app asks GitHub's public API whether a newer LocalFlow has been released, and if so shows a notification (once per version) and a banner with a **Download** button. No data about you or your automations is sent. Switch it off in **Settings › Tell me about new versions**.
 
 ## Web server
 
@@ -408,8 +409,8 @@ LOCALFLOW_GUIDE_EXAMPLES=app/guide_examples.json cargo test -p localflow-core --
 Bump the version in `Cargo.toml` (`[workspace.package]`), `app/package.json` and `app/src-tauri/tauri.conf.json`, then push a tag:
 
 ```bash
-git tag v1.3.0
-git push origin v1.3.0
+git tag v1.3.1
+git push origin v1.3.1
 ```
 
 GitHub Actions ([`release.yml`](.github/workflows/release.yml)) runs the tests, builds the Windows installers and attaches them to a GitHub release.

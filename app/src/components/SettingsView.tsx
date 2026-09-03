@@ -163,6 +163,8 @@ export default function SettingsView({ onLanguageChange }: Props) {
         </label>
       </section>
 
+      <UpdateSetting />
+
       <section className="card">
         <strong>{t("settings.folders")}</strong>
         <p className="muted small">{t("settings.foldersText")}</p>
@@ -218,5 +220,48 @@ export default function SettingsView({ onLanguageChange }: Props) {
         <p className="muted small">{t("settings.trayNote")}</p>
       </section>
     </div>
+  );
+}
+
+/** "Tell me about new versions": a daily check of LocalFlow's public releases on GitHub. */
+function UpdateSetting() {
+  const [enabled, setEnabled] = useState<boolean | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  useEffect(() => {
+    api.getUpdateCheck().then(setEnabled).catch(() => {});
+  }, []);
+  if (enabled === null) return null;
+  const checkNow = async () => {
+    setStatus(t("update.checking"));
+    try {
+      const info = await api.updateStatus(true);
+      setStatus(info ? t("update.available", { version: info.latest.version, current: info.current }) : t("update.upToDate"));
+    } catch (e) {
+      setStatus(errorMessages(e).join(" "));
+    }
+  };
+  return (
+    <section className="card setting">
+      <div>
+        <strong>{t("update.setting")}</strong>
+        <p className="muted small">{t("update.settingText")}</p>
+        <button className="link small" onClick={checkNow}>
+          {t("update.checkNow")}
+        </button>
+        {status && <p className="small">{status}</p>}
+      </div>
+      <label className="switch">
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={(e) => {
+            const on = e.target.checked;
+            setEnabled(on);
+            api.setUpdateCheck(on).catch(() => setEnabled(!on));
+          }}
+        />
+        <span className="switch-track" />
+      </label>
+    </section>
   );
 }

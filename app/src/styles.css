@@ -664,3 +664,8 @@ section.card label.check.nested { margin-left: 1.6rem; }
 .dota-launch-option { border: 1px dashed var(--border); border-radius: var(--radius); padding: .5rem .7rem; margin: .4rem 0; }
 .dota-launch-option p { margin: .25rem 0; }
 .dota-launch-text { font-family: var(--mono); background: var(--surface-2); padding: .15rem .5rem; border-radius: 4px; user-select: all; }
+
+/* New version available */
+.banner.info { background: var(--accent-soft); color: var(--text); }
+.update-banner { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+.update-banner span { flex: 1; min-width: 200px; }

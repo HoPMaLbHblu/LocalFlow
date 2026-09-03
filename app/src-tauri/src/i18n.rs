@@ -12,6 +12,10 @@ pub struct Texts {
     pub failed: &'static str,
     pub finished: &'static str,
     pub unknown_error: &'static str,
+    /// `{version}`: the new version.
+    pub update_title: &'static str,
+    /// `{current}`: the installed version.
+    pub update_body: &'static str,
 }
 
 const EN: Texts = Texts {
@@ -21,6 +25,8 @@ const EN: Texts = Texts {
     failed: "{name} failed",
     finished: "{name} finished",
     unknown_error: "unknown error",
+    update_title: "LocalFlow {version} is available",
+    update_body: "You have {current}. Open LocalFlow to download the new version.",
 };
 
 const RU: Texts = Texts {
@@ -30,6 +36,8 @@ const RU: Texts = Texts {
     failed: "«{name}»: ошибка",
     finished: "«{name}» выполнено",
     unknown_error: "неизвестная ошибка",
+    update_title: "Вышла LocalFlow {version}",
+    update_body: "У вас {current}. Откройте LocalFlow, чтобы скачать новую версию.",
 };
 
 const DE: Texts = Texts {
@@ -39,6 +47,8 @@ const DE: Texts = Texts {
     failed: "„{name}“ fehlgeschlagen",
     finished: "„{name}“ abgeschlossen",
     unknown_error: "unbekannter Fehler",
+    update_title: "LocalFlow {version} ist verfügbar",
+    update_body: "Du hast {current}. Öffne LocalFlow, um die neue Version herunterzuladen.",
 };
 
 pub fn texts(language: &str) -> &'static Texts {

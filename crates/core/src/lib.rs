@@ -10,6 +10,7 @@ pub mod appdata;
 pub mod links;
 pub mod dota;
 pub mod messaging;
+pub mod updates;
 pub mod remote;
 pub mod backup;
 pub mod config;

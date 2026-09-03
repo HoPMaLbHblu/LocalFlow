@@ -264,3 +264,18 @@ fn template_schedules_are_valid() {
         }
     }
 }
+
+/// Every template has a title and description in each of the app's languages.
+#[test]
+fn every_template_is_translated() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../app/src/i18n");
+    for lang in ["en", "ru", "de"] {
+        let text = std::fs::read_to_string(dir.join(format!("{lang}.ts"))).unwrap();
+        for example in EXAMPLES {
+            for field in ["title", "description"] {
+                let key = format!("\"template.{}.{field}\"", example.slug);
+                assert!(text.contains(&key), "{lang}.ts has no {key}");
+            }
+        }
+    }
+}
