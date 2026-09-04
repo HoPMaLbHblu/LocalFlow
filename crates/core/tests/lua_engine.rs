@@ -12,6 +12,7 @@ fn ctx() -> RunContext {
         automation_id: 7,
         automation_name: "Test".into(),
         trigger: "manual".into(),
+        file: None,
     }
 }
 

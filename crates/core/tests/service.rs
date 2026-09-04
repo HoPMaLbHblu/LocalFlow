@@ -34,6 +34,7 @@ fn input(code: &str, schedule: Option<&str>) -> AutomationInput {
         lua_code: code.into(),
         schedule: schedule.map(String::from),
         enabled: true,
+        ..Default::default()
     }
 }
 

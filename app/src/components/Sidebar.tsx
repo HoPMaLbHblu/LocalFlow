@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { AutomationSummary } from "../api";
-import { formatRelative } from "../format";
+import { describeTriggers, formatRelative } from "../format";
 import type { View } from "../App";
 
 interface Props {
@@ -11,6 +11,7 @@ interface Props {
   onNew: () => void;
   onHome: () => void;
   onSettings: () => void;
+  onGuide: () => void;
 }
 
 /** Status dot: green/red for the last run, grey if it never ran, hollow if disabled. */
@@ -59,7 +60,7 @@ export default function Sidebar(props: Props) {
             <span className="automation-item-text">
               <span className="automation-item-name">{a.name}</span>
               <span className="automation-item-meta">
-                {!a.enabled ? "Disabled" : a.next_run ? `Next ${formatRelative(a.next_run)}` : "Manual"}
+                {a.enabled && a.next_run ? `Next ${formatRelative(a.next_run)}` : describeTriggers(a)}
               </span>
             </span>
           </button>
@@ -68,6 +69,9 @@ export default function Sidebar(props: Props) {
         {props.automations.length > 0 && filtered.length === 0 && <p className="muted small pad">No matches.</p>}
       </nav>
 
+      <button className={`sidebar-footer ${props.view === "guide" ? "selected" : ""}`} onClick={props.onGuide}>
+        📘 Learn
+      </button>
       <button className={`sidebar-footer ${props.view === "settings" ? "selected" : ""}`} onClick={props.onSettings}>
         ⚙ Settings
       </button>

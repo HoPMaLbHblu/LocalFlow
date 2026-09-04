@@ -10,6 +10,7 @@ pub mod db;
 pub mod errors;
 pub mod lua;
 pub mod scheduler;
+pub mod watcher;
 mod service;
 
 pub use config::CoreConfig;

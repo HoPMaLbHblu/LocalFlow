@@ -49,6 +49,7 @@ impl AutomationForm {
             lua_code: self.lua_code.clone(),
             schedule: Some(self.schedule.clone()),
             enabled: self.enabled.is_some(),
+            ..Default::default()
         }
     }
 }
@@ -174,9 +175,17 @@ pub async fn update(
     headers: HeaderMap,
     Form(form): Form<AutomationForm>,
 ) -> AppResult<Response> {
-    state.flow.get(id).await?;
+    let existing = state.flow.get(id).await?;
 
-    match state.flow.update(id, &form.to_input()).await {
+    // The web form doesn't edit these triggers (the desktop app does), so keep them.
+    let input = AutomationInput {
+        run_on_startup: existing.run_on_startup,
+        watch_path: existing.watch_path,
+        watch_pattern: existing.watch_pattern,
+        ..form.to_input()
+    };
+
+    match state.flow.update(id, &input).await {
         Ok(_) => Ok(redirect(&headers, &format!("/automations/{id}"))),
         Err(CoreError::Validation(errors)) => {
             let page = render_form(&state, &form, Some(id), &errors)?;

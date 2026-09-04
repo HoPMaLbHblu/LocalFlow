@@ -42,6 +42,7 @@ pub struct AutomationDetail {
     #[serde(flatten)]
     automation: Automation,
     scheduled: bool,
+    watching: bool,
     next_run: Option<DateTime<Utc>>,
 }
 
@@ -56,6 +57,7 @@ pub async fn get_automation(state: State<'_, AppState>, id: i64) -> CommandResul
     Ok(AutomationDetail {
         automation,
         scheduled: state.flow.is_scheduled(id).await,
+        watching: state.flow.is_watching(id).await,
         next_run: state.flow.next_run(id).await,
     })
 }

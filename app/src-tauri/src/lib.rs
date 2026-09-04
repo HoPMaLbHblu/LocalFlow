@@ -50,12 +50,20 @@ fn handle_event(app: &AppHandle, notifications: &AtomicBool, event: CoreEvent) {
             CoreEvent::Log { level, message, automation_id: Some(_), .. } if level == "notify" => {
                 notify(app, "LocalFlow", message);
             }
-            CoreEvent::RunFinished { name, trigger, run, .. } if run.status == "failed" && trigger == "schedule" => {
-                let error = run.error.as_deref().unwrap_or("unknown error");
-                notify(app, &format!("{name} failed"), error);
+            // Runs nobody is watching: report failures, and confirm runs started from the tray.
+            CoreEvent::RunFinished { name, trigger, run, .. } if trigger != "manual" => {
+                if run.status == "failed" {
+                    let error = run.error.as_deref().unwrap_or("unknown error");
+                    notify(app, &format!("{name} failed"), error);
+                } else if trigger == tray::TRAY_TRIGGER {
+                    notify(app, "LocalFlow", &format!("{name} finished"));
+                }
             }
             _ => {}
         }
+    }
+    if matches!(event, CoreEvent::AutomationsChanged) {
+        tray::refresh(app);
     }
     let _ = app.emit(EVENT_NAME, event);
 }

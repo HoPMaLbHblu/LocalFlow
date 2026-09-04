@@ -11,6 +11,9 @@ fn sample(name: &str) -> NewAutomation {
         lua_code: "log('hi')".to_string(),
         schedule: None,
         enabled: true,
+        run_on_startup: false,
+        watch_path: None,
+        watch_pattern: None,
     }
 }
 

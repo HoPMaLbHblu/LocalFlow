@@ -22,16 +22,16 @@ let automations: AutomationSummary[] = [
   {
     id: 1, name: "Organize PDF files", description: "Move PDFs from Downloads into Documents/PDF.",
     lua_code: 'automation {\n    name = "Organize PDF files",\n\n    run = function(ctx)\n        local files = fs.list("~/Downloads", "*.pdf")\n        for _, file in ipairs(files) do\n            fs.move(file, "~/Documents/PDF/" .. fs.basename(file))\n            log("Moved file: " .. file)\n        end\n    end\n}\n',
-    schedule: "0 0 * * * *", enabled: true, created_at: iso(-86_400_000), updated_at: iso(-86_400_000),
+    schedule: "0 0 * * * *", enabled: true, created_at: iso(-86_400_000), updated_at: iso(-86_400_000), run_on_startup: false, watch_path: null, watch_pattern: null,
     last_run: runs[0], next_run: iso(1_500_000),
   },
   {
     id: 2, name: "Tidy screenshots", description: "", lua_code: 'log("tidy")', schedule: "0 */30 * * * *",
-    enabled: true, created_at: iso(-86_400_000), updated_at: iso(-86_400_000), last_run: runs[1], next_run: iso(600_000),
+    enabled: true, created_at: iso(-86_400_000), updated_at: iso(-86_400_000), run_on_startup: false, watch_path: null, watch_pattern: null, last_run: runs[1], next_run: iso(600_000),
   },
   {
     id: 3, name: "Back up notes", description: "", lua_code: 'log("backup")', schedule: null,
-    enabled: false, created_at: iso(-86_400_000), updated_at: iso(-86_400_000), last_run: null, next_run: null,
+    enabled: false, created_at: iso(-86_400_000), updated_at: iso(-86_400_000), run_on_startup: true, watch_path: null, watch_pattern: null, last_run: null, next_run: null,
   },
 ];
 
@@ -48,7 +48,7 @@ export function installDevMock() {
     const find = () => automations.find((a) => a.id === args.id)!;
     switch (cmd) {
       case "list_automations": return automations;
-      case "get_automation": { const a = find(); return { ...a, scheduled: !!a.next_run }; }
+      case "get_automation": { const a = find(); return { ...a, scheduled: !!a.next_run, watching: !!a.watch_path }; }
       case "get_templates": return templates;
       case "validate_code": return /\bif\s+then\b/.test(args.code) ? "Lua syntax error: automation:1: unexpected symbol near 'then'" : null;
       case "validate_schedule": return args.schedule && args.schedule.trim().split(/\s+/).length !== 6 ? `Invalid schedule "${args.schedule}".` : null;
@@ -68,7 +68,7 @@ export function installDevMock() {
       }
       case "update_automation": { Object.assign(find(), args.input); return find(); }
       case "delete_automation": automations = automations.filter((a) => a.id !== args.id); return null;
-      case "get_settings": return { autostart: true, notifications: true, allowed_dirs: ["C:\\Users\\you"], data_dir: "C:\\Users\\you\\AppData\\Roaming\\com.hopmalbhblu.localflow", version: "2.0.0" };
+      case "get_settings": return { autostart: true, notifications: true, allowed_dirs: ["C:\\Users\\you"], data_dir: "C:\\Users\\you\\AppData\\Roaming\\com.hopmalbhblu.localflow", version: "2.1.0" };
       case "plugin:event|listen": return 1;
       default: return null;
     }

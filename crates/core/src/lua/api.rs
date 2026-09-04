@@ -7,6 +7,9 @@
 //! fs.exists(path)               -- true if the path exists
 //! fs.delete(path)               -- delete a file or empty directory; false if it did not exist
 //! fs.mkdir(path)                -- create a directory (and parents)
+//! fs.is_dir(path)               -- true if the path is a folder
+//! fs.size(path)                 -- file size in bytes
+//! fs.modified(path)             -- when the file last changed, as a timestamp (see time.*)
 //! fs.basename(path)             -- "report.pdf" for "~/Downloads/report.pdf"
 //! fs.join(a, b, ...)            -- join path parts
 //! log(message)                  -- write to the automation's log
@@ -51,8 +54,9 @@ impl LogCollector {
 
 pub type LogSink = Rc<LogCollector>;
 
-pub fn register(lua: &Lua, policy: Arc<PathPolicy>, logs: LogSink) -> mlua::Result<()> {
+pub fn register(lua: &Lua, policy: Arc<PathPolicy>, logs: LogSink, deadline: std::time::Instant) -> mlua::Result<()> {
     let globals = lua.globals();
+    super::system::register(lua, deadline)?;
 
     let sink = logs.clone();
     globals.set(
@@ -212,6 +216,40 @@ fn fs_table(lua: &Lua, policy: Arc<PathPolicy>) -> mlua::Result<Table> {
                 std::fs::remove_file(&resolved).map_err(|e| fs_err("fs.delete", e))?;
             }
             Ok(true)
+        })?,
+    )?;
+
+    let p = policy.clone();
+    fs.set(
+        "is_dir",
+        lua.create_function(move |_, path: String| {
+            Ok(p.resolve(&path).map_err(|e| fs_err("fs.is_dir", e))?.is_dir())
+        })?,
+    )?;
+
+    let p = policy.clone();
+    fs.set(
+        "size",
+        lua.create_function(move |_, path: String| {
+            let resolved = p.resolve(&path).map_err(|e| fs_err("fs.size", e))?;
+            let meta = std::fs::metadata(&resolved).map_err(|_| fs_err("fs.size", format!("not found: {path}")))?;
+            Ok(meta.len())
+        })?,
+    )?;
+
+    let p = policy.clone();
+    fs.set(
+        "modified",
+        lua.create_function(move |_, path: String| {
+            let resolved = p.resolve(&path).map_err(|e| fs_err("fs.modified", e))?;
+            let modified = std::fs::metadata(&resolved)
+                .and_then(|m| m.modified())
+                .map_err(|_| fs_err("fs.modified", format!("not found: {path}")))?;
+            let seconds = modified
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs() as i64)
+                .unwrap_or(0);
+            Ok(seconds)
         })?,
     )?;
 

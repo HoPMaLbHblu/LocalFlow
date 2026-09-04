@@ -12,6 +12,9 @@ export interface Automation {
   enabled: boolean;
   created_at: string;
   updated_at: string;
+  run_on_startup: boolean;
+  watch_path: string | null;
+  watch_pattern: string | null;
 }
 
 export interface AutomationRun {
@@ -31,6 +34,7 @@ export interface AutomationSummary extends Automation {
 
 export interface AutomationDetail extends Automation {
   scheduled: boolean;
+  watching: boolean;
   next_run: string | null;
 }
 
@@ -53,6 +57,9 @@ export interface Template {
   description: string;
   schedule: string;
   code: string;
+  run_on_startup?: boolean;
+  watch_path?: string;
+  watch_pattern?: string;
 }
 
 export interface TestRunResult {
@@ -76,6 +83,9 @@ export interface AutomationInput {
   lua_code: string;
   schedule: string | null;
   enabled: boolean;
+  run_on_startup: boolean;
+  watch_path: string | null;
+  watch_pattern: string | null;
 }
 
 export type CommandError =

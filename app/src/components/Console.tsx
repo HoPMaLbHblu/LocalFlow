@@ -1,6 +1,8 @@
 import { useEffect, useRef } from "react";
 import type { LogLine } from "../api";
 import StatusBadge from "./StatusBadge";
+import { explainError } from "../guide/content";
+import { renderInline } from "../guide/GuideText";
 
 export interface ConsoleState {
   title: string;
@@ -50,6 +52,9 @@ export default function Console({ state, onClear }: Props) {
             <span className="console-level">error</span>
             <span>{state.error}</span>
           </div>
+        )}
+        {state?.error && explainError(state.error) && (
+          <div className="console-hint">💡 {renderInline(explainError(state.error)!)}</div>
         )}
         {state && state.status !== "running" && state.lines.length === 0 && !state.error && (
           <div className="muted">No output.</div>

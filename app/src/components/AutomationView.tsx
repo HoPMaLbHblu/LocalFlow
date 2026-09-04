@@ -7,11 +7,13 @@ import {
   type AutomationInput,
   type Template,
 } from "../api";
-import { describeSchedule, formatMs, formatDuration, formatRelative, parseOutput, SCHEDULE_PRESETS } from "../format";
+import { describeTriggers, formatMs, formatDuration, formatRelative, parseOutput, SCHEDULE_PRESETS } from "../format";
 import CodeEditor from "./CodeEditor";
 import Console, { type ConsoleState } from "./Console";
 import RunsTab from "./RunsTab";
 import LogsTab from "./LogsTab";
+import HelpPanel from "./HelpPanel";
+import type { EditorView } from "@codemirror/view";
 
 type Tab = "editor" | "history" | "logs";
 
@@ -22,10 +24,20 @@ interface Props {
   setDirty: (dirty: boolean) => void;
   onSaved: (id: number) => void;
   onDeleted: () => void;
+  onOpenGuide: () => void;
 }
 
 function inputFromTemplate(t: Template): AutomationInput {
-  return { name: t.title, description: t.description, lua_code: t.code, schedule: t.schedule, enabled: true };
+  return {
+    name: t.title,
+    description: t.description,
+    lua_code: t.code,
+    schedule: t.schedule,
+    enabled: true,
+    run_on_startup: t.run_on_startup ?? false,
+    watch_path: t.watch_path ?? "",
+    watch_pattern: t.watch_pattern ?? "",
+  };
 }
 
 function inputFromAutomation(a: AutomationDetail): AutomationInput {
@@ -35,6 +47,9 @@ function inputFromAutomation(a: AutomationDetail): AutomationInput {
     lua_code: a.lua_code,
     schedule: a.schedule ?? "",
     enabled: a.enabled,
+    run_on_startup: a.run_on_startup,
+    watch_path: a.watch_path ?? "",
+    watch_pattern: a.watch_pattern ?? "",
   };
 }
 
@@ -44,14 +59,19 @@ function sameInput(a: AutomationInput, b: AutomationInput) {
     a.description === b.description &&
     a.lua_code === b.lua_code &&
     (a.schedule ?? "") === (b.schedule ?? "") &&
-    a.enabled === b.enabled
+    a.enabled === b.enabled &&
+    a.run_on_startup === b.run_on_startup &&
+    (a.watch_path ?? "") === (b.watch_path ?? "") &&
+    (a.watch_pattern ?? "") === (b.watch_pattern ?? "")
   );
 }
 
-export default function AutomationView({ id, template, setDirty, onSaved, onDeleted }: Props) {
+export default function AutomationView({ id, template, setDirty, onSaved, onDeleted, onOpenGuide }: Props) {
   const [detail, setDetail] = useState<AutomationDetail | null>(null);
   const [form, setForm] = useState<AutomationInput>(() =>
-    template ? inputFromTemplate(template) : { name: "", description: "", lua_code: "", schedule: "", enabled: true },
+    template
+      ? inputFromTemplate(template)
+      : { name: "", description: "", lua_code: "", schedule: "", enabled: true, run_on_startup: false, watch_path: "", watch_pattern: "" },
   );
   const [saved, setSaved] = useState<AutomationInput | null>(null);
   const [tab, setTab] = useState<Tab>("editor");
@@ -61,12 +81,57 @@ export default function AutomationView({ id, template, setDirty, onSaved, onDele
   const [console_, setConsole] = useState<ConsoleState | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [historyVersion, setHistoryVersion] = useState(0);
+  const [helpOpen, setHelpOpen] = useState(() => {
+    try {
+      return localStorage.getItem("localflow.helpOpen") !== "false";
+    } catch {
+      return true;
+    }
+  });
+  const editorView = useRef<EditorView | null>(null);
+  const [watchOpen, setWatchOpen] = useState(false);
+
+  const toggleHelp = () => {
+    setHelpOpen((open) => {
+      try {
+        localStorage.setItem("localflow.helpOpen", String(!open));
+      } catch {
+        // Preference just won't be remembered.
+      }
+      return !open;
+    });
+  };
+
+  /** Insert a snippet at the cursor, matching the indentation of the current line. */
+  const insertSnippet = (code: string) => {
+    const view = editorView.current;
+    if (!view) return;
+    const { from, to } = view.state.selection.main;
+    const line = view.state.doc.lineAt(from);
+    const indent = /^\s*/.exec(line.text)![0];
+    const text = code
+      .trimEnd()
+      .split("\n")
+      .map((l, i) => (i === 0 || !l ? l : indent + l))
+      .join("\n");
+    // Blank line: fill it. Start of a line: push the existing code down. Otherwise: start a new line.
+    const insert =
+      line.text.trim() === ""
+        ? text
+        : from <= line.from + indent.length
+          ? text + "\n" + indent
+          : "\n" + indent + text;
+    view.dispatch({ changes: { from, to, insert }, selection: { anchor: from + insert.length } });
+    view.focus();
+  };
 
   // Which live log lines belong in the console right now.
   const liveTarget = useRef<"test" | number | null>(null);
 
   const dirty = saved ? !sameInput(form, saved) : true;
-  useEffect(() => setDirty(id === null || dirty), [dirty, id, setDirty]);
+  useEffect(() => {
+    setDirty(id === null || dirty);
+  }, [dirty, id, setDirty]);
 
   const load = useCallback(async () => {
     if (id === null) return;
@@ -216,6 +281,7 @@ export default function AutomationView({ id, template, setDirty, onSaved, onDele
     );
   }
 
+  const watching = !!form.watch_path || watchOpen;
   const isPreset = SCHEDULE_PRESETS.some((p) => p.value === (form.schedule ?? ""));
 
   return (
@@ -226,11 +292,10 @@ export default function AutomationView({ id, template, setDirty, onSaved, onDele
           <span className="muted small">
             {id === null
               ? "Not saved yet"
-              : !form.enabled
-                ? "Disabled"
-                : detail?.next_run
-                  ? `Next run ${formatRelative(detail.next_run)} · ${describeSchedule(detail.schedule)}`
-                  : "Manual only"}
+              : detail
+                ? (detail.enabled && detail.next_run ? `Next run ${formatRelative(detail.next_run)} · ` : "") +
+                  describeTriggers(detail)
+                : ""}
             {id !== null && dirty && " · unsaved changes"}
           </span>
         </div>
@@ -313,8 +378,67 @@ export default function AutomationView({ id, template, setDirty, onSaved, onDele
           </div>
           {scheduleError && <div className="field-error">{scheduleError}</div>}
 
-          <div className="editor-area">
-            <CodeEditor value={form.lua_code} onChange={(v) => update({ lua_code: v })} onSave={save} onTest={testRun} />
+          <div className="triggers">
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={form.run_on_startup}
+                onChange={(e) => update({ run_on_startup: e.target.checked })}
+              />
+              <span>
+                Run when LocalFlow starts
+                <span className="muted small"> (with Settings › Start with Windows, that's every time you sign in)</span>
+              </span>
+            </label>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={watching}
+                onChange={(e) => {
+                  setWatchOpen(e.target.checked);
+                  update(e.target.checked ? { watch_path: form.watch_path || "~/Downloads" } : { watch_path: "", watch_pattern: "" });
+                }}
+              />
+              <span>Run when a new file appears in a folder</span>
+            </label>
+            {watching && (
+              <div className="watch-fields">
+                <label className="grow">
+                  Folder
+                  <input
+                    className="mono"
+                    value={form.watch_path ?? ""}
+                    placeholder="~/Downloads"
+                    onChange={(e) => update({ watch_path: e.target.value })}
+                  />
+                </label>
+                <label>
+                  Files
+                  <input
+                    className="mono"
+                    value={form.watch_pattern ?? ""}
+                    placeholder="* (all files)"
+                    onChange={(e) => update({ watch_pattern: e.target.value })}
+                  />
+                </label>
+                <span className="muted small watch-hint">
+                  The new file is in <code>ctx.file</code>.
+                </span>
+              </div>
+            )}
+          </div>
+
+          <div className="editor-row">
+            <div className="editor-area">
+              <CodeEditor
+                value={form.lua_code}
+                onChange={(v) => update({ lua_code: v })}
+                onSave={save}
+                onTest={testRun}
+                onReady={(view) => (editorView.current = view)}
+              />
+            </div>
+            {helpOpen && <HelpPanel onInsert={insertSnippet} onOpenGuide={onOpenGuide} onClose={toggleHelp} />}
           </div>
 
           <div className="editor-toolbar">
@@ -322,6 +446,11 @@ export default function AutomationView({ id, template, setDirty, onSaved, onDele
               {busy === "testing" ? "Testing…" : "Test run"}
             </button>
             <span className="muted small">Test runs don't save anything, but file operations are real.</span>
+            {!helpOpen && (
+              <button className="link small" onClick={toggleHelp}>
+                ? Show help
+              </button>
+            )}
             <button className="primary push-right" onClick={save} disabled={busy !== null || (!dirty && id !== null)} title="Ctrl+S">
               {busy === "saving" ? "Saving…" : id === null ? "Create automation" : "Save"}
             </button>

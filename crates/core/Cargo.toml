@@ -16,6 +16,9 @@ thiserror.workspace = true
 chrono.workspace = true
 dirs.workspace = true
 uuid.workspace = true
+notify = "8"
+sysinfo = "0.37"
+open = "5"
 
 [dev-dependencies]
 tempfile.workspace = true
