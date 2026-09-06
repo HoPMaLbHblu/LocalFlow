@@ -60,8 +60,16 @@ pub fn register(lua: &Lua, policy: std::sync::Arc<super::sandbox::PathPolicy>, d
             if Instant::now() + duration > deadline {
                 return Err(err("wait", "waiting that long would pass the script's time limit"));
             }
-            std::thread::sleep(duration);
-            Ok(())
+            // Sleep in short slices so a stop request wakes the script early.
+            let end = Instant::now() + duration;
+            loop {
+                super::sandbox::check_cancelled()?;
+                let left = end.saturating_duration_since(Instant::now());
+                if left.is_zero() {
+                    return Ok(());
+                }
+                std::thread::sleep(left.min(Duration::from_millis(100)));
+            }
         })?,
     )?;
     Ok(())

@@ -25,7 +25,7 @@ use super::{
     api::{self, LogSink},
     data,
     engine::{self, RunContext},
-    sandbox::PathPolicy,
+    sandbox::{self, PathPolicy},
 };
 
 /// How many automations may be running inside each other at once.
@@ -157,6 +157,7 @@ fn run_step(lua: &Lua, env: &ChainEnv, function: &str, key: &Value, input: Value
     if env.stack.len() >= MAX_DEPTH {
         return Err(err(function, format!("steps can go at most {MAX_DEPTH} levels deep")));
     }
+    sandbox::check_cancelled()?;
     let remaining = env.deadline.saturating_duration_since(Instant::now());
     if remaining.is_zero() {
         return Err(err(function, "the time limit was reached"));
@@ -178,6 +179,7 @@ fn run_step(lua: &Lua, env: &ChainEnv, function: &str, key: &Value, input: Value
         input,
         library: Some(env.library.clone()),
         stack,
+        cancel: sandbox::current_cancel().unwrap_or_default(),
     };
     let store = env.stores.borrow().get(&step.id).cloned().unwrap_or_else(|| step.store.clone());
 

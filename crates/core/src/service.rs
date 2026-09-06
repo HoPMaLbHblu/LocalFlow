@@ -4,7 +4,7 @@ use std::{
     collections::HashMap,
     future::Future,
     pin::Pin,
-    sync::{Arc, RwLock},
+    sync::{atomic::{AtomicBool, AtomicI64, Ordering}, Arc, RwLock},
     time::{Duration, Instant},
 };
 
@@ -155,6 +155,38 @@ struct Inner {
     startup_notice: Option<StartupNotice>,
     /// Background loops started by `start`, stopped by `close`.
     tasks: std::sync::Mutex<Vec<tokio::task::AbortHandle>>,
+    /// Runs in progress, by run id (a run being started has a temporary negative key).
+    running: std::sync::Mutex<HashMap<i64, RunHandle>>,
+    pending_key: AtomicI64,
+}
+
+struct RunHandle {
+    automation_id: i64,
+    name: String,
+    started_at: String,
+    cancel: Arc<AtomicBool>,
+}
+
+/// A run that is in progress right now.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct RunningRun {
+    pub run_id: i64,
+    pub automation_id: i64,
+    pub name: String,
+    pub started_at: String,
+}
+
+/// Removes a run from the running set when dropped (success, failure, panic or cancellation of the future).
+struct RunGuard {
+    inner: Arc<Inner>,
+    key: i64,
+    cancel: Arc<AtomicBool>,
+}
+
+impl Drop for RunGuard {
+    fn drop(&mut self) {
+        self.inner.running.lock().unwrap_or_else(|e| e.into_inner()).remove(&self.key);
+    }
 }
 
 /// Something the user should hear about after startup.
@@ -223,6 +255,8 @@ impl LocalFlow {
                 backups,
                 startup_notice,
                 tasks: Default::default(),
+                running: Default::default(),
+                pending_key: AtomicI64::new(-1),
             }),
         })
     }
@@ -655,7 +689,91 @@ impl LocalFlow {
         file: Option<String>,
         details: HashMap<String, String>,
     ) -> CoreResult<AutomationRun> {
-        self.run_full(id, trigger.to_string(), file, details, None, 0).await
+        self.run_full(id, trigger.to_string(), file, details, None, 0, None).await
+    }
+
+    // ---- stopping and listing runs ------------------------------------------
+    //
+    // Limits: a stop is a flag the script checks (every ~10,000 Lua instructions and in
+    // `wait`, steps and time-budgeted helpers). A blocking OS call already in flight
+    // (a long `shell.run`, an `ask()` dialog, `speak`) is not interrupted; the stop
+    // takes effect when it returns. Child processes are not killed.
+
+    /// Runs in progress, oldest id first.
+    pub fn running(&self) -> Vec<RunningRun> {
+        let map = self.inner.running.lock().unwrap_or_else(|e| e.into_inner());
+        let mut list: Vec<RunningRun> = map
+            .iter()
+            .filter(|(key, _)| **key > 0)
+            .map(|(key, h)| RunningRun {
+                run_id: *key,
+                automation_id: h.automation_id,
+                name: h.name.clone(),
+                started_at: h.started_at.clone(),
+            })
+            .collect();
+        list.sort_by_key(|r| r.run_id);
+        list
+    }
+
+    /// Ask one run to stop. True if it was running.
+    pub fn stop_run(&self, run_id: i64) -> bool {
+        let map = self.inner.running.lock().unwrap_or_else(|e| e.into_inner());
+        match map.get(&run_id) {
+            Some(h) if run_id > 0 => {
+                h.cancel.store(true, Ordering::Relaxed);
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Ask every run of this automation to stop; returns how many.
+    pub fn stop_automation(&self, automation_id: i64) -> usize {
+        let map = self.inner.running.lock().unwrap_or_else(|e| e.into_inner());
+        map.values()
+            .filter(|h| h.automation_id == automation_id)
+            .map(|h| h.cancel.store(true, Ordering::Relaxed))
+            .count()
+    }
+
+    /// Ask every running automation to stop; returns how many.
+    pub fn stop_all(&self) -> usize {
+        let map = self.inner.running.lock().unwrap_or_else(|e| e.into_inner());
+        map.values().map(|h| h.cancel.store(true, Ordering::Relaxed)).count()
+    }
+
+    pub fn is_running(&self, automation_id: i64) -> bool {
+        let map = self.inner.running.lock().unwrap_or_else(|e| e.into_inner());
+        map.values().any(|h| h.automation_id == automation_id)
+    }
+
+    /// Like [`LocalFlow::run`], but does nothing (`Ok(None)`) if this automation is
+    /// already running. The check and the registration happen under one lock, so two
+    /// simultaneous calls can't both start it.
+    pub async fn run_guarded(&self, id: i64, trigger: &str) -> CoreResult<Option<AutomationRun>> {
+        let automation = self.get(id).await?;
+        let cancel = Arc::new(AtomicBool::new(false));
+        let key = self.inner.pending_key.fetch_sub(1, Ordering::Relaxed);
+        {
+            let mut map = self.inner.running.lock().unwrap_or_else(|e| e.into_inner());
+            if map.values().any(|h| h.automation_id == id) {
+                return Ok(None);
+            }
+            map.insert(
+                key,
+                RunHandle {
+                    automation_id: id,
+                    name: automation.name,
+                    started_at: Utc::now().to_rfc3339(),
+                    cancel: cancel.clone(),
+                },
+            );
+        }
+        let guard = RunGuard { inner: self.inner.clone(), key, cancel };
+        self.run_full(id, trigger.to_string(), None, HashMap::new(), None, 0, Some(guard))
+            .await
+            .map(Some)
     }
 
     /// Everything a run can be given. `depth` counts "run after" links, so a loop of
@@ -668,9 +786,10 @@ impl LocalFlow {
         details: HashMap<String, String>,
         input: Option<serde_json::Value>,
         depth: usize,
+        guard: Option<RunGuard>,
     ) -> Pin<Box<dyn Future<Output = CoreResult<AutomationRun>> + Send + 'static>> {
         let this = self.clone();
-        Box::pin(async move { this.run_inner(id, &trigger, file, details, input, depth).await })
+        Box::pin(async move { this.run_inner(id, &trigger, file, details, input, depth, guard).await })
     }
 
     async fn run_inner(
@@ -681,10 +800,28 @@ impl LocalFlow {
         details: HashMap<String, String>,
         input: Option<serde_json::Value>,
         depth: usize,
+        guard: Option<RunGuard>,
     ) -> CoreResult<AutomationRun> {
         let repo = &self.inner.repo;
         let automation = self.get(id).await?;
         let run_id = repo.start_run(id).await?;
+        // Register as running (or move a reservation from run_guarded to the real id).
+        // The guard removes the entry however this function ends.
+        let mut guard = match guard {
+            Some(g) => g,
+            None => RunGuard { inner: self.inner.clone(), key: 0, cancel: Arc::new(AtomicBool::new(false)) },
+        };
+        {
+            let mut map = self.inner.running.lock().unwrap_or_else(|e| e.into_inner());
+            let handle = map.remove(&guard.key).unwrap_or_else(|| RunHandle {
+                automation_id: id,
+                name: automation.name.clone(),
+                started_at: Utc::now().to_rfc3339(),
+                cancel: guard.cancel.clone(),
+            });
+            map.insert(run_id, handle);
+            guard.key = run_id;
+        }
         tracing::info!(automation_id = id, run_id, trigger, "running automation '{}'", automation.name);
         self.emit(CoreEvent::RunStarted {
             automation_id: id,
@@ -700,6 +837,7 @@ impl LocalFlow {
             details,
             input,
             library: self.library_for(&automation.lua_code).await?,
+            cancel: guard.cancel.clone(),
             ..RunContext::new(id, automation.name.clone(), trigger, automation.allow_system)
         };
         let store = repo.load_store(id).await?;
@@ -732,7 +870,12 @@ impl LocalFlow {
             trigger: trigger.to_string(),
             run: run.clone(),
         });
-        self.start_followers(id, &automation.name, result.success, result.result, depth).await;
+        let stopped = guard.cancel.load(Ordering::Relaxed);
+        drop(guard);
+        // A run the user stopped does not start its "run after" followers.
+        if !stopped {
+            self.start_followers(id, &automation.name, result.success, result.result, depth).await;
+        }
         Ok(run)
     }
 
@@ -753,7 +896,7 @@ impl LocalFlow {
                 ("previous".to_string(), name.to_string()),
                 ("previous_ok".to_string(), success.to_string()),
             ]);
-            let run = self.run_full(follower.id, "after".into(), None, details, result.clone(), depth + 1);
+            let run = self.run_full(follower.id, "after".into(), None, details, result.clone(), depth + 1, None);
             tokio::spawn(async move {
                 if let Err(e) = run.await {
                     tracing::error!("\"run after\" failed: {e}");

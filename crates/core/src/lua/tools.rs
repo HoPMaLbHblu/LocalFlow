@@ -50,6 +50,9 @@ fn require(allowed: bool, function: &str) -> mlua::Result<()> {
 }
 
 fn budget(deadline: Instant, wanted: Duration) -> Result<Duration, String> {
+    if super::sandbox::cancelled() {
+        return Err(super::sandbox::STOPPED.into());
+    }
     let left = deadline.saturating_duration_since(Instant::now()).min(wanted);
     if left.is_zero() {
         Err("no time left before the script's time limit".into())

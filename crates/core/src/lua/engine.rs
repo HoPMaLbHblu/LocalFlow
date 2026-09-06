@@ -34,6 +34,10 @@ pub struct RunContext {
     pub library: Option<Arc<Library>>,
     /// Automations already running in this chain (for steps), outermost first.
     pub stack: Vec<i64>,
+    /// Set to true to stop the run (see `LocalFlow::stop_run`). Shared with steps.
+    /// Limit: a blocking OS call already in flight (long `shell.run`, `ask()`, `speak`)
+    /// is not interrupted; the stop takes effect when it returns or at the next check.
+    pub cancel: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl RunContext {
@@ -49,6 +53,7 @@ impl RunContext {
             input: None,
             library: None,
             stack: Vec::new(),
+            cancel: Arc::default(),
         }
     }
 }
@@ -129,6 +134,7 @@ pub fn execute_with(
     store: HashMap<String, String>,
     on_log: impl Fn(&LogLine) + 'static,
 ) -> ExecutionResult {
+    let _cancel_scope = sandbox::CancelScope::enter(ctx.cancel.clone());
     let logs = Rc::new(LogCollector::new(on_log));
     let store: SharedStore = Rc::new(RefCell::new(StoreState { values: store, changed: false }));
     let step_stores: StepStores = Rc::default();
@@ -190,6 +196,15 @@ pub fn execute_with(
         state.changed.then(|| state.values.clone())
     };
     let step_stores = step_stores.take();
+    // A script can swallow the stop error with pcall; a stopped run is still a stopped run.
+    let result = match result {
+        Ok(_) if sandbox::cancelled() => Err(mlua::Error::runtime(sandbox::STOPPED)),
+        other => other,
+    };
+    let result = match result {
+        Err(_) if sandbox::cancelled() => Err(mlua::Error::runtime(sandbox::STOPPED)),
+        other => other,
+    };
     match result {
         Ok(result) => ExecutionResult { success: true, logs, error: None, store, result, step_stores },
         Err(e) => ExecutionResult { success: false, logs, error: Some(describe(&e)), store, result: None, step_stores },

@@ -2,6 +2,7 @@
 
 use std::{
     path::{Component, Path, PathBuf},
+    sync::{atomic::{AtomicBool, Ordering}, Arc},
     time::{Duration, Instant},
 };
 
@@ -9,6 +10,51 @@ use mlua::{HookTriggers, Lua, LuaOptions, StdLib, Value, VmState};
 
 /// Scripts may not allocate more than this much memory.
 const MEMORY_LIMIT: usize = 64 * 1024 * 1024;
+
+/// The error text of a run that was stopped on request.
+pub const STOPPED: &str = "stopped by the user";
+
+thread_local! {
+    /// The stop flag of the run executing on this thread. A script (and its nested
+    /// steps) runs on one blocking thread, so deadline-aware helpers can look here
+    /// without every function having to carry the flag.
+    static CANCEL: std::cell::RefCell<Option<Arc<AtomicBool>>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Makes `flag` the current thread's stop flag until dropped (then restores the previous one).
+pub struct CancelScope(Option<Arc<AtomicBool>>);
+
+impl CancelScope {
+    pub fn enter(flag: Arc<AtomicBool>) -> Self {
+        CancelScope(CANCEL.with(|c| c.borrow_mut().replace(flag)))
+    }
+}
+
+impl Drop for CancelScope {
+    fn drop(&mut self) {
+        let previous = self.0.take();
+        CANCEL.with(|c| *c.borrow_mut() = previous);
+    }
+}
+
+/// True if a stop was requested for the run on this thread.
+pub fn cancelled() -> bool {
+    CANCEL.with(|c| c.borrow().as_ref().is_some_and(|f| f.load(Ordering::Relaxed)))
+}
+
+/// The current thread's stop flag (so nested steps share it).
+pub fn current_cancel() -> Option<Arc<AtomicBool>> {
+    CANCEL.with(|c| c.borrow().clone())
+}
+
+/// `Err("stopped by the user")` if a stop was requested.
+pub fn check_cancelled() -> mlua::Result<()> {
+    if cancelled() {
+        Err(mlua::Error::runtime(STOPPED))
+    } else {
+        Ok(())
+    }
+}
 
 /// Create a Lua state with only safe standard libraries loaded.
 ///
@@ -30,7 +76,9 @@ pub fn new_lua(timeout: Duration) -> mlua::Result<Lua> {
     lua.set_hook(
         HookTriggers::new().every_nth_instruction(10_000),
         move |_lua, _debug| {
-            if started.elapsed() > timeout {
+            if cancelled() {
+                Err(mlua::Error::runtime(STOPPED))
+            } else if started.elapsed() > timeout {
                 Err(mlua::Error::runtime(format!(
                     "script timed out after {} seconds",
                     timeout.as_secs()

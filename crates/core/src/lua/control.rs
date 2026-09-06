@@ -168,6 +168,7 @@ fn cmd_command(line: &str) -> Command {
 
 /// Seconds left before the script's time limit, capped by the caller's own timeout.
 fn time_budget(deadline: Instant, wanted: Option<f64>) -> mlua::Result<Duration> {
+    super::sandbox::check_cancelled()?;
     let remaining = deadline.saturating_duration_since(Instant::now());
     let wanted = wanted.map(Duration::from_secs_f64).unwrap_or(Duration::from_secs(60));
     let budget = remaining.min(wanted);

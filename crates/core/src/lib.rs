@@ -27,4 +27,4 @@ mod service;
 
 pub use config::CoreConfig;
 pub use errors::{CoreError, CoreResult};
-pub use service::{AutomationInput, AutomationSummary, CoreEvent, EventHandler, LocalFlow, StartupNotice, TestRunResult};
+pub use service::{AutomationInput, AutomationSummary, CoreEvent, EventHandler, LocalFlow, RunningRun, StartupNotice, TestRunResult};
