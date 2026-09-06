@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { t } from "../i18n";
 import { api, onCoreEvent, type LogEntry } from "../api";
 import { formatTime } from "../format";
 
@@ -38,12 +39,12 @@ export default function LogsTab({ id }: { id: number }) {
       <div className="toolbar">
         {LEVELS.map((l) => (
           <button key={l} className={`chip ${level === l ? "active" : ""}`} onClick={() => setLevel(l)}>
-            {l}
+            {l === "all" ? t("logs.all") : l}
           </button>
         ))}
-        <span className="muted small push-right">Newest first · updates live</span>
+        <span className="muted small push-right">{t("logs.live")}</span>
       </div>
-      {logs && shown.length === 0 && <p className="muted">No log lines yet.</p>}
+      {logs && shown.length === 0 && <p className="muted">{t("logs.none")}</p>}
       <ul className="log-list">
         {shown.map((l) => (
           <li key={l.id} className={`level-${l.level}`}>

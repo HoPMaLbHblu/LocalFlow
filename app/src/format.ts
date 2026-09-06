@@ -1,15 +1,17 @@
-// Date and duration formatting. The backend stores UTC; everything is shown in local time.
+// Date and duration formatting. The backend stores UTC; everything is shown in local time,
+// in the language chosen in Settings.
 
-const timeFormat = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
-const relativeFormat = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+import { locale, t, type Key } from "./i18n";
 
 export function formatTime(iso: string | null | undefined): string {
-  return iso ? timeFormat.format(new Date(iso)) : "—";
+  if (!iso) return "—";
+  return new Intl.DateTimeFormat(locale(), { dateStyle: "medium", timeStyle: "short" }).format(new Date(iso));
 }
 
 /** "3 minutes ago", "in 2 hours", ... */
 export function formatRelative(iso: string | null | undefined, now = Date.now()): string {
   if (!iso) return "—";
+  const relative = new Intl.RelativeTimeFormat(locale(), { numeric: "auto" });
   const seconds = Math.round((new Date(iso).getTime() - now) / 1000);
   const units: [Intl.RelativeTimeFormatUnit, number][] = [
     ["day", 86400],
@@ -17,9 +19,9 @@ export function formatRelative(iso: string | null | undefined, now = Date.now())
     ["minute", 60],
   ];
   for (const [unit, size] of units) {
-    if (Math.abs(seconds) >= size) return relativeFormat.format(Math.round(seconds / size), unit);
+    if (Math.abs(seconds) >= size) return relative.format(Math.round(seconds / size), unit);
   }
-  return relativeFormat.format(seconds, "second");
+  return relative.format(seconds, "second");
 }
 
 export function formatDuration(startIso: string, endIso: string | null): string {
@@ -28,7 +30,8 @@ export function formatDuration(startIso: string, endIso: string | null): string 
 }
 
 export function formatMs(ms: number): string {
-  return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(2)} s`;
+  if (ms < 1000) return `${ms} ms`;
+  return `${new Intl.NumberFormat(locale(), { maximumFractionDigits: 2 }).format(ms / 1000)} s`;
 }
 
 /** Split a stored run output ("[level] message" per line) back into lines. */
@@ -41,17 +44,25 @@ export function parseOutput(output: string | null): { level: string; message: st
 }
 
 /** Common schedules offered in the editor. */
-export const SCHEDULE_PRESETS: { label: string; value: string }[] = [
-  { label: "Manual only", value: "" },
-  { label: "Every 5 minutes", value: "0 */5 * * * *" },
-  { label: "Every 15 minutes", value: "0 */15 * * * *" },
-  { label: "Every 30 minutes", value: "0 */30 * * * *" },
-  { label: "Every hour", value: "0 0 * * * *" },
-  { label: "Every day at 9:00", value: "0 0 9 * * *" },
-  { label: "Every day at 18:00", value: "0 0 18 * * *" },
-  { label: "Weekdays at 9:00", value: "0 0 9 * * Mon-Fri" },
-  { label: "Every Monday at 9:00", value: "0 0 9 * * Mon" },
+const PRESETS: { key: Key; value: string }[] = [
+  { key: "preset.manual", value: "" },
+  { key: "preset.every5", value: "0 */5 * * * *" },
+  { key: "preset.every15", value: "0 */15 * * * *" },
+  { key: "preset.every30", value: "0 */30 * * * *" },
+  { key: "preset.hourly", value: "0 0 * * * *" },
+  { key: "preset.daily9", value: "0 0 9 * * *" },
+  { key: "preset.daily18", value: "0 0 18 * * *" },
+  { key: "preset.weekdays9", value: "0 0 9 * * Mon-Fri" },
+  { key: "preset.monday9", value: "0 0 9 * * Mon" },
 ];
+
+export function schedulePresets(): { label: string; value: string }[] {
+  return PRESETS.map((p) => ({ label: t(p.key), value: p.value }));
+}
+
+export function isPresetSchedule(schedule: string): boolean {
+  return PRESETS.some((p) => p.value === schedule);
+}
 
 /** Short description of everything that starts an automation, e.g. "Every hour · On startup". */
 export function describeTriggers(a: {
@@ -61,15 +72,22 @@ export function describeTriggers(a: {
   watch_path: string | null;
   watch_pattern?: string | null;
 }): string {
-  if (!a.enabled) return "Disabled";
+  if (!a.enabled) return t("trigger.disabled");
   const parts: string[] = [];
-  if (a.watch_path) parts.push(`Watching ${a.watch_path}${a.watch_pattern ? ` (${a.watch_pattern})` : ""}`);
+  if (a.watch_path) parts.push(t("trigger.watching", { path: a.watch_path + (a.watch_pattern ? ` (${a.watch_pattern})` : "") }));
   if (a.schedule) parts.push(describeSchedule(a.schedule));
-  if (a.run_on_startup) parts.push("On startup");
-  return parts.length ? parts.join(" · ") : "Manual";
+  if (a.run_on_startup) parts.push(t("trigger.onStartup"));
+  return parts.length ? parts.join(" · ") : t("trigger.manual");
 }
 
 export function describeSchedule(schedule: string | null): string {
-  if (!schedule) return "Manual only";
-  return SCHEDULE_PRESETS.find((p) => p.value === schedule)?.label ?? schedule;
+  if (!schedule) return t("trigger.manualOnly");
+  const preset = PRESETS.find((p) => p.value === schedule);
+  return preset ? t(preset.key) : schedule;
+}
+
+/** Translated status word ("success", "failed", ...). */
+export function statusLabel(status: string): string {
+  const key = `status.${status}` as Key;
+  return ["success", "failed", "running", "never"].includes(status) ? t(key) : status;
 }

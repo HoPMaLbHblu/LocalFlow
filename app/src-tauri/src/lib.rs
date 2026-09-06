@@ -5,12 +5,13 @@
 //! - `notify()` in scripts shows a native desktop notification.
 
 mod commands;
+mod i18n;
 mod settings;
 mod tray;
 
 use std::sync::{
     atomic::{AtomicBool, Ordering},
-    Arc,
+    Arc, RwLock,
 };
 
 use localflow_core::{CoreConfig, CoreEvent, LocalFlow};
@@ -24,9 +25,22 @@ pub const EVENT_NAME: &str = "localflow://event";
 /// Passed by autostart so LocalFlow starts quietly in the tray.
 pub const MINIMIZED_FLAG: &str = "--minimized";
 
+/// Preferences the Rust side needs while running.
+pub struct Prefs {
+    pub notifications: AtomicBool,
+    /// Resolved language code ("en", "ru", "de") for the tray menu and notifications.
+    pub language: RwLock<&'static str>,
+}
+
+impl Prefs {
+    pub fn texts(&self) -> &'static i18n::Texts {
+        i18n::texts(*self.language.read().expect("language lock"))
+    }
+}
+
 pub struct AppState {
     pub flow: LocalFlow,
-    pub notifications: Arc<AtomicBool>,
+    pub prefs: Arc<Prefs>,
 }
 
 pub fn show_main_window(app: &AppHandle) {
@@ -44,8 +58,9 @@ fn notify(app: &AppHandle, title: &str, body: &str) {
 }
 
 /// Forward core events to the UI, and turn some of them into desktop notifications.
-fn handle_event(app: &AppHandle, notifications: &AtomicBool, event: CoreEvent) {
-    if notifications.load(Ordering::Relaxed) {
+fn handle_event(app: &AppHandle, prefs: &Prefs, event: CoreEvent) {
+    if prefs.notifications.load(Ordering::Relaxed) {
+        let texts = prefs.texts();
         match &event {
             CoreEvent::Log { level, message, automation_id: Some(_), .. } if level == "notify" => {
                 notify(app, "LocalFlow", message);
@@ -53,10 +68,10 @@ fn handle_event(app: &AppHandle, notifications: &AtomicBool, event: CoreEvent) {
             // Runs nobody is watching: report failures, and confirm runs started from the tray.
             CoreEvent::RunFinished { name, trigger, run, .. } if trigger != "manual" => {
                 if run.status == "failed" {
-                    let error = run.error.as_deref().unwrap_or("unknown error");
-                    notify(app, &format!("{name} failed"), error);
+                    let error = run.error.as_deref().unwrap_or(texts.unknown_error);
+                    notify(app, &texts.failed.replace("{name}", name), error);
                 } else if trigger == tray::TRAY_TRIGGER {
-                    notify(app, "LocalFlow", &format!("{name} finished"));
+                    notify(app, "LocalFlow", &texts.finished.replace("{name}", name));
                 }
             }
             _ => {}
@@ -95,20 +110,26 @@ pub fn run() {
                 db_path.to_string_lossy().replace('\\', "/")
             ));
 
-            let notifications = Arc::new(AtomicBool::new(true));
-            let events_flag = notifications.clone();
+            let prefs = Arc::new(Prefs {
+                notifications: AtomicBool::new(true),
+                language: RwLock::new(i18n::resolve("auto")),
+            });
+            let events_prefs = prefs.clone();
             let events_handle = handle.clone();
-            let on_event = Arc::new(move |event| handle_event(&events_handle, &events_flag, event));
+            let on_event = Arc::new(move |event| handle_event(&events_handle, &events_prefs, event));
 
-            let flow = tauri::async_runtime::block_on(async {
+            let (flow, theme) = tauri::async_runtime::block_on(async {
                 let flow = LocalFlow::open(config, Some(on_event)).await?;
-                settings::apply_saved(&flow, &notifications).await?;
+                let theme = settings::apply_saved(&flow, &prefs).await?;
                 flow.start().await?;
-                Ok::<_, localflow_core::CoreError>(flow)
+                Ok::<_, localflow_core::CoreError>((flow, theme))
             })?;
 
             tracing::info!("database: {}", db_path.display());
-            app.manage(AppState { flow, notifications });
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.set_theme(settings::window_theme(&theme));
+            }
+            app.manage(AppState { flow, prefs });
             tray::create(&handle)?;
 
             if std::env::args().any(|a| a == MINIMIZED_FLAG) {
@@ -143,6 +164,8 @@ pub fn run() {
             settings::set_autostart,
             settings::set_notifications,
             settings::set_allowed_dirs,
+            settings::set_language,
+            settings::set_theme,
         ])
         .run(tauri::generate_context!())
         .expect("error while running LocalFlow");

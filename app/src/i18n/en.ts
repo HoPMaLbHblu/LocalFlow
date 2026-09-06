@@ -1,0 +1,212 @@
+// English interface texts. The other languages must provide every key (checked by TypeScript).
+// `{name}` placeholders are filled in by t(key, { name: ... }).
+
+export const en = {
+  // app
+  "app.unsavedConfirm": "You have unsaved changes. Discard them?",
+  "app.loadError": "Could not load automations: {error}",
+
+  // sidebar
+  "sidebar.new": "+ New automation",
+  "sidebar.search": "Search…",
+  "sidebar.empty": "No automations yet.",
+  "sidebar.noMatches": "No matches.",
+  "sidebar.learn": "📘 Learn",
+  "sidebar.settings": "⚙ Settings",
+  "sidebar.next": "Next {time}",
+  "sidebar.lastRun": "Last run: {status}",
+
+  // statuses
+  "status.success": "success",
+  "status.failed": "failed",
+  "status.running": "running",
+  "status.never": "never",
+
+  // triggers
+  "trigger.disabled": "Disabled",
+  "trigger.manual": "Manual",
+  "trigger.manualOnly": "Manual only",
+  "trigger.onStartup": "On startup",
+  "trigger.watching": "Watching {path}",
+
+  // home
+  "home.welcomeTitle": "Welcome to LocalFlow",
+  "home.welcomeText":
+    "Automate chores on your computer with small Lua scripts. Run them with one click or on a schedule. LocalFlow keeps working in the system tray (the icons next to the clock on the taskbar) when the window is closed.",
+  "home.learnTitle": "New to coding? Start with the guide",
+  "home.learnText": "Short lessons teach you enough Lua to write your own automations, with examples you can try in one click.",
+  "home.startFromTemplate": "Start from a template",
+  "home.fromScratch": "or start from scratch",
+  "home.overview": "Overview",
+  "home.statAutomations": "automations",
+  "home.statEnabled": "enabled",
+  "home.statScheduled": "scheduled",
+  "home.statFailing": "failing",
+  "home.comingUp": "Coming up",
+  "home.nothingScheduled": "Nothing scheduled.",
+  "home.recentActivity": "Recent activity",
+  "home.nothingRun": "Nothing has run yet.",
+
+  // template picker
+  "picker.title": "New automation",
+  "picker.intro": "Pick a starting point. You can change everything afterwards.",
+  "picker.blank": "Blank",
+  "picker.blankDescription": "An empty automation to fill in yourself.",
+  "common.cancel": "Cancel",
+
+  // automation view
+  "view.notFound": "This automation no longer exists.",
+  "view.newTitle": "New automation",
+  "view.notSaved": "Not saved yet",
+  "view.unsaved": "unsaved changes",
+  "view.nextRun": "Next run {time}",
+  "view.enabled": "Enabled",
+  "view.disabled": "Disabled",
+  "view.running": "Running…",
+  "view.runNow": "▶ Run now",
+  "view.discard": "Discard",
+  "view.delete": "Delete",
+  "view.tabEditor": "Editor",
+  "view.tabHistory": "Run history",
+  "view.tabLogs": "Logs",
+  "view.name": "Name",
+  "view.description": "Description",
+  "view.optional": "Optional",
+  "view.schedule": "Schedule",
+  "view.custom": "Custom…",
+  "view.cron": "Cron expression",
+  "view.cronPlaceholder": "sec min hour day month weekday",
+  "view.cronHelp": "Six fields: second minute hour day month weekday",
+  "view.onStartup": "Run when LocalFlow starts",
+  "view.onStartupHint": "(with Settings › Start with Windows, that's every time you sign in)",
+  "view.watch": "Run when a new file appears in a folder",
+  "view.folder": "Folder",
+  "view.files": "Files",
+  "view.allFiles": "* (all files)",
+  "view.watchHint": "The new file is in {code}.",
+  "view.testing": "Testing…",
+  "view.testRun": "Test run",
+  "view.testRunNote": "Test runs don't save anything, but file operations are real.",
+  "view.showHelp": "? Show help",
+  "view.saving": "Saving…",
+  "view.create": "Create automation",
+  "view.save": "Save",
+  "view.runSavedConfirm": "Run now uses the saved version. Your unsaved changes won't be included. Continue?",
+  "view.deleteConfirm": "Delete \"{name}\" and all of its history?",
+  "view.run": "Run",
+  "view.runNumber": "Run #{id}",
+  "view.untitled": "Untitled",
+
+  // console
+  "console.empty": "Output: press Test run (Ctrl+Enter) to try your script without saving.",
+  "console.clear": "Clear",
+  "console.noOutput": "No output.",
+
+  // run history
+  "runs.loading": "Loading…",
+  "runs.none": "This automation has not run yet.",
+  "runs.colRun": "Run",
+  "runs.colStatus": "Status",
+  "runs.colStarted": "Started",
+  "runs.colDuration": "Duration",
+  "runs.hide": "▾ hide",
+  "runs.details": "▸ details",
+
+  // logs
+  "logs.all": "all",
+  "logs.live": "Newest first · updates live",
+  "logs.none": "No log lines yet.",
+
+  // settings
+  "settings.title": "Settings",
+  "settings.saved": "Saved.",
+  "settings.appearance": "Appearance",
+  "settings.theme": "Theme",
+  "settings.themeSystem": "System",
+  "settings.themeLight": "Light",
+  "settings.themeDark": "Dark",
+  "settings.language": "Language",
+  "settings.languageAuto": "Automatic (Windows language)",
+  "settings.autostart": "Start with Windows",
+  "settings.autostartText":
+    "LocalFlow starts quietly in the system tray (the icons next to the clock on the taskbar) when you sign in, so schedules keep running.",
+  "settings.notifications": "Desktop notifications",
+  "settings.notificationsText": "Show a notification when a script calls {code} or an automation fails while nobody is watching.",
+  "settings.folders": "Allowed folders",
+  "settings.foldersText": "Scripts can only read and change files inside these folders (and their subfolders).",
+  "settings.remove": "Remove",
+  "settings.add": "Add",
+  "settings.saveFolders": "Save folders",
+  "settings.undo": "Undo",
+  "settings.foldersSaved": "Allowed folders saved.",
+  "settings.folderPlaceholder": "C:\\Users\\you\\Projects",
+  "settings.about": "About",
+  "settings.version": "LocalFlow {version}",
+  "settings.dataDir": "Data is stored in {path}",
+  "settings.trayNote":
+    "Closing the window keeps LocalFlow running in the system tray (the icons next to the clock on the taskbar; click ^ if you don't see it). Right-click the LocalFlow icon there to run automations or choose Quit to exit.",
+
+  // help panel
+  "help.snippets": "Snippets",
+  "help.functions": "Functions",
+  "help.close": "Close help",
+  "help.insert": "Insert",
+  "help.insertTitle": "Insert at the cursor",
+  "help.insertExample": "Insert example",
+  "help.returns": "Returns {value}.",
+  "help.openGuide": "📘 New to Lua? Open the guide",
+
+  // guide page
+  "guide.title": "Learn LocalFlow",
+  "guide.reference": "Function reference",
+  "guide.referenceSummary": "Everything scripts can use.",
+  "guide.referenceIntro":
+    "These are the functions LocalFlow adds to Lua. You can also hover over them in the editor, or open the Help panel next to the code.",
+  "guide.copy": "Copy",
+  "guide.copied": "Copied",
+  "guide.openInEditor": "Open in editor",
+
+  // schedule presets
+  "preset.manual": "Manual only",
+  "preset.every5": "Every 5 minutes",
+  "preset.every15": "Every 15 minutes",
+  "preset.every30": "Every 30 minutes",
+  "preset.hourly": "Every hour",
+  "preset.daily9": "Every day at 9:00",
+  "preset.daily18": "Every day at 18:00",
+  "preset.weekdays9": "Weekdays at 9:00",
+  "preset.monday9": "Every Monday at 9:00",
+
+  // built-in templates (by slug)
+  "template.hello-world.title": "Hello world",
+  "template.hello-world.description": "The smallest possible automation. A good place to start.",
+  "template.organize-pdfs.title": "Organize PDF files",
+  "template.organize-pdfs.description": "Move PDFs from Downloads into Documents/PDF.",
+  "template.tidy-screenshots.title": "Tidy screenshots",
+  "template.tidy-screenshots.description": "Move screenshots off the Desktop into Pictures/Screenshots.",
+  "template.backup-notes.title": "Back up notes",
+  "template.backup-notes.description": "Copy Markdown notes to a backup folder, skipping files already copied.",
+  "template.open-work-apps.title": "Open my work apps",
+  "template.open-work-apps.description": "Open the apps you use every day in one click, or automatically at sign-in.",
+  "template.list-apps.title": "List my apps",
+  "template.list-apps.description": "Show the app names app.open() understands, and what's running now.",
+  "template.file-new-pdfs.title": "File new PDFs",
+  "template.file-new-pdfs.description": "The moment a PDF is downloaded, move it into a Documents/PDF folder for this month.",
+  "template.old-installers.title": "Tidy old installers",
+  "template.old-installers.description": "Move installers older than 30 days out of Downloads.",
+
+  // messages from the backend
+  "backend.nameRequired": "Name is required.",
+  "backend.nameTooLong": "Name must be at most 100 characters.",
+  "backend.codeEmpty": "Lua code must not be empty.",
+  "backend.syntax": "Lua syntax error: {detail}",
+  "backend.schedule": "Invalid schedule \"{value}\". Use 6 fields: second minute hour day-of-month month day-of-week, e.g. \"0 */5 * * * *\" (every 5 minutes).",
+  "backend.watchDenied": "Watch folder \"{path}\" is outside the allowed folders (see Settings).",
+  "backend.watchMissing": "Watch folder not found: {path}",
+  "backend.folderMissing": "Folder not found: {path}",
+  "backend.folderRequired": "Add at least one folder.",
+  "backend.notFound": "This automation no longer exists.",
+};
+
+export type Key = keyof typeof en;
+export type Dictionary = Record<Key, string>;

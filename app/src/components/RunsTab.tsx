@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
+import { t } from "../i18n";
 import { api, type AutomationRun } from "../api";
 import { formatDuration, formatTime, parseOutput } from "../format";
 import StatusBadge from "./StatusBadge";
@@ -12,18 +13,18 @@ export default function RunsTab({ id, version }: { id: number; version: number }
     api.listRuns(id).then(setRuns);
   }, [id, version]);
 
-  if (!runs) return <div className="page muted">Loading…</div>;
-  if (runs.length === 0) return <div className="page muted">This automation has not run yet.</div>;
+  if (!runs) return <div className="page muted">{t("runs.loading")}</div>;
+  if (runs.length === 0) return <div className="page muted">{t("runs.none")}</div>;
 
   return (
     <div className="page">
       <table className="table">
         <thead>
           <tr>
-            <th>Run</th>
-            <th>Status</th>
-            <th>Started</th>
-            <th>Duration</th>
+            <th>{t("runs.colRun")}</th>
+            <th>{t("runs.colStatus")}</th>
+            <th>{t("runs.colStarted")}</th>
+            <th>{t("runs.colDuration")}</th>
             <th></th>
           </tr>
         </thead>
@@ -37,7 +38,7 @@ export default function RunsTab({ id, version }: { id: number; version: number }
                 </td>
                 <td>{formatTime(run.started_at)}</td>
                 <td>{formatDuration(run.started_at, run.finished_at)}</td>
-                <td className="muted small">{open === run.id ? "▾ hide" : "▸ details"}</td>
+                <td className="muted small">{open === run.id ? t("runs.hide") : t("runs.details")}</td>
               </tr>
               {open === run.id && (
                 <tr className="details-row">
@@ -46,7 +47,7 @@ export default function RunsTab({ id, version }: { id: number; version: number }
                     {parseOutput(run.output).length > 0 ? (
                       <pre>{run.output}</pre>
                     ) : (
-                      !run.error && <p className="muted">No output.</p>
+                      !run.error && <p className="muted">{t("console.noOutput")}</p>
                     )}
                   </td>
                 </tr>

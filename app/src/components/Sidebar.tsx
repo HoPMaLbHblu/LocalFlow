@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
+import { t } from "../i18n";
 import type { AutomationSummary } from "../api";
-import { describeTriggers, formatRelative } from "../format";
+import { describeTriggers, formatRelative, statusLabel } from "../format";
 import type { View } from "../App";
 
 interface Props {
@@ -17,7 +18,7 @@ interface Props {
 /** Status dot: green/red for the last run, grey if it never ran, hollow if disabled. */
 function StatusDot({ automation }: { automation: AutomationSummary }) {
   const status = automation.last_run?.status ?? "never";
-  const title = automation.enabled ? `Last run: ${status}` : "Disabled";
+  const title = automation.enabled ? t("sidebar.lastRun", { status: statusLabel(status) }) : t("trigger.disabled");
   return <span className={`dot dot-${status} ${automation.enabled ? "" : "dot-disabled"}`} title={title} />;
 }
 
@@ -36,14 +37,14 @@ export default function Sidebar(props: Props) {
       </button>
 
       <button className="primary new-button" onClick={props.onNew}>
-        + New automation
+        {t("sidebar.new")}
       </button>
 
       {props.automations.length > 5 && (
         <input
           className="search"
           type="search"
-          placeholder="Search…"
+          placeholder={t("sidebar.search")}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
@@ -60,20 +61,20 @@ export default function Sidebar(props: Props) {
             <span className="automation-item-text">
               <span className="automation-item-name">{a.name}</span>
               <span className="automation-item-meta">
-                {a.enabled && a.next_run ? `Next ${formatRelative(a.next_run)}` : describeTriggers(a)}
+                {a.enabled && a.next_run ? t("sidebar.next", { time: formatRelative(a.next_run) }) : describeTriggers(a)}
               </span>
             </span>
           </button>
         ))}
-        {props.automations.length === 0 && <p className="muted small pad">No automations yet.</p>}
-        {props.automations.length > 0 && filtered.length === 0 && <p className="muted small pad">No matches.</p>}
+        {props.automations.length === 0 && <p className="muted small pad">{t("sidebar.empty")}</p>}
+        {props.automations.length > 0 && filtered.length === 0 && <p className="muted small pad">{t("sidebar.noMatches")}</p>}
       </nav>
 
       <button className={`sidebar-footer ${props.view === "guide" ? "selected" : ""}`} onClick={props.onGuide}>
-        📘 Learn
+        {t("sidebar.learn")}
       </button>
       <button className={`sidebar-footer ${props.view === "settings" ? "selected" : ""}`} onClick={props.onSettings}>
-        ⚙ Settings
+        {t("sidebar.settings")}
       </button>
     </aside>
   );

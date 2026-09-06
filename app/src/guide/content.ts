@@ -1,4 +1,12 @@
 // Everything the in-app helper teaches: API reference, lessons, snippets and error hints.
+// This file holds the English texts; guide/ru.ts and guide/de.ts translate them.
+
+import { language } from "../i18n";
+import { code, t, tip, warning, type Block, type GuideTranslation, type HintId, type Lesson } from "./blocks";
+import { ru } from "./ru";
+import { de } from "./de";
+
+export type { Block, Lesson };
 // Text uses `backticks` for inline code; see renderInline() in GuideText.tsx.
 
 // ---- API reference ---------------------------------------------------------
@@ -11,7 +19,7 @@ export interface ApiDoc {
   example: string;
 }
 
-export const API_DOCS: ApiDoc[] = [
+const API_DOCS: ApiDoc[] = [
   {
     name: "fs.list",
     signature: "fs.list(folder, pattern)",
@@ -185,7 +193,7 @@ export const API_DOCS: ApiDoc[] = [
   {
     name: "ctx.trigger",
     signature: "ctx.trigger",
-    summary: 'How the run started: `"manual"` (Run now), `"tray"`, `"schedule"`, `"startup"`, `"watch"` (a new file) or `"test"` (Test run).',
+    summary: 'How the run started: `"manual"` (Run now), `"tray"` (the system tray menu), `"schedule"`, `"startup"`, `"watch"` (a new file) or `"test"` (Test run).',
     example: 'if ctx.trigger == "test" then\n    log("Just testing, not moving anything")\n    return\nend',
   },
   {
@@ -210,7 +218,7 @@ export interface Snippet {
   code: string;
 }
 
-export const SNIPPETS: Snippet[] = [
+const SNIPPETS: Snippet[] = [
   {
     title: "Open apps if not running",
     description: "Open a list of apps, skipping ones already open.",
@@ -280,25 +288,7 @@ export const SNIPPETS: Snippet[] = [
 
 // ---- lessons ---------------------------------------------------------------
 
-export type Block =
-  | { kind: "text"; text: string }
-  | { kind: "code"; code: string; runnable?: boolean }
-  | { kind: "tip"; text: string }
-  | { kind: "warning"; text: string };
-
-export interface Lesson {
-  id: string;
-  title: string;
-  summary: string;
-  blocks: Block[];
-}
-
-const t = (text: string): Block => ({ kind: "text", text });
-const code = (source: string, runnable = true): Block => ({ kind: "code", code: source, runnable });
-const tip = (text: string): Block => ({ kind: "tip", text });
-const warning = (text: string): Block => ({ kind: "warning", text });
-
-export const LESSONS: Lesson[] = [
+const LESSONS: Lesson[] = [
   {
     id: "first",
     title: "1. Your first automation",
@@ -391,7 +381,7 @@ export const LESSONS: Lesson[] = [
     title: "7. Schedules and notifications",
     summary: "Run automatically and tell yourself about it.",
     blocks: [
-      t("Pick a **Schedule** above the editor, like *Every hour* or *Weekdays at 9:00*, then Save. LocalFlow runs the automation by itself as long as it is enabled and LocalFlow is running (it keeps going in the tray when you close the window)."),
+      t("Pick a **Schedule** above the editor, like *Every hour* or *Weekdays at 9:00*, then Save. LocalFlow runs the automation by itself as long as it is enabled and LocalFlow is running. When you close the window, it keeps going in the system tray (the icons next to the clock on the taskbar)."),
       t("For something the presets don't cover, choose **Custom…** and write a cron expression. It has six parts: second, minute, hour, day, month, weekday. `*` means \"every\", and `*/15` means \"every 15th\"."),
       code("-- Examples (these go in the Schedule box, not in the code):\n--   0 */15 * * * *      every 15 minutes\n--   0 30 8 * * *        every day at 8:30\n--   0 0 20 * * Sun      Sundays at 20:00\n--   0 0 9 1 * *         the 1st of every month at 9:00\n", false),
       t("Use `notify(...)` to get a Windows notification. It's useful at the end of a scheduled run:"),
@@ -411,7 +401,7 @@ export const LESSONS: Lesson[] = [
       code('local names = app.shortcuts()\nlog(#names .. " apps found")\nfor i = 1, math.min(#names, 15) do\n    log(names[i])\nend\n'),
       t("To avoid opening something twice, check first with `app.running(name)`. `wait(seconds)` gives an app a moment to start before the next one:"),
       code('local apps = { "notepad" }\n\nfor _, name in ipairs(apps) do\n    if app.running(name) then\n        log(name .. " is already open")\n    else\n        app.open(name)\n        log("Opened " .. name)\n        wait(1)\n    end\nend\n'),
-      tip("**Open everything when you sign in:** tick **Run when LocalFlow starts** above the editor, and turn on **Settings › Start with Windows**. Or right-click the LocalFlow tray icon › **Run** to start any automation in one click."),
+      tip("**Open everything when you sign in:** tick **Run when LocalFlow starts** above the editor, and turn on **Settings › Start with Windows**. Or right-click the LocalFlow icon in the system tray (next to the clock on the taskbar; click ^ if you don't see it) › **Run** to start any automation in one click."),
       t("The *Open my work apps* template does all of this. Just change the list of names."),
     ],
   },
@@ -461,58 +451,83 @@ export const LESSONS: Lesson[] = [
 
 const FS_NAMES = API_DOCS.filter((d) => d.name.startsWith("fs.")).map((d) => d.name);
 
-const HINTS: { pattern: RegExp; hint: (m: RegExpMatchArray) => string }[] = [
+const HINTS: { id: HintId; pattern: RegExp; hint: (m: RegExpMatchArray) => string }[] = [
   {
-    pattern: /attempt to call a nil value \(field '(\w+)'\)/,
+    id: "fieldCall", pattern: /attempt to call a nil value \(field '(\w+)'\)/,
     hint: (m) => `There is no function called \`${m[1]}\` there. Check the spelling. Available: ${FS_NAMES.map((n) => `\`${n}\``).join(", ")}.`,
   },
   {
-    pattern: /attempt to index a nil value \(global '(os|io|debug|package)'\)/,
+    id: "blockedGlobal", pattern: /attempt to index a nil value \(global '(os|io|debug|package)'\)/,
     hint: (m) => `\`${m[1]}\` isn't available in LocalFlow, for safety. Use the \`fs.*\` functions to work with files.`,
   },
   {
-    pattern: /attempt to call a nil value \(global '(\w+)'\)/,
+    id: "globalCall", pattern: /attempt to call a nil value \(global '(\w+)'\)/,
     hint: (m) => `\`${m[1]}\` isn't a known function. Check the spelling (capital letters matter), or define it with \`local function ${m[1]}() ... end\` *above* the line that uses it.`,
   },
   {
-    pattern: /attempt to (?:index|call) a nil value \((?:global|local|upvalue) '(\w+)'\)/,
+    id: "nilValue", pattern: /attempt to (?:index|call) a nil value \((?:global|local|upvalue) '(\w+)'\)/,
     hint: (m) => `\`${m[1]}\` has no value here. Maybe it's misspelled, or it was never set with \`local ${m[1]} = ...\`.`,
   },
   {
-    pattern: /attempt to concatenate a nil value(?: \((?:global|local|field|upvalue) '(\w+)'\))?/,
+    id: "concatNil", pattern: /attempt to concatenate a nil value(?: \((?:global|local|field|upvalue) '(\w+)'\))?/,
     hint: (m) => `You're joining text with \`..\`, but ${m[1] ? `\`${m[1]}\`` : "one of the values"} is \`nil\` (empty). Make sure it has a value, or use \`tostring(...)\`.`,
   },
   {
-    pattern: /attempt to concatenate a (table|boolean) value/,
+    id: "concatType", pattern: /attempt to concatenate a (table|boolean) value/,
     hint: (m) => `You can't join a ${m[1]} with \`..\` directly. Wrap it: \`tostring(value)\`${m[1] === "table" ? ", or use `#list` to get a count" : ""}.`,
   },
   {
-    pattern: /attempt to (?:perform arithmetic|compare)/,
+    id: "arith", pattern: /attempt to (?:perform arithmetic|compare)/,
     hint: () => "You're doing maths or comparing with something that isn't a number (or is `nil`). Log the values to check what they are.",
   },
-  { pattern: /'end' expected/, hint: () => "An `end` is missing. Every `if`, `for`, `while` and `function` needs its own `end`." },
-  { pattern: /'then' expected/, hint: () => "`if` needs `then` after the condition: `if x > 1 then ... end`. To compare, use `==`, not `=`." },
-  { pattern: /'do' expected/, hint: () => "Loops need `do`: `for _, file in ipairs(files) do ... end`." },
-  { pattern: /'=' expected/, hint: () => "Lua read this as an assignment. Check for a misspelled keyword or a missing `(` in a function call." },
-  { pattern: /unfinished string/, hint: () => "A piece of text is missing its closing quote `\"`." },
-  { pattern: /'}' expected/, hint: () => "A `{` is missing its closing `}`. Also check for missing commas between items, like `name = \"x\",`." },
-  { pattern: /'\)' expected/, hint: () => "A `(` is missing its closing `)`. Also check for a missing `..` when joining text." },
-  { pattern: /unexpected symbol/, hint: () => "Lua didn't understand this line. Look for missing quotes, `..` between text, commas, or `then`/`do`." },
-  { pattern: /access denied/, hint: () => "Scripts can only use files in your allowed folders. Check the path, or add the folder in Settings." },
-  { pattern: /source not found|source file not found|directory not found/, hint: () => "That path doesn't exist. Remember `~` is your home folder. Use `fs.exists(path)` to check first." },
-  { pattern: /destination already exists/, hint: () => "`fs.move` never overwrites. Check with `fs.exists(target)` first and skip or rename." },
-  { pattern: /timed out/, hint: () => "The script ran too long, usually a loop that never ends. Check your `while` loops." },
-  { pattern: /must define a `run/, hint: () => "Add `run = function(ctx) ... end` inside `automation { ... }`." },
-  { pattern: /could not find an app/, hint: () => 'Use the name from your Start menu, like `"Spotify"`. Run `app.shortcuts()` (or the *List my apps* template) to see every name, or give the full path to the program\'s .exe.' },
-  { pattern: /time limit/, hint: () => "Scripts must finish within 30 seconds, including `wait(...)`. Use shorter waits." },
-  { pattern: /bad argument/, hint: () => "A function got the wrong kind of value, often a missing argument or a number where text was expected." },
+  { id: "missingEnd", pattern: /'end' expected/, hint: () => "An `end` is missing. Every `if`, `for`, `while` and `function` needs its own `end`." },
+  { id: "missingThen", pattern: /'then' expected/, hint: () => "`if` needs `then` after the condition: `if x > 1 then ... end`. To compare, use `==`, not `=`." },
+  { id: "missingDo", pattern: /'do' expected/, hint: () => "Loops need `do`: `for _, file in ipairs(files) do ... end`." },
+  { id: "missingEquals", pattern: /'=' expected/, hint: () => "Lua read this as an assignment. Check for a misspelled keyword or a missing `(` in a function call." },
+  { id: "unfinishedString", pattern: /unfinished string/, hint: () => "A piece of text is missing its closing quote `\"`." },
+  { id: "missingBrace", pattern: /'}' expected/, hint: () => "A `{` is missing its closing `}`. Also check for missing commas between items, like `name = \"x\",`." },
+  { id: "missingParen", pattern: /'\)' expected/, hint: () => "A `(` is missing its closing `)`. Also check for a missing `..` when joining text." },
+  { id: "unexpectedSymbol", pattern: /unexpected symbol/, hint: () => "Lua didn't understand this line. Look for missing quotes, `..` between text, commas, or `then`/`do`." },
+  { id: "accessDenied", pattern: /access denied/, hint: () => "Scripts can only use files in your allowed folders. Check the path, or add the folder in Settings." },
+  { id: "notFound", pattern: /source not found|source file not found|directory not found/, hint: () => "That path doesn't exist. Remember `~` is your home folder. Use `fs.exists(path)` to check first." },
+  { id: "destExists", pattern: /destination already exists/, hint: () => "`fs.move` never overwrites. Check with `fs.exists(target)` first and skip or rename." },
+  { id: "timedOut", pattern: /timed out/, hint: () => "The script ran too long, usually a loop that never ends. Check your `while` loops." },
+  { id: "missingRun", pattern: /must define a `run/, hint: () => "Add `run = function(ctx) ... end` inside `automation { ... }`." },
+  { id: "appNotFound", pattern: /could not find an app/, hint: () => 'Use the name from your Start menu, like `"Spotify"`. Run `app.shortcuts()` (or the *List my apps* template) to see every name, or give the full path to the program\'s .exe.' },
+  { id: "timeLimit", pattern: /time limit/, hint: () => "Scripts must finish within 30 seconds, including `wait(...)`. Use shorter waits." },
+  { id: "badArgument", pattern: /bad argument/, hint: () => "A function got the wrong kind of value, often a missing argument or a number where text was expected." },
 ];
+
+const TRANSLATIONS: Record<string, GuideTranslation> = { ru, de };
+
+function translation(): GuideTranslation | undefined {
+  return TRANSLATIONS[language()];
+}
+
+/** Function reference in the current language. */
+export function apiDocs(): ApiDoc[] {
+  const tr = translation();
+  return API_DOCS.map((doc) => ({ ...doc, ...(tr?.api[doc.name] ?? {}) }));
+}
+
+/** Snippets in the current language. */
+export function snippets(): Snippet[] {
+  const tr = translation();
+  return SNIPPETS.map((s) => ({ ...s, ...(tr?.snippets[s.title] ?? {}) }));
+}
+
+/** Lessons in the current language. */
+export function lessons(): Lesson[] {
+  return translation()?.lessons ?? LESSONS;
+}
 
 /** A beginner-friendly explanation for a Lua/LocalFlow error, if we recognise it. */
 export function explainError(message: string): string | null {
-  for (const { pattern, hint } of HINTS) {
+  const tr = translation();
+  const fsNames = FS_NAMES.map((n) => `\`${n}\``).join(", ");
+  for (const { id, pattern, hint } of HINTS) {
     const match = message.match(pattern);
-    if (match) return hint(match);
+    if (match) return tr ? tr.hints[id](match, fsNames) : hint(match);
   }
   return null;
 }

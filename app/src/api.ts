@@ -2,6 +2,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { t, translateBackendMessage } from "./i18n";
 
 export interface Automation {
   id: number;
@@ -73,6 +74,10 @@ export interface Settings {
   autostart: boolean;
   notifications: boolean;
   allowed_dirs: string[];
+  /** "auto", "en", "ru" or "de". */
+  language: string;
+  /** "system", "light" or "dark". */
+  theme: string;
   data_dir: string;
   version: string;
 }
@@ -97,9 +102,9 @@ export type CommandError =
 export function errorMessages(e: unknown): string[] {
   const err = e as CommandError;
   if (err && typeof err === "object" && "kind" in err) {
-    if (err.kind === "validation") return err.messages;
-    if (err.kind === "not_found") return ["This automation no longer exists."];
-    return [err.message];
+    if (err.kind === "validation") return err.messages.map(translateBackendMessage);
+    if (err.kind === "not_found") return [t("backend.notFound")];
+    return [translateBackendMessage(err.message)];
   }
   return [String(e)];
 }
@@ -133,4 +138,6 @@ export const api = {
   setAutostart: (enabled: boolean) => invoke<void>("set_autostart", { enabled }),
   setNotifications: (enabled: boolean) => invoke<void>("set_notifications", { enabled }),
   setAllowedDirs: (dirs: string[]) => invoke<void>("set_allowed_dirs", { dirs }),
+  setLanguage: (language: string) => invoke<void>("set_language", { language }),
+  setTheme: (theme: string) => invoke<void>("set_theme", { theme }),
 };

@@ -1,4 +1,5 @@
 import type { AutomationSummary, Template } from "../api";
+import { t } from "../i18n";
 import { describeSchedule, formatRelative } from "../format";
 import StatusBadge from "./StatusBadge";
 
@@ -17,22 +18,17 @@ export default function Home({ automations, templates, onSelect, onTemplate, onN
       <div className="page">
         <div className="welcome">
           <img src="/logo.svg" alt="" width={64} height={64} />
-          <h1>Welcome to LocalFlow</h1>
-          <p className="muted">
-            Automate chores on your computer with small Lua scripts. Run them with one click or on a schedule —
-            LocalFlow keeps working in the tray when the window is closed.
-          </p>
+          <h1>{t("home.welcomeTitle")}</h1>
+          <p className="muted">{t("home.welcomeText")}</p>
         </div>
         <button className="card learn-card" onClick={onGuide}>
           <span className="learn-icon">📘</span>
           <span>
-            <strong>New to coding? Start with the guide</strong>
-            <span className="muted small">
-              Short lessons teach you enough Lua to write your own automations, with examples you can try in one click.
-            </span>
+            <strong>{t("home.learnTitle")}</strong>
+            <span className="muted small">{t("home.learnText")}</span>
           </span>
         </button>
-        <h2>Start from a template</h2>
+        <h2>{t("home.startFromTemplate")}</h2>
         <div className="template-grid">
           {templates.map((t) => (
             <button key={t.slug} className="card template-card" onClick={() => onTemplate(t)}>
@@ -43,7 +39,7 @@ export default function Home({ automations, templates, onSelect, onTemplate, onN
         </div>
         <p>
           <button className="link" onClick={onNew}>
-            or start from scratch
+            {t("home.fromScratch")}
           </button>
         </p>
       </div>
@@ -66,18 +62,18 @@ export default function Home({ automations, templates, onSelect, onTemplate, onN
 
   return (
     <div className="page">
-      <h1>Overview</h1>
+      <h1>{t("home.overview")}</h1>
       <div className="stats">
-        <Stat value={automations.length} label="automations" />
-        <Stat value={enabled} label="enabled" />
-        <Stat value={scheduled} label="scheduled" />
-        <Stat value={failing} label="failing" tone={failing > 0 ? "bad" : undefined} />
+        <Stat value={automations.length} label={t("home.statAutomations")} />
+        <Stat value={enabled} label={t("home.statEnabled")} />
+        <Stat value={scheduled} label={t("home.statScheduled")} />
+        <Stat value={failing} label={t("home.statFailing")} tone={failing > 0 ? "bad" : undefined} />
       </div>
 
       <div className="columns">
         <section className="card">
-          <h2>Coming up</h2>
-          {upcoming.length === 0 && <p className="muted">Nothing scheduled.</p>}
+          <h2>{t("home.comingUp")}</h2>
+          {upcoming.length === 0 && <p className="muted">{t("home.nothingScheduled")}</p>}
           <ul className="plain-list">
             {upcoming.map((a) => (
               <li key={a.id}>
@@ -93,8 +89,8 @@ export default function Home({ automations, templates, onSelect, onTemplate, onN
         </section>
 
         <section className="card">
-          <h2>Recent activity</h2>
-          {recent.length === 0 && <p className="muted">Nothing has run yet.</p>}
+          <h2>{t("home.recentActivity")}</h2>
+          {recent.length === 0 && <p className="muted">{t("home.nothingRun")}</p>}
           <ul className="plain-list">
             {recent.map((a) => (
               <li key={a.id}>

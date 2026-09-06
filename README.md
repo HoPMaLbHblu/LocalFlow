@@ -1,10 +1,10 @@
 # LocalFlow
 
-Automate chores on your computer with small **Lua** scripts: tidy your Downloads folder, back up notes, move screenshots. Run them with one click or on a schedule. LocalFlow lives in the system tray and keeps your schedules running in the background.
+Automate chores on your computer with small **Lua** scripts: tidy your Downloads folder, back up notes, move screenshots. Run them with one click or on a schedule. LocalFlow lives in the system tray (the icons next to the clock on the taskbar) and keeps your schedules running in the background. Available in English, Russian and German, with light and dark themes.
 
 LocalFlow comes in two flavours that share the same engine:
 
-- **Desktop app** (Windows): a native window with a code editor, test runs, live logs, tray icon, desktop notifications and "start with Windows".
+- **Desktop app** (Windows): a native window with a code editor, test runs, live logs, a system tray icon, desktop notifications, "start with Windows", light/dark themes and English/Russian/German.
 - **Web server**: the same features in your browser at `http://127.0.0.1:3000`, for headless machines.
 
 ## Install the desktop app
@@ -16,9 +16,9 @@ After installing:
 1. Click **+ New automation** and pick a template, for example *Hello world*.
 2. Press **Test run** (Ctrl+Enter) to try it without saving.
 3. Press **Save** (Ctrl+S). Choose a **schedule** to run it automatically.
-4. Close the window whenever you like. LocalFlow keeps running in the tray; use **Quit** in the tray menu to exit.
+4. Close the window whenever you like. LocalFlow keeps running in the system tray (the icons next to the clock on the taskbar; click **^** if you don't see it). Right-click its icon there and choose **Quit** to exit.
 
-Turn on **Settings → Start with Windows** so schedules survive a reboot.
+Turn on **Settings → Start with Windows** so schedules survive a reboot. **Settings → Appearance** switches between light, dark and system theme, and between English, Русский and Deutsch.
 
 ## Writing automations
 
@@ -69,7 +69,7 @@ automation {
 | `log(message)` / `print(...)` | Writes a line to the automation's log. |
 | `notify(message)` | Shows a desktop notification (desktop app) and writes a `notify` log line. |
 
-`ctx` contains `ctx.id`, `ctx.name`, `ctx.trigger` (`"manual"`, `"tray"`, `"schedule"`, `"startup"`, `"watch"` or `"test"`) and, for folder-watch runs, `ctx.file`.
+`ctx` contains `ctx.id`, `ctx.name`, `ctx.trigger` (`"manual"`, `"tray"` (system tray menu), `"schedule"`, `"startup"`, `"watch"` or `"test"`) and, for folder-watch runs, `ctx.file`.
 
 Paths: `~` is your home folder, and relative paths are relative to it. `/` works as a separator on every OS.
 
@@ -79,7 +79,7 @@ The editor autocompletes these functions, shows what they do when you hover over
 
 | Trigger | How |
 |---|---|
-| **Run now** | The button in the editor, or right-click the tray icon › **Run** › pick an automation. |
+| **Run now** | The button in the editor, or right-click the LocalFlow icon in the system tray (next to the clock on the taskbar) › **Run** › pick an automation. |
 | **Schedule** | Pick a preset or a custom cron expression (below). |
 | **When LocalFlow starts** | Tick *Run when LocalFlow starts*. With **Settings › Start with Windows** this runs every time you sign in, which is perfect for opening your apps. |
 | **New file in a folder** | Tick *Run when a new file appears in a folder* and choose the folder and, optionally, a pattern such as `*.pdf`. The automation runs once per new file, after it has finished downloading, with the file in `ctx.file`. |

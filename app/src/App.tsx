@@ -6,6 +6,7 @@ import AutomationView from "./components/AutomationView";
 import TemplatePicker from "./components/TemplatePicker";
 import SettingsView from "./components/SettingsView";
 import GuidePage from "./components/GuidePage";
+import { t, tMaybe } from "./i18n";
 
 export type View =
   | { kind: "home" }
@@ -15,8 +16,23 @@ export type View =
   | { kind: "settings" }
   | { kind: "guide" };
 
-export default function App() {
-  const [view, setView] = useState<View>({ kind: "home" });
+/** Built-in templates come from Rust in English; show them in the current language. */
+function localizeTemplate(template: Template): Template {
+  return {
+    ...template,
+    title: tMaybe(`template.${template.slug}.title`) ?? template.title,
+    description: tMaybe(`template.${template.slug}.description`) ?? template.description,
+  };
+}
+
+interface Props {
+  /** Where to start, e.g. back on Settings after switching language. */
+  initialView?: View;
+  onLanguageChange: (setting: string) => void;
+}
+
+export default function App({ initialView, onLanguageChange }: Props) {
+  const [view, setView] = useState<View>(initialView ?? { kind: "home" });
   const [automations, setAutomations] = useState<AutomationSummary[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -34,7 +50,7 @@ export default function App() {
 
   useEffect(() => {
     refresh();
-    api.getTemplates().then(setTemplates);
+    api.getTemplates().then((list) => setTemplates(list.map(localizeTemplate)));
     const unlisten = onCoreEvent((event) => {
       if (event.type === "automations_changed" || event.type === "run_finished") refresh();
     });
@@ -47,7 +63,7 @@ export default function App() {
   }, [refresh]);
 
   const navigate = useCallback((next: View) => {
-    if (dirty.current && !window.confirm("You have unsaved changes. Discard them?")) return;
+    if (dirty.current && !window.confirm(t("app.unsavedConfirm"))) return;
     dirty.current = false;
     setView(next);
   }, []);
@@ -87,7 +103,7 @@ export default function App() {
         onGuide={openGuide}
       />
       <main className="main">
-        {loadError && <div className="banner error">Could not load automations: {loadError}</div>}
+        {loadError && <div className="banner error">{t("app.loadError", { error: loadError })}</div>}
         {view.kind === "home" && (
           <Home
             automations={automations}
@@ -132,7 +148,7 @@ export default function App() {
             onOpenGuide={openGuide}
           />
         )}
-        {view.kind === "settings" && <SettingsView />}
+        {view.kind === "settings" && <SettingsView onLanguageChange={onLanguageChange} />}
         {view.kind === "guide" && <GuidePage onTry={openDraft} />}
       </main>
     </div>
