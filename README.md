@@ -66,8 +66,25 @@ automation {
 | `time.date(t)` | A timestamp split into `year`, `month`, `day`, `hour`, `min`, `sec`, `weekday` (1 = Monday) and `yday`. |
 | `time.today()` | Today's date, `"2026-09-29"`. |
 | `time.days(n)`, `time.hours(n)`, `time.minutes(n)` | Durations in seconds, for comparing with timestamps. |
+| `fs.read(path)` / `fs.write(path, text)` / `fs.append(path, text)` | Read, create/replace, or add to a text file. |
+| `fs.rename(path, new_name)` | Renames in place; never overwrites. |
+| `fs.list_dirs(folder)` | The folders inside a folder. |
+| `fs.find(folder, pattern)` | Files matching `pattern` in the folder and all subfolders. |
+| `fs.largest(folder, count)` | The biggest files below a folder, as `{ path, size }`. |
+| `fs.hash(path)` | SHA-256 of a file. |
+| `zip.create(zip_path, source)` / `zip.extract(zip_path, folder)` | Make or unpack zip archives (paths escaping the target folder are refused). |
+| `security.scan(folder, options)` | File names typical of malware: words like *trojan*, *rootkit*, *keylogger* on programs, scripts and archives; fake double extensions (`invoice.pdf.exe`); Windows system program names outside the Windows folder. **Name-based only, not an antivirus.** |
+| `system.disks()`, `system.disk_free(path)`, `system.memory()`, `system.cpu()`, `system.battery()`, `system.uptime()`, `system.computer_name()`, `system.user_name()`, `system.os()` | Information about the computer. |
+| `clipboard.get()` / `clipboard.set(text)` | Read or set the clipboard text. |
+| `ask(question, title)` | Yes/No dialog; returns `true` for Yes. |
+| `sound.beep()` / `sound.play(wav_path)` | Play the Windows sound or a `.wav` file. |
+| `json.encode(value, pretty)` / `json.decode(text)` | Convert between Lua tables and JSON. |
+| `http.get(url, opts)` / `http.post(url, opts)` | Web requests; `opts` can hold `headers`, `json` or `body`. Returns `{ status, ok, body }`. |
+| `store.get(key, default)` / `store.set(key, value)` / `store.delete(key)` | Values kept between runs of the same automation. |
 | `log(message)` / `print(...)` | Writes a line to the automation's log. |
 | `notify(message)` | Shows a desktop notification (desktop app) and writes a `notify` log line. |
+
+Searches (`fs.find`, `fs.largest`, `security.scan`) stop at the script's time limit and then return what they found plus `false` as a second value. For a whole-disk scan, add the disk (e.g. `C:\`) under **Settings › Allowed folders** and raise **Settings › Script time limit** (up to 1 hour).
 
 `ctx` contains `ctx.id`, `ctx.name`, `ctx.trigger` (`"manual"`, `"tray"` (system tray menu), `"schedule"`, `"startup"`, `"watch"` or `"test"`) and, for folder-watch runs, `ctx.file`.
 
@@ -101,6 +118,12 @@ automation {
 }
 ```
 
+### Sharing automations
+
+Press **Export** on an automation to save it as a `.localflow` file (plain JSON with the name, code and triggers) and send it to anyone. To import one, use **📥 Import** in the sidebar, double-click the file, or drag it onto the LocalFlow window.
+
+The import screen shows the code and what the automation can do (delete, move or write files, open programs, use the internet or the clipboard, run by itself). **Imported automations always arrive switched off**, so you can read them and do a Test run first. Only import automations from people you trust.
+
 ### Schedules
 
 Pick a preset in the editor (every 5 minutes, every hour, weekdays at 9:00, ...) or choose **Custom** and write a cron expression with **six** fields, seconds first, in your local time zone:
@@ -122,7 +145,7 @@ Disabling an automation pauses its schedule; you can still run it manually.
 - **Sandboxed Lua.** Scripts get Lua's `string`, `table`, `math`, `utf8` and `coroutine` libraries plus the API above. `os`, `io`, `package`, `debug`, `require`, `load`, `dofile` and `loadfile` are not available.
 - **Limited folders.** File functions (and watch folders) only work inside the allowed folders: your home folder by default, changeable in **Settings**. `..` and symlinks cannot be used to get out.
 - **Opening apps is allowed.** `app.open` can start any installed program, file or website, because that's its job. Only run scripts you trust.
-- **Limits.** Scripts are stopped after 30 seconds and may use at most 64 MB of memory.
+- **Limits.** Scripts are stopped after their time limit (30 seconds by default, adjustable in Settings) and may use at most 64 MB of memory.
 - **Test runs are real.** A test run doesn't save the automation or its history, but file operations really happen.
 - **Local only.** The desktop app opens no network ports. The web server listens on `127.0.0.1` unless you explicitly allow otherwise.
 

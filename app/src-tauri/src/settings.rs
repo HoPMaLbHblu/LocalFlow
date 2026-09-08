@@ -13,6 +13,10 @@ const NOTIFICATIONS: &str = "notifications";
 const ALLOWED_DIRS: &str = "allowed_dirs";
 const LANGUAGE: &str = "language";
 const THEME: &str = "theme";
+const SCRIPT_TIMEOUT: &str = "script_timeout_secs";
+
+/// Allowed script time limits, in seconds.
+const TIMEOUT_RANGE: std::ops::RangeInclusive<u64> = 10..=3600;
 
 const THEMES: [&str; 3] = ["system", "light", "dark"];
 
@@ -25,6 +29,8 @@ pub struct Settings {
     language: String,
     /// "system", "light" or "dark".
     theme: String,
+    /// How long a script may run, in seconds.
+    script_timeout_secs: u64,
     data_dir: String,
     version: String,
 }
@@ -40,6 +46,11 @@ pub async fn apply_saved(flow: &LocalFlow, prefs: &Prefs) -> CoreResult<String> 
         let dirs = parse_dirs(&value);
         if !dirs.is_empty() {
             flow.set_allowed_dirs(&dirs);
+        }
+    }
+    if let Some(secs) = repo.get_setting(SCRIPT_TIMEOUT).await?.and_then(|v| v.parse::<u64>().ok()) {
+        if TIMEOUT_RANGE.contains(&secs) {
+            flow.set_script_timeout(std::time::Duration::from_secs(secs));
         }
     }
     let language = repo.get_setting(LANGUAGE).await?.unwrap_or_else(|| "auto".into());
@@ -83,6 +94,7 @@ pub async fn get_settings(app: AppHandle, state: State<'_, AppState>) -> Result<
         allowed_dirs,
         language: repo.get_setting(LANGUAGE).await.map_err(error)?.unwrap_or_else(|| "auto".into()),
         theme: repo.get_setting(THEME).await.map_err(error)?.unwrap_or_else(|| "system".into()),
+        script_timeout_secs: state.flow.script_timeout().as_secs(),
         data_dir: app.path().app_data_dir().map(|p| p.display().to_string()).unwrap_or_default(),
         version: app.package_info().version.to_string(),
     })
@@ -127,6 +139,17 @@ pub async fn set_theme(app: AppHandle, state: State<'_, AppState>, theme: String
     if let Some(window) = app.get_webview_window("main") {
         window.set_theme(window_theme(&theme)).map_err(error)?;
     }
+    Ok(())
+}
+
+/// How long a script may run before it is stopped (10 seconds to 1 hour).
+#[tauri::command]
+pub async fn set_script_timeout(state: State<'_, AppState>, seconds: u64) -> Result<(), CommandError> {
+    if !TIMEOUT_RANGE.contains(&seconds) {
+        return Err(error(format!("time limit must be between 10 and 3600 seconds, got {seconds}")));
+    }
+    state.flow.repo().set_setting(SCRIPT_TIMEOUT, &seconds.to_string()).await.map_err(error)?;
+    state.flow.set_script_timeout(std::time::Duration::from_secs(seconds));
     Ok(())
 }
 

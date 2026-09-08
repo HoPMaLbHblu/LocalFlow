@@ -453,3 +453,15 @@ label input, label select { color: var(--text); font-size: .9rem; font-weight: n
 .setting-row select { width: auto; min-width: 220px; }
 
 .page.narrow code { word-break: break-all; }
+
+/* ---- sharing ------------------------------------------------------------ */
+
+.new-row { display: flex; gap: .4rem; margin: .25rem 0 .35rem; }
+.new-row .new-button { flex: 1; margin: 0; }
+.import-button { padding-left: .6rem; padding-right: .6rem; white-space: nowrap; }
+.risk-list { list-style: none; padding: 0; margin: .25rem 0 .75rem; display: flex; flex-direction: column; gap: .3rem; }
+.risk-list li.serious { color: var(--warn); font-weight: 600; }
+.ok-text { color: var(--ok); }
+.import-code { max-height: 360px; overflow: auto; }
+.card h2 { margin-top: 0; }
+.page.narrow .card + .card, .page.narrow .card + .banner, .page.narrow .banner + .card { margin-top: .75rem; }

@@ -1,4 +1,6 @@
 pub mod api;
+pub mod data;
+pub mod files;
 pub mod engine;
 pub mod sandbox;
 pub mod system;
@@ -99,6 +101,56 @@ pub const EXAMPLES: &[Example] = &[
         description: "Move installers older than 30 days out of Downloads.",
         schedule: "0 0 10 * * Mon",
         code: include_str!("../../scripts/old_installers.lua"),
+        run_on_startup: NO_TRIGGERS.0,
+        watch_path: NO_TRIGGERS.1,
+        watch_pattern: NO_TRIGGERS.2,
+    },
+    Example {
+        slug: "largest-files",
+        title: "Find the largest files",
+        description: "List the 20 biggest files in your home folder (or a whole disk) to free up space.",
+        schedule: "",
+        code: include_str!("../../scripts/largest_files.lua"),
+        run_on_startup: NO_TRIGGERS.0,
+        watch_path: NO_TRIGGERS.1,
+        watch_pattern: NO_TRIGGERS.2,
+    },
+    Example {
+        slug: "suspicious-files",
+        title: "Look for suspicious files",
+        description: "Check file names for signs of malware, like \"trojan\" or fake double extensions. Not an antivirus.",
+        schedule: "",
+        code: include_str!("../../scripts/suspicious_files.lua"),
+        run_on_startup: NO_TRIGGERS.0,
+        watch_path: NO_TRIGGERS.1,
+        watch_pattern: NO_TRIGGERS.2,
+    },
+    Example {
+        slug: "low-disk-space",
+        title: "Low disk space warning",
+        description: "Every hour, warn when a disk has less than 10 GB free.",
+        schedule: "0 0 * * * *",
+        code: include_str!("../../scripts/low_disk_space.lua"),
+        run_on_startup: NO_TRIGGERS.0,
+        watch_path: NO_TRIGGERS.1,
+        watch_pattern: NO_TRIGGERS.2,
+    },
+    Example {
+        slug: "clipboard-history",
+        title: "Clipboard history",
+        description: "Every minute, save new clipboard text to a daily file in Documents.",
+        schedule: "0 * * * * *",
+        code: include_str!("../../scripts/clipboard_history.lua"),
+        run_on_startup: NO_TRIGGERS.0,
+        watch_path: NO_TRIGGERS.1,
+        watch_pattern: NO_TRIGGERS.2,
+    },
+    Example {
+        slug: "zip-backup",
+        title: "Daily zip backup",
+        description: "Every evening, zip your Documents/Notes folder into Backups with today's date.",
+        schedule: "0 0 20 * * *",
+        code: include_str!("../../scripts/zip_backup.lua"),
         run_on_startup: NO_TRIGGERS.0,
         watch_path: NO_TRIGGERS.1,
         watch_pattern: NO_TRIGGERS.2,

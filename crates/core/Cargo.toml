@@ -19,6 +19,16 @@ uuid.workspace = true
 notify = "8"
 sysinfo = "0.37"
 open = "5"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+ureq = { version = "2", features = ["json"] }
+serde_json.workspace = true
+sha2 = "0.10"
+arboard = { version = "3", default-features = false }
+
+[target.'cfg(windows)'.dependencies]
+rfd = { version = "0.15", default-features = false }
+windows-sys = { version = "0.59", features = ["Win32_System_Power", "Win32_UI_WindowsAndMessaging", "Win32_Media_Audio", "Win32_Foundation", "Win32_System_Diagnostics_Debug"] }
 
 [dev-dependencies]
 tempfile.workspace = true
+zip = { version = "2", default-features = false, features = ["deflate"] }

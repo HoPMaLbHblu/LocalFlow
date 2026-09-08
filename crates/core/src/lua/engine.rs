@@ -1,12 +1,13 @@
 //! Validating and executing Lua scripts. Pure functions: no database, no async.
 
-use std::{rc::Rc, sync::Arc, time::Duration};
+use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc, time::Duration};
 
 use mlua::{Function, Table};
 use serde::Serialize;
 
 use super::{
     api::{self, LogCollector},
+    data::{SharedStore, StoreState},
     sandbox::{self, PathPolicy},
 };
 
@@ -35,11 +36,13 @@ pub struct ExecutionResult {
     pub success: bool,
     pub logs: Vec<LogLine>,
     pub error: Option<String>,
+    /// The script's saved values, if it changed any with `store.set`.
+    pub store: Option<HashMap<String, String>>,
 }
 
 impl ExecutionResult {
     pub fn failed(error: String) -> Self {
-        ExecutionResult { success: false, logs: Vec::new(), error: Some(error) }
+        ExecutionResult { success: false, logs: Vec::new(), error: Some(error), store: None }
     }
 
     /// Everything the script logged, one line per message.
@@ -72,7 +75,7 @@ pub fn execute(
     policy: Arc<PathPolicy>,
     timeout: Duration,
 ) -> ExecutionResult {
-    execute_with(code, ctx, policy, timeout, |_| {})
+    execute_with(code, ctx, policy, timeout, HashMap::new(), |_| {})
 }
 
 /// Like [`execute`], calling `on_log` for every line as soon as the script writes it.
@@ -84,13 +87,15 @@ pub fn execute_with(
     ctx: &RunContext,
     policy: Arc<PathPolicy>,
     timeout: Duration,
+    store: HashMap<String, String>,
     on_log: impl Fn(&LogLine) + 'static,
 ) -> ExecutionResult {
     let logs = Rc::new(LogCollector::new(on_log));
+    let store: SharedStore = Rc::new(RefCell::new(StoreState { values: store, changed: false }));
 
     let result = (|| -> mlua::Result<()> {
         let lua = sandbox::new_lua(timeout)?;
-        api::register(&lua, policy, logs.clone(), std::time::Instant::now() + timeout)?;
+        api::register(&lua, policy, logs.clone(), std::time::Instant::now() + timeout, store.clone())?;
 
         // Available both as the `run(ctx)` argument and as a global for plain scripts.
         let ctx_table = lua.create_table()?;
@@ -113,9 +118,13 @@ pub fn execute_with(
     })();
 
     let logs = logs.lines();
+    let store = {
+        let state = store.borrow();
+        state.changed.then(|| state.values.clone())
+    };
     match result {
-        Ok(()) => ExecutionResult { success: true, logs, error: None },
-        Err(e) => ExecutionResult { success: false, logs, error: Some(describe(&e)) },
+        Ok(()) => ExecutionResult { success: true, logs, error: None, store },
+        Err(e) => ExecutionResult { success: false, logs, error: Some(describe(&e)), store },
     }
 }
 
