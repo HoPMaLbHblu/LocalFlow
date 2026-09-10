@@ -2410,7 +2410,7 @@ checksum = "47d9d19d1d6efa0109d2f65ff4c85cddd50bd572e5a00127ab10987290bcefae"
 
 [[package]]
 name = "localflow"
-version = "2.3.0"
+version = "2.3.1"
 dependencies = [
  "axum",
  "dotenvy",
@@ -2428,7 +2428,7 @@ dependencies = [
 
 [[package]]
 name = "localflow-core"
-version = "2.3.0"
+version = "2.3.1"
 dependencies = [
  "arboard",
  "chrono",
@@ -2455,10 +2455,11 @@ dependencies = [
 
 [[package]]
 name = "localflow-desktop"
-version = "2.3.0"
+version = "2.3.1"
 dependencies = [
  "chrono",
  "localflow-core",
+ "rfd 0.15.4",
  "serde",
  "serde_json",
  "sys-locale",

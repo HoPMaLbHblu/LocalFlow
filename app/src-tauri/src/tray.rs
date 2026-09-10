@@ -26,7 +26,13 @@ fn build_menu(app: &AppHandle, automations: &[(i64, String)]) -> tauri::Result<M
 
     let run = Submenu::with_id(app, "run", texts.run, !automations.is_empty())?;
     for (id, name) in automations {
-        run.append(&MenuItem::with_id(app, format!("{RUN_PREFIX}{id}"), name, true, None::<&str>)?)?;
+        run.append(&MenuItem::with_id(
+            app,
+            format!("{RUN_PREFIX}{id}"),
+            name,
+            true,
+            None::<&str>,
+        )?)?;
     }
 
     Menu::with_items(
@@ -46,7 +52,10 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
                 show_main_window(app);
             } else if id == "quit" {
                 app.exit(0);
-            } else if let Some(automation_id) = id.strip_prefix(RUN_PREFIX).and_then(|n| n.parse::<i64>().ok()) {
+            } else if let Some(automation_id) = id
+                .strip_prefix(RUN_PREFIX)
+                .and_then(|n| n.parse::<i64>().ok())
+            {
                 let flow = app.state::<AppState>().flow.clone();
                 tauri::async_runtime::spawn(async move {
                     if let Err(e) = flow.run(automation_id, TRAY_TRIGGER).await {
@@ -56,7 +65,12 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
             }
         })
         .on_tray_icon_event(|tray, event| {
-            if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
                 show_main_window(tray.app_handle());
             }
         });
@@ -85,7 +99,10 @@ pub fn refresh(app: &AppHandle) {
                 return;
             }
         };
-        let (Some(tray), Ok(menu)) = (app.tray_by_id(TRAY_ID), build_menu(&app, &automations)) else { return };
+        let (Some(tray), Ok(menu)) = (app.tray_by_id(TRAY_ID), build_menu(&app, &automations))
+        else {
+            return;
+        };
         let _ = tray.set_menu(Some(menu));
     });
 }

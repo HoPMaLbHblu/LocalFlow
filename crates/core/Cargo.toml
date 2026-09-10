@@ -31,4 +31,5 @@ windows-sys = { version = "0.59", features = ["Win32_System_Power", "Win32_UI_Wi
 
 [dev-dependencies]
 tempfile.workspace = true
+sqlx.workspace = true
 zip = { version = "2", default-features = false, features = ["deflate"] }

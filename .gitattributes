@@ -1,0 +1,8 @@
+# Check out text files with LF line endings on every OS.
+# Database migrations are embedded with a checksum of their exact bytes, so
+# CRLF and LF checkouts must not produce different builds.
+* text=auto eol=lf
+
+*.png binary
+*.ico binary
+*.icns binary

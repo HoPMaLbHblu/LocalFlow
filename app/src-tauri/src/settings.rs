@@ -40,7 +40,9 @@ pub struct Settings {
 pub async fn apply_saved(flow: &LocalFlow, prefs: &Prefs) -> CoreResult<String> {
     let repo = flow.repo();
     if let Some(value) = repo.get_setting(NOTIFICATIONS).await? {
-        prefs.notifications.store(value == "true", Ordering::Relaxed);
+        prefs
+            .notifications
+            .store(value == "true", Ordering::Relaxed);
     }
     if let Some(value) = repo.get_setting(ALLOWED_DIRS).await? {
         let dirs = parse_dirs(&value);
@@ -48,15 +50,25 @@ pub async fn apply_saved(flow: &LocalFlow, prefs: &Prefs) -> CoreResult<String> 
             flow.set_allowed_dirs(&dirs);
         }
     }
-    if let Some(secs) = repo.get_setting(SCRIPT_TIMEOUT).await?.and_then(|v| v.parse::<u64>().ok()) {
+    if let Some(secs) = repo
+        .get_setting(SCRIPT_TIMEOUT)
+        .await?
+        .and_then(|v| v.parse::<u64>().ok())
+    {
         if TIMEOUT_RANGE.contains(&secs) {
             flow.set_script_timeout(std::time::Duration::from_secs(secs));
         }
     }
-    let language = repo.get_setting(LANGUAGE).await?.unwrap_or_else(|| "auto".into());
+    let language = repo
+        .get_setting(LANGUAGE)
+        .await?
+        .unwrap_or_else(|| "auto".into());
     *prefs.language.write().expect("language lock") = i18n::resolve(&language);
 
-    Ok(repo.get_setting(THEME).await?.unwrap_or_else(|| "system".into()))
+    Ok(repo
+        .get_setting(THEME)
+        .await?
+        .unwrap_or_else(|| "system".into()))
 }
 
 /// The window's title bar theme for a theme setting; `None` follows Windows.
@@ -70,15 +82,25 @@ pub fn window_theme(theme: &str) -> Option<Theme> {
 
 /// Stored as one folder per line.
 fn parse_dirs(value: &str) -> Vec<PathBuf> {
-    value.lines().map(str::trim).filter(|l| !l.is_empty()).map(PathBuf::from).collect()
+    value
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .map(PathBuf::from)
+        .collect()
 }
 
 fn error(message: impl ToString) -> CommandError {
-    CommandError::Error { message: message.to_string() }
+    CommandError::Error {
+        message: message.to_string(),
+    }
 }
 
 #[tauri::command]
-pub async fn get_settings(app: AppHandle, state: State<'_, AppState>) -> Result<Settings, CommandError> {
+pub async fn get_settings(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Settings, CommandError> {
     let repo = state.flow.repo();
     let allowed_dirs = state
         .flow
@@ -92,10 +114,22 @@ pub async fn get_settings(app: AppHandle, state: State<'_, AppState>) -> Result<
         autostart: app.autolaunch().is_enabled().unwrap_or(false),
         notifications: state.prefs.notifications.load(Ordering::Relaxed),
         allowed_dirs,
-        language: repo.get_setting(LANGUAGE).await.map_err(error)?.unwrap_or_else(|| "auto".into()),
-        theme: repo.get_setting(THEME).await.map_err(error)?.unwrap_or_else(|| "system".into()),
+        language: repo
+            .get_setting(LANGUAGE)
+            .await
+            .map_err(error)?
+            .unwrap_or_else(|| "auto".into()),
+        theme: repo
+            .get_setting(THEME)
+            .await
+            .map_err(error)?
+            .unwrap_or_else(|| "system".into()),
         script_timeout_secs: state.flow.script_timeout().as_secs(),
-        data_dir: app.path().app_data_dir().map(|p| p.display().to_string()).unwrap_or_default(),
+        data_dir: app
+            .path()
+            .app_data_dir()
+            .map(|p| p.display().to_string())
+            .unwrap_or_default(),
         version: app.package_info().version.to_string(),
     })
 }
@@ -103,12 +137,19 @@ pub async fn get_settings(app: AppHandle, state: State<'_, AppState>) -> Result<
 #[tauri::command]
 pub fn set_autostart(app: AppHandle, enabled: bool) -> Result<(), CommandError> {
     let autolaunch = app.autolaunch();
-    let result = if enabled { autolaunch.enable() } else { autolaunch.disable() };
+    let result = if enabled {
+        autolaunch.enable()
+    } else {
+        autolaunch.disable()
+    };
     result.map_err(error)
 }
 
 #[tauri::command]
-pub async fn set_notifications(state: State<'_, AppState>, enabled: bool) -> Result<(), CommandError> {
+pub async fn set_notifications(
+    state: State<'_, AppState>,
+    enabled: bool,
+) -> Result<(), CommandError> {
     state.prefs.notifications.store(enabled, Ordering::Relaxed);
     state
         .flow
@@ -120,22 +161,40 @@ pub async fn set_notifications(state: State<'_, AppState>, enabled: bool) -> Res
 
 /// `language` is "auto" (follow Windows) or a language code.
 #[tauri::command]
-pub async fn set_language(app: AppHandle, state: State<'_, AppState>, language: String) -> Result<(), CommandError> {
+pub async fn set_language(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    language: String,
+) -> Result<(), CommandError> {
     if language != "auto" && !i18n::LANGUAGES.contains(&language.as_str()) {
         return Err(error(format!("unsupported language: {language}")));
     }
-    state.flow.repo().set_setting(LANGUAGE, &language).await.map_err(error)?;
+    state
+        .flow
+        .repo()
+        .set_setting(LANGUAGE, &language)
+        .await
+        .map_err(error)?;
     *state.prefs.language.write().expect("language lock") = i18n::resolve(&language);
     tray::refresh(&app);
     Ok(())
 }
 
 #[tauri::command]
-pub async fn set_theme(app: AppHandle, state: State<'_, AppState>, theme: String) -> Result<(), CommandError> {
+pub async fn set_theme(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    theme: String,
+) -> Result<(), CommandError> {
     if !THEMES.contains(&theme.as_str()) {
         return Err(error(format!("unsupported theme: {theme}")));
     }
-    state.flow.repo().set_setting(THEME, &theme).await.map_err(error)?;
+    state
+        .flow
+        .repo()
+        .set_setting(THEME, &theme)
+        .await
+        .map_err(error)?;
     if let Some(window) = app.get_webview_window("main") {
         window.set_theme(window_theme(&theme)).map_err(error)?;
     }
@@ -144,18 +203,33 @@ pub async fn set_theme(app: AppHandle, state: State<'_, AppState>, theme: String
 
 /// How long a script may run before it is stopped (10 seconds to 1 hour).
 #[tauri::command]
-pub async fn set_script_timeout(state: State<'_, AppState>, seconds: u64) -> Result<(), CommandError> {
+pub async fn set_script_timeout(
+    state: State<'_, AppState>,
+    seconds: u64,
+) -> Result<(), CommandError> {
     if !TIMEOUT_RANGE.contains(&seconds) {
-        return Err(error(format!("time limit must be between 10 and 3600 seconds, got {seconds}")));
+        return Err(error(format!(
+            "time limit must be between 10 and 3600 seconds, got {seconds}"
+        )));
     }
-    state.flow.repo().set_setting(SCRIPT_TIMEOUT, &seconds.to_string()).await.map_err(error)?;
-    state.flow.set_script_timeout(std::time::Duration::from_secs(seconds));
+    state
+        .flow
+        .repo()
+        .set_setting(SCRIPT_TIMEOUT, &seconds.to_string())
+        .await
+        .map_err(error)?;
+    state
+        .flow
+        .set_script_timeout(std::time::Duration::from_secs(seconds));
     Ok(())
 }
 
 /// Replace the folders scripts may access. Every folder must exist.
 #[tauri::command]
-pub async fn set_allowed_dirs(state: State<'_, AppState>, dirs: Vec<String>) -> Result<(), CommandError> {
+pub async fn set_allowed_dirs(
+    state: State<'_, AppState>,
+    dirs: Vec<String>,
+) -> Result<(), CommandError> {
     let mut paths = Vec::new();
     let mut problems = Vec::new();
     for dir in dirs.iter().map(|d| d.trim()).filter(|d| !d.is_empty()) {
@@ -173,8 +247,17 @@ pub async fn set_allowed_dirs(state: State<'_, AppState>, dirs: Vec<String>) -> 
         return Err(CommandError::Validation { messages: problems });
     }
 
-    let value = paths.iter().map(|p| p.to_string_lossy()).collect::<Vec<_>>().join("\n");
-    state.flow.repo().set_setting(ALLOWED_DIRS, &value).await.map_err(error)?;
+    let value = paths
+        .iter()
+        .map(|p| p.to_string_lossy())
+        .collect::<Vec<_>>()
+        .join("\n");
+    state
+        .flow
+        .repo()
+        .set_setting(ALLOWED_DIRS, &value)
+        .await
+        .map_err(error)?;
     state.flow.set_allowed_dirs(&paths);
     Ok(())
 }
