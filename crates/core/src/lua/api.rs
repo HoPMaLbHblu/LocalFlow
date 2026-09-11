@@ -3,9 +3,9 @@
 //! ```lua
 //! fs.list(path, pattern)        -- files in a directory matching a wildcard, e.g. "*.pdf"
 //! fs.move(source, destination)  -- move/rename a file; returns the new path
-//! fs.copy(source, destination)  -- copy a file; returns the new path
+//! fs.copy(source, destination)  -- copy a file (a replaced file goes to the Recycle Bin)
 //! fs.exists(path)               -- true if the path exists
-//! fs.delete(path)               -- delete a file or empty directory; false if it did not exist
+//! fs.delete(path)               -- move a file or folder to the Recycle Bin; false if it did not exist
 //! fs.mkdir(path)                -- create a directory (and parents)
 //! fs.is_dir(path)               -- true if the path is a folder
 //! fs.size(path)                 -- file size in bytes
@@ -196,6 +196,9 @@ fn fs_table(lua: &Lua, policy: Arc<PathPolicy>) -> mlua::Result<Table> {
             if let Some(parent) = dst.parent() {
                 std::fs::create_dir_all(parent).map_err(|e| fs_err("fs.copy", e))?;
             }
+            if dst != src {
+                super::recycle::keep_old_version(&dst).map_err(|e| fs_err("fs.copy", e))?;
+            }
             std::fs::copy(&src, &dst).map_err(|e| fs_err("fs.copy", e))?;
             Ok(path_string(&dst))
         })?,
@@ -218,12 +221,8 @@ fn fs_table(lua: &Lua, policy: Arc<PathPolicy>) -> mlua::Result<Table> {
             if !resolved.exists() {
                 return Ok(false);
             }
-            if resolved.is_dir() {
-                std::fs::remove_dir(&resolved)
-                    .map_err(|e| fs_err("fs.delete", format!("cannot remove directory {path} (it must be empty): {e}")))?;
-            } else {
-                std::fs::remove_file(&resolved).map_err(|e| fs_err("fs.delete", e))?;
-            }
+            // Never permanent: files and folders go to the Recycle Bin.
+            super::recycle::recycle(&resolved).map_err(|e| fs_err("fs.delete", e))?;
             Ok(true)
         })?,
     )?;

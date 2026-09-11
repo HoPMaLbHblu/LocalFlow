@@ -6,6 +6,7 @@
 
 mod commands;
 mod i18n;
+mod safety;
 mod settings;
 mod sharing;
 mod tray;
@@ -213,6 +214,16 @@ pub fn run() {
             sharing::preview_import,
             sharing::import_automation,
             sharing::take_pending_import,
+            safety::list_trash,
+            safety::restore_automation,
+            safety::delete_forever,
+            safety::list_versions,
+            safety::restore_version,
+            safety::list_backups,
+            safety::backup_now,
+            safety::restore_backup,
+            safety::open_backups_folder,
+            safety::startup_notice,
         ])
         .run(tauri::generate_context!())
         .expect("error while running LocalFlow");

@@ -23,6 +23,7 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 ureq = { version = "2", features = ["json"] }
 serde_json.workspace = true
 sha2 = "0.10"
+trash = "5"
 arboard = { version = "3", default-features = false }
 
 [target.'cfg(windows)'.dependencies]

@@ -7,6 +7,7 @@ import TemplatePicker from "./components/TemplatePicker";
 import SettingsView from "./components/SettingsView";
 import GuidePage from "./components/GuidePage";
 import ImportView from "./components/ImportView";
+import TrashView from "./components/TrashView";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { onOpenFile } from "./api";
@@ -19,7 +20,8 @@ export type View =
   | { kind: "automation"; id: number }
   | { kind: "settings" }
   | { kind: "guide" }
-  | { kind: "import"; path: string };
+  | { kind: "import"; path: string }
+  | { kind: "trash" };
 
 const isLocalflowFile = (path: string) => path.toLowerCase().endsWith(".localflow");
 
@@ -111,6 +113,18 @@ export default function App({ initialView, onLanguageChange }: Props) {
     };
   }, [navigate]);
 
+  // Tell the user once if a backup was restored or a damaged database was repaired.
+  const [notice, setNotice] = useState<string | null>(null);
+  useEffect(() => {
+    api
+      .startupNotice()
+      .then((n) => {
+        if (n?.kind === "restored") setNotice(t("notice.restored", { backup: n.backup }));
+        if (n?.kind === "recovered_from_damage") setNotice(t("notice.recovered", { backup: n.backup }));
+      })
+      .catch(() => {});
+  }, []);
+
   const pickImportFile = async () => {
     const path = await openFileDialog({
       multiple: false,
@@ -141,8 +155,14 @@ export default function App({ initialView, onLanguageChange }: Props) {
         onSettings={() => navigate({ kind: "settings" })}
         onGuide={openGuide}
         onImport={pickImportFile}
+        onTrash={() => navigate({ kind: "trash" })}
       />
       <main className="main">
+        {notice && (
+          <div className="banner ok" onClick={() => setNotice(null)}>
+            {notice}
+          </div>
+        )}
         {loadError && <div className="banner error">{t("app.loadError", { error: loadError })}</div>}
         {view.kind === "home" && (
           <Home
@@ -190,6 +210,7 @@ export default function App({ initialView, onLanguageChange }: Props) {
         )}
         {view.kind === "settings" && <SettingsView onLanguageChange={onLanguageChange} />}
         {view.kind === "guide" && <GuidePage onTry={openDraft} />}
+        {view.kind === "trash" && <TrashView onRestored={(id) => navigate({ kind: "automation", id })} />}
         {view.kind === "import" && (
           <ImportView
             key={view.path}

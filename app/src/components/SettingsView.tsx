@@ -3,6 +3,7 @@ import { api, errorMessages, type Settings } from "../api";
 import { renderInline } from "../guide/GuideText";
 import { LANGUAGES, t } from "../i18n";
 import { applyTheme, type Theme } from "../theme";
+import BackupsCard from "./BackupsCard";
 
 interface Props {
   onLanguageChange: (setting: string) => void;
@@ -195,6 +196,8 @@ export default function SettingsView({ onLanguageChange }: Props) {
           </div>
         )}
       </section>
+
+      <BackupsCard />
 
       <section className="card">
         <strong>{t("settings.about")}</strong>

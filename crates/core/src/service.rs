@@ -11,10 +11,11 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    backup::{BackupInfo, Backups},
     config::CoreConfig,
     db::{
         self,
-        models::{Automation, AutomationRun, LogEntry, NewAutomation},
+        models::{Automation, AutomationRun, AutomationVersion, LogEntry, NewAutomation},
         repository::Repository,
     },
     errors::{CoreError, CoreResult},
@@ -131,6 +132,19 @@ struct Inner {
     path_policy: RwLock<Arc<PathPolicy>>,
     script_timeout: RwLock<Duration>,
     events: Option<EventHandler>,
+    backups: Option<Backups>,
+    /// What happened while opening the database, for the UI to report.
+    startup_notice: Option<StartupNotice>,
+}
+
+/// Something the user should hear about after startup.
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum StartupNotice {
+    /// A backup chosen in Settings was restored.
+    Restored { backup: String },
+    /// The database was damaged; the newest backup was restored and the damaged copy kept.
+    RecoveredFromDamage { backup: String },
 }
 
 /// Cheap to clone; all clones share the same database, scheduler and settings.
@@ -141,8 +155,36 @@ pub struct LocalFlow {
 
 impl LocalFlow {
     /// Open the database (creating and migrating it if needed). Call [`LocalFlow::start`] afterwards.
+    ///
+    /// Protects the data on the way: applies a restore chosen in Settings,
+    /// recovers from a damaged database using the newest backup (keeping the
+    /// damaged copy), and backs up before a new version changes the database.
     pub async fn open(config: CoreConfig, events: Option<EventHandler>) -> CoreResult<Self> {
-        let pool = db::connect(&config.database_url).await?;
+        let backups = Backups::for_database_url(&config.database_url);
+        let backup_error = |e: String| CoreError::Validation(vec![e]);
+        let mut startup_notice = None;
+
+        if let Some(backups) = &backups {
+            if let Some(backup) = backups.apply_pending_restore().map_err(backup_error)? {
+                startup_notice = Some(StartupNotice::Restored { backup });
+            }
+        }
+
+        let mut pool = db::open(&config.database_url).await?;
+        if let (Some(backups), Err(problem)) = (&backups, db::check_integrity(&pool).await) {
+            tracing::error!("database integrity check failed: {problem}");
+            pool.close().await;
+            let backup = backups.recover_from_damage().map_err(backup_error)?;
+            startup_notice = Some(StartupNotice::RecoveredFromDamage { backup });
+            pool = db::open(&config.database_url).await?;
+        }
+
+        if let Some(backups) = &backups {
+            if db::is_initialized(&pool).await && db::needs_migration(&pool).await {
+                backups.create(&pool, "before-update").await.map_err(backup_error)?;
+            }
+        }
+        db::migrate(&pool).await?;
         let repo = Repository::new(pool);
 
         let interrupted = repo.fail_interrupted_runs().await?;
@@ -158,8 +200,20 @@ impl LocalFlow {
                 path_policy: RwLock::new(Arc::new(PathPolicy::new(&config.allowed_dirs))),
                 script_timeout: RwLock::new(config.script_timeout),
                 events,
+                backups,
+                startup_notice,
             }),
         })
+    }
+
+    /// Close the database cleanly (all changes are written first).
+    pub async fn close(&self) {
+        self.inner.repo.pool().close().await;
+    }
+
+    /// Anything that happened to the database at startup that the user should know about.
+    pub fn startup_notice(&self) -> Option<StartupNotice> {
+        self.inner.startup_notice.clone()
     }
 
     /// Start schedules and folder watches, then run the "when LocalFlow starts" automations.
@@ -171,6 +225,17 @@ impl LocalFlow {
             }
         }
         self.inner.scheduler.start().await?;
+
+        // A backup every day, also when LocalFlow runs for weeks without a restart.
+        if self.inner.backups.is_some() {
+            let flow = self.clone();
+            tokio::spawn(async move {
+                loop {
+                    flow.daily_backup().await;
+                    tokio::time::sleep(Duration::from_secs(60 * 60)).await;
+                }
+            });
+        }
 
         let startup: Vec<i64> = automations
             .iter()
@@ -288,7 +353,17 @@ impl LocalFlow {
         Ok(out)
     }
 
+    /// An automation that is not in the trash.
     pub async fn get(&self, id: i64) -> CoreResult<Automation> {
+        let automation = self.get_any(id).await?;
+        if automation.deleted_at.is_some() {
+            return Err(CoreError::NotFound);
+        }
+        Ok(automation)
+    }
+
+    /// An automation, even if it is in the trash.
+    pub async fn get_any(&self, id: i64) -> CoreResult<Automation> {
         self.inner.repo.get_automation(id).await?.ok_or(CoreError::NotFound)
     }
 
@@ -335,15 +410,124 @@ impl LocalFlow {
         self.set_enabled(id, !current.enabled).await
     }
 
+    /// Move an automation to the trash. Its code, history, logs and saved
+    /// values are all kept, and [`LocalFlow::restore`] brings it back.
     pub async fn delete(&self, id: i64) -> CoreResult<()> {
+        self.get(id).await?; // already in the trash counts as not found
         self.inner.scheduler.remove(id).await?;
         self.inner.watchers.remove(id).await;
-        if !self.inner.repo.delete_automation(id).await? {
+        if !self.inner.repo.set_deleted(id, true).await? {
             return Err(CoreError::NotFound);
         }
-        tracing::info!(automation_id = id, "deleted automation");
+        tracing::info!(automation_id = id, "moved automation to the trash");
         self.emit(CoreEvent::AutomationsChanged);
         Ok(())
+    }
+
+    /// Take an automation out of the trash, with its triggers as they were.
+    pub async fn restore(&self, id: i64) -> CoreResult<Automation> {
+        if !self.inner.repo.set_deleted(id, false).await? {
+            return Err(CoreError::NotFound);
+        }
+        let automation = self.get(id).await?;
+        if let Err(e) = self.sync_triggers(&automation).await {
+            // e.g. its watch folder no longer exists: restore it, but switched off.
+            tracing::warn!(automation_id = id, "restored without triggers: {e}");
+            return self.set_enabled(id, false).await;
+        }
+        tracing::info!(automation_id = id, "restored automation from the trash");
+        self.emit(CoreEvent::AutomationsChanged);
+        Ok(automation)
+    }
+
+    pub async fn trash(&self) -> CoreResult<Vec<Automation>> {
+        Ok(self.inner.repo.list_trash().await?)
+    }
+
+    /// Permanently delete an automation that is already in the trash.
+    /// A backup is taken first, so even this can be undone from Settings › Backups.
+    pub async fn delete_forever(&self, id: i64) -> CoreResult<()> {
+        let automation = self.get_any(id).await?;
+        if automation.deleted_at.is_none() {
+            return Err(CoreError::Validation(vec!["Only automations in the trash can be deleted permanently.".into()]));
+        }
+        if let Some(backups) = &self.inner.backups {
+            backups
+                .create(self.inner.repo.pool(), "before-delete")
+                .await
+                .map_err(|e| CoreError::Validation(vec![e]))?;
+        }
+        self.inner.repo.delete_automation(id).await?;
+        tracing::info!(automation_id = id, "permanently deleted automation");
+        self.emit(CoreEvent::AutomationsChanged);
+        Ok(())
+    }
+
+    // ---- versions ------------------------------------------------------------
+
+    pub async fn versions(&self, id: i64) -> CoreResult<Vec<AutomationVersion>> {
+        Ok(self.inner.repo.list_versions(id).await?)
+    }
+
+    /// Put an earlier version back. The current state becomes a version itself,
+    /// so this can be undone too. The enabled switch is left as it is.
+    pub async fn restore_version(&self, id: i64, version_id: i64) -> CoreResult<Automation> {
+        let version = self
+            .inner
+            .repo
+            .get_version(version_id)
+            .await?
+            .filter(|v| v.automation_id == id)
+            .ok_or(CoreError::NotFound)?;
+        let current = self.get(id).await?;
+        let input = AutomationInput {
+            name: version.name,
+            description: version.description,
+            lua_code: version.lua_code,
+            schedule: version.schedule,
+            enabled: current.enabled,
+            run_on_startup: version.run_on_startup,
+            watch_path: version.watch_path,
+            watch_pattern: version.watch_pattern,
+        };
+        self.update(id, &input).await
+    }
+
+    // ---- backups -------------------------------------------------------------
+
+    pub fn backups_dir(&self) -> Option<std::path::PathBuf> {
+        self.inner.backups.as_ref().map(|b| b.dir().to_path_buf())
+    }
+
+    pub fn list_backups(&self) -> Vec<BackupInfo> {
+        self.inner.backups.as_ref().map(|b| b.list()).unwrap_or_default()
+    }
+
+    pub async fn backup_now(&self) -> CoreResult<BackupInfo> {
+        let backups = self.inner.backups.as_ref().ok_or_else(|| CoreError::Validation(vec!["Backups are not available.".into()]))?;
+        backups.create(self.inner.repo.pool(), "manual").await.map_err(|e| CoreError::Validation(vec![e]))
+    }
+
+    /// Replace everything with a backup the next time LocalFlow starts.
+    /// The current state is backed up first.
+    pub async fn schedule_restore(&self, file_name: &str) -> CoreResult<()> {
+        let backups = self.inner.backups.as_ref().ok_or_else(|| CoreError::Validation(vec!["Backups are not available.".into()]))?;
+        backups
+            .schedule_restore(self.inner.repo.pool(), file_name)
+            .await
+            .map_err(|e| CoreError::Validation(vec![e]))
+    }
+
+    /// Make today's automatic backup if there isn't one yet.
+    async fn daily_backup(&self) {
+        let Some(backups) = &self.inner.backups else { return };
+        if backups.has_daily_backup_today() {
+            return;
+        }
+        match backups.create(self.inner.repo.pool(), "daily").await {
+            Ok(_) => backups.prune(),
+            Err(e) => tracing::error!("daily backup failed: {e}"),
+        }
     }
 
     pub async fn is_scheduled(&self, id: i64) -> bool {

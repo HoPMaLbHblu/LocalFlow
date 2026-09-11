@@ -2410,7 +2410,7 @@ checksum = "47d9d19d1d6efa0109d2f65ff4c85cddd50bd572e5a00127ab10987290bcefae"
 
 [[package]]
 name = "localflow"
-version = "2.3.1"
+version = "2.4.0"
 dependencies = [
  "axum",
  "dotenvy",
@@ -2428,7 +2428,7 @@ dependencies = [
 
 [[package]]
 name = "localflow-core"
-version = "2.3.1"
+version = "2.4.0"
 dependencies = [
  "arboard",
  "chrono",
@@ -2447,6 +2447,7 @@ dependencies = [
  "tokio",
  "tokio-cron-scheduler",
  "tracing",
+ "trash",
  "ureq",
  "uuid",
  "windows-sys 0.59.0",
@@ -2455,7 +2456,7 @@ dependencies = [
 
 [[package]]
 name = "localflow-desktop"
-version = "2.3.1"
+version = "2.4.0"
 dependencies = [
  "chrono",
  "localflow-core",
@@ -5375,6 +5376,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "trash"
+version = "5.2.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "be89b3fe156965d29ac4f8522f3a640c655affdd9f21cb4f36857f0c92c00317"
+dependencies = [
+ "chrono",
+ "libc",
+ "log",
+ "objc2",
+ "objc2-foundation",
+ "once_cell",
+ "percent-encoding",
+ "scopeguard",
+ "urlencoding",
+ "windows 0.62.2",
+]
+
+[[package]]
 name = "tray-icon"
 version = "0.25.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5494,6 +5513,12 @@ dependencies = [
  "serde",
  "serde_derive",
 ]
+
+[[package]]
+name = "urlencoding"
+version = "2.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "daf8dba3b7eb870caf1ddeed7bc9d2a049f3cfdfae7cb521b087cc33ae4c49da"
 
 [[package]]
 name = "urlpattern"

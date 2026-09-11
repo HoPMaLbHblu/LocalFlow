@@ -1,6 +1,7 @@
 pub mod api;
 pub mod data;
 pub mod files;
+pub mod recycle;
 pub mod engine;
 pub mod sandbox;
 pub mod system;

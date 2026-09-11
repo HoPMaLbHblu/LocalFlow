@@ -16,7 +16,33 @@ export interface Automation {
   run_on_startup: boolean;
   watch_path: string | null;
   watch_pattern: string | null;
+  /** Set when the automation is in the trash. */
+  deleted_at?: string | null;
 }
+
+/** An earlier saved state of an automation. */
+export interface AutomationVersion {
+  id: number;
+  automation_id: number;
+  name: string;
+  description: string;
+  lua_code: string;
+  schedule: string | null;
+  run_on_startup: boolean;
+  watch_path: string | null;
+  watch_pattern: string | null;
+  /** When this version was replaced by a newer one. */
+  saved_at: string;
+}
+
+export interface BackupInfo {
+  file_name: string;
+  created_at: string;
+  size: number;
+  kind: "daily" | "before-update" | "manual" | "before-restore" | "before-delete" | "damaged" | string;
+}
+
+export type StartupNotice = { kind: "restored"; backup: string } | { kind: "recovered_from_damage"; backup: string };
 
 export interface AutomationRun {
   id: number;
@@ -185,4 +211,14 @@ export const api = {
   previewImport: (path: string) => invoke<ImportPreview>("preview_import", { path }),
   importAutomation: (path: string) => invoke<Automation>("import_automation", { path }),
   takePendingImport: () => invoke<string | null>("take_pending_import"),
+  listTrash: () => invoke<Automation[]>("list_trash"),
+  restoreAutomation: (id: number) => invoke<Automation>("restore_automation", { id }),
+  deleteForever: (id: number) => invoke<void>("delete_forever", { id }),
+  listVersions: (id: number) => invoke<AutomationVersion[]>("list_versions", { id }),
+  restoreVersion: (id: number, versionId: number) => invoke<Automation>("restore_version", { id, versionId }),
+  listBackups: () => invoke<BackupInfo[]>("list_backups"),
+  backupNow: () => invoke<BackupInfo>("backup_now"),
+  restoreBackup: (fileName: string) => invoke<void>("restore_backup", { fileName }),
+  openBackupsFolder: () => invoke<void>("open_backups_folder"),
+  startupNotice: () => invoke<StartupNotice | null>("startup_notice"),
 };
