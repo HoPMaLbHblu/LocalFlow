@@ -268,6 +268,34 @@ pub struct Recognized {
     pub language: Option<String>,
 }
 
+/// What a segmenter found in the audio so far.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Segmented {
+    /// Finished utterances (16 kHz mono), each with a little lead-in so the first word isn't clipped.
+    pub utterances: Vec<Vec<f32>>,
+    /// Someone is speaking right now.
+    pub speech_in_progress: bool,
+}
+
+/// Cuts a stream of audio into utterances (voice activity detection). The real one is Silero VAD in
+/// `engine.rs`; `session.rs` has a simple energy-based one for tests and as a fallback.
+pub trait Segmenter: Send {
+    fn feed(&mut self, chunk: &[f32]) -> Segmented;
+    /// The speech collected so far, even if the speaker hasn't paused (push-to-talk release).
+    fn flush(&mut self) -> Vec<Vec<f32>>;
+    fn reset(&mut self);
+}
+
+/// Result of the user-initiated microphone check in the setup flow.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MicTest {
+    /// Loudest sample, 0.0 - 1.0.
+    pub peak: f32,
+    pub rms: f32,
+    /// Enough signal to say the microphone works.
+    pub heard_sound: bool,
+}
+
 /// Speech to text for one utterance of 16 kHz mono audio. The real engine lives in `engine.rs`.
 pub trait Recognizer: Send {
     /// `language`: "en", "ru", "de" or "auto". An empty text means nothing intelligible was heard.

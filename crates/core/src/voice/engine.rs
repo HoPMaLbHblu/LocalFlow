@@ -46,3 +46,17 @@ pub fn remove_model(_engine: &str) -> Result<(), String> {
 pub fn create_recognizer(_engine: &str, _language: &str) -> Result<Box<dyn Recognizer>, String> {
     Err("no speech engine is available yet".into())
 }
+
+/// The model for a recognition language ("en", "ru", "de"), e.g. "sherpa-en". `engine` arguments of
+/// the functions above are MODEL ids: one per language.
+pub fn model_for_language(language: &str) -> Option<String> {
+    match language {
+        "en" | "ru" | "de" => Some(format!("sherpa-{language}")),
+        _ => None,
+    }
+}
+
+/// Voice activity detection (cuts the audio into utterances). Needs the VAD model.
+pub fn create_segmenter() -> Result<Box<dyn super::Segmenter>, String> {
+    Err("no speech engine is available yet".into())
+}
