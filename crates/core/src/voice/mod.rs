@@ -231,6 +231,8 @@ pub enum VoiceEvent {
     Reply { reply: Reply },
     /// A yes/no question is waiting for an answer.
     Confirm { prompt: String },
+    /// Voice changed one of its own settings (for example "turn spoken feedback on"). The app saves them.
+    Settings { settings: VoiceSettings },
 }
 
 pub type VoiceEvents = std::sync::Arc<dyn Fn(VoiceEvent) + Send + Sync>;
