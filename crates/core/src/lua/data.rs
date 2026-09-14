@@ -24,7 +24,7 @@ fn err(function: &str, error: impl std::fmt::Display) -> mlua::Error {
 }
 
 /// JSON `null` becomes `nil` instead of a special marker value.
-fn to_lua(lua: &Lua, value: &serde_json::Value) -> mlua::Result<Value> {
+pub(crate) fn to_lua(lua: &Lua, value: &serde_json::Value) -> mlua::Result<Value> {
     lua.to_value_with(value, SerializeOptions::new().serialize_none_to_null(false).serialize_unit_to_null(false))
 }
 

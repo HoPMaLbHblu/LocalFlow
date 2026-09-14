@@ -8,12 +8,7 @@ use localflow_core::lua::{
 use tempfile::TempDir;
 
 fn ctx() -> RunContext {
-    RunContext {
-        automation_id: 7,
-        automation_name: "Test".into(),
-        trigger: "manual".into(),
-        file: None,
-    }
+    RunContext::new(7, "Test", "manual", false)
 }
 
 /// Run `code` with only `allowed` accessible.

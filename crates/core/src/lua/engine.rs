@@ -2,12 +2,13 @@
 
 use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc, time::Duration};
 
-use mlua::{Function, Table};
+use mlua::{Function, LuaSerdeExt, Table, Value};
 use serde::Serialize;
 
 use super::{
     api::{self, LogCollector},
-    data::{SharedStore, StoreState},
+    chain::{self, ChainEnv, Library, StepStores},
+    data::{self, SharedStore, StoreState},
     sandbox::{self, PathPolicy},
 };
 
@@ -19,10 +20,37 @@ const CHUNK_NAME: &str = "=automation";
 pub struct RunContext {
     pub automation_id: i64,
     pub automation_name: String,
-    /// `"manual"`, `"schedule"`, `"startup"`, `"watch"` or `"test"`.
+    /// `"manual"`, `"schedule"`, `"startup"`, `"watch"`, `"after"`, `"step"` or `"test"`.
     pub trigger: String,
     /// For `"watch"` runs: the file that appeared.
     pub file: Option<String>,
+    /// More values for `ctx`, e.g. `app` for app triggers or `drive` for USB.
+    pub details: HashMap<String, String>,
+    /// Whether powerful functions (commands, keystrokes, shutdown, ...) may run.
+    pub allow_system: bool,
+    /// `ctx.input`: data from the automation that started this one.
+    pub input: Option<serde_json::Value>,
+    /// Automations this run may start with `automations.run`.
+    pub library: Option<Arc<Library>>,
+    /// Automations already running in this chain (for steps), outermost first.
+    pub stack: Vec<i64>,
+}
+
+impl RunContext {
+    /// A context with no input, steps or extra details.
+    pub fn new(automation_id: i64, automation_name: impl Into<String>, trigger: impl Into<String>, allow_system: bool) -> Self {
+        RunContext {
+            automation_id,
+            automation_name: automation_name.into(),
+            trigger: trigger.into(),
+            file: None,
+            details: HashMap::new(),
+            allow_system,
+            input: None,
+            library: None,
+            stack: Vec::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -38,11 +66,22 @@ pub struct ExecutionResult {
     pub error: Option<String>,
     /// The script's saved values, if it changed any with `store.set`.
     pub store: Option<HashMap<String, String>>,
+    /// What `run(ctx)` (or the script) returned, if it can be stored as JSON.
+    pub result: Option<serde_json::Value>,
+    /// Saved values changed by steps (`automations.run`), by automation id.
+    pub step_stores: HashMap<i64, HashMap<String, String>>,
 }
 
 impl ExecutionResult {
     pub fn failed(error: String) -> Self {
-        ExecutionResult { success: false, logs: Vec::new(), error: Some(error), store: None }
+        ExecutionResult {
+            success: false,
+            logs: Vec::new(),
+            error: Some(error),
+            store: None,
+            result: None,
+            step_stores: HashMap::new(),
+        }
     }
 
     /// Everything the script logged, one line per message.
@@ -92,10 +131,28 @@ pub fn execute_with(
 ) -> ExecutionResult {
     let logs = Rc::new(LogCollector::new(on_log));
     let store: SharedStore = Rc::new(RefCell::new(StoreState { values: store, changed: false }));
+    let step_stores: StepStores = Rc::default();
 
-    let result = (|| -> mlua::Result<()> {
+    let result = (|| -> mlua::Result<Option<serde_json::Value>> {
         let lua = sandbox::new_lua(timeout)?;
-        api::register(&lua, policy, logs.clone(), std::time::Instant::now() + timeout, store.clone())?;
+        let deadline = std::time::Instant::now() + timeout;
+        api::register(&lua, policy.clone(), logs.clone(), deadline, store.clone(), ctx.allow_system)?;
+        let mut stack = ctx.stack.clone();
+        if stack.is_empty() && ctx.automation_id != 0 {
+            stack.push(ctx.automation_id);
+        }
+        chain::register(
+            &lua,
+            ChainEnv {
+                library: ctx.library.clone().unwrap_or_default(),
+                stack,
+                caller: ctx.automation_name.clone(),
+                policy,
+                deadline,
+                logs: logs.clone(),
+                stores: step_stores.clone(),
+            },
+        )?;
 
         // Available both as the `run(ctx)` argument and as a global for plain scripts.
         let ctx_table = lua.create_table()?;
@@ -103,18 +160,28 @@ pub fn execute_with(
         ctx_table.set("name", ctx.automation_name.as_str())?;
         ctx_table.set("trigger", ctx.trigger.as_str())?;
         ctx_table.set("file", ctx.file.as_deref())?;
+        for (key, value) in &ctx.details {
+            ctx_table.set(key.as_str(), value.as_str())?;
+        }
+        if let Some(input) = &ctx.input {
+            ctx_table.set("input", data::to_lua(&lua, input)?)?;
+        }
         lua.globals().set("ctx", &ctx_table)?;
 
-        lua.load(code).set_name(CHUNK_NAME).exec()?;
+        let mut returned: Value = lua.load(code).set_name(CHUNK_NAME).call(())?;
 
         if let Some(definition) = lua.named_registry_value::<Option<Table>>(api::AUTOMATION_KEY)? {
             let run: Option<Function> = definition.get("run")?;
             let run = run.ok_or_else(|| {
                 mlua::Error::runtime("automation { ... } must define a `run = function(ctx) ... end`")
             })?;
-            run.call::<()>(ctx_table)?;
+            returned = run.call(ctx_table)?;
         }
-        Ok(())
+        // Functions and other things JSON can't hold are simply not passed on.
+        Ok(match returned {
+            Value::Nil => None,
+            value => lua.from_value::<serde_json::Value>(value).ok(),
+        })
     })();
 
     let logs = logs.lines();
@@ -122,9 +189,10 @@ pub fn execute_with(
         let state = store.borrow();
         state.changed.then(|| state.values.clone())
     };
+    let step_stores = step_stores.take();
     match result {
-        Ok(()) => ExecutionResult { success: true, logs, error: None, store },
-        Err(e) => ExecutionResult { success: false, logs, error: Some(describe(&e)), store },
+        Ok(result) => ExecutionResult { success: true, logs, error: None, store, result, step_stores },
+        Err(e) => ExecutionResult { success: false, logs, error: Some(describe(&e)), store, result: None, step_stores },
     }
 }
 

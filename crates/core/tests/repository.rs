@@ -14,6 +14,8 @@ fn sample(name: &str) -> NewAutomation {
         run_on_startup: false,
         watch_path: None,
         watch_pattern: None,
+        allow_system: false,
+        triggers: None,
     }
 }
 

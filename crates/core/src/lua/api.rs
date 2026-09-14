@@ -60,9 +60,11 @@ pub fn register(
     logs: LogSink,
     deadline: std::time::Instant,
     store: super::data::SharedStore,
+    allow_system: bool,
 ) -> mlua::Result<()> {
     let globals = lua.globals();
     super::system::register(lua, policy.clone(), deadline)?;
+    super::control::register(lua, allow_system, policy.clone(), deadline)?;
     super::data::register(lua, store, deadline)?;
 
     let sink = logs.clone();
@@ -109,7 +111,7 @@ pub fn register(
     Ok(())
 }
 
-fn push(sink: &LogSink, level: &str, message: String) {
+pub(crate) fn push(sink: &LogSink, level: &str, message: String) {
     let line = LogLine { level: level.to_string(), message };
     (sink.on_log)(&line);
     sink.lines.borrow_mut().push(line);

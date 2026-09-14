@@ -109,7 +109,12 @@ fn open_target(target: &str, args: Vec<String>) -> Result<String, String> {
     }
 
     let lower = target.to_lowercase();
-    if ["http://", "https://", "mailto:"].iter().any(|p| lower.starts_with(p)) {
+    // Links like https://, mailto: or ms-settings:display (but not C:\...).
+    let scheme = lower.split(':').next().unwrap_or("");
+    let is_link = lower.contains(':')
+        && scheme.len() > 1
+        && scheme.chars().all(|c| c.is_ascii_alphanumeric() || "+.-".contains(c));
+    if is_link {
         open::that_detached(target).map_err(|e| e.to_string())?;
         return Ok(target.to_string());
     }
@@ -140,7 +145,7 @@ fn open_target(target: &str, args: Vec<String>) -> Result<String, String> {
     Ok(target.to_string())
 }
 
-fn expand_home(raw: &str) -> PathBuf {
+pub fn expand_home(raw: &str) -> PathBuf {
     let home = dirs::home_dir().unwrap_or_default();
     if raw == "~" {
         home

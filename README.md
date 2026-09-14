@@ -118,6 +118,26 @@ automation {
 }
 ```
 
+### Controlling Windows
+
+These functions control the whole PC. Everything marked 🔒 only works when **Allow system control** is switched on for that automation (under *More triggers and permissions* in the editor). Imported automations never have it switched on.
+
+| Function | What it does |
+|---|---|
+| 🔒 `shell.run(cmd, { cwd, timeout })` / `shell.powershell(script, …)` | Run a Command Prompt or PowerShell command without a window; returns `{ code, ok, output, error }`. |
+| `process.list()` / `process.running(name)` / `process.wait_for(name, seconds)` | See which programs run. |
+| 🔒 `process.kill(name_or_pid)` | Stop a program (Windows' own processes are protected). |
+| `window.list()` / `window.find(text)` / `window.active()` | Visible windows with title, app, position and size. |
+| 🔒 `window.focus/minimize/maximize/restore/close(w)` / `window.move(w, x, y, width, height)` | Arrange windows; `close` asks the app politely, like clicking X. |
+| 🔒 `keyboard.press("ctrl+shift+esc")` / `keyboard.type(text)` | Key combinations (incl. media keys) and typing. |
+| 🔒 `mouse.move(x, y)` / `mouse.click(x, y, button, double)` · `mouse.position()` · `screen.size()` | Mouse and screen. |
+| 🔒 `system.lock()` / `system.sleep()` / `system.shutdown(delay)` / `system.restart(delay)` / `system.cancel_shutdown()` | Power; shutdown and restart always leave time to cancel (`shutdown /a`). |
+| 🔒 `system.volume_up/down(steps)` / `system.mute()` / `system.brightness(percent)` / `system.set_wallpaper(path)` | Sound and display. |
+| 🔒 `system.wake_at("07:30")` / `system.cancel_wake()` | Wake the PC from **sleep** at a time (a shut-down PC can only be switched on by the BIOS). Windows must allow wake timers. |
+| `system.idle_seconds()` · `network.wake_on_lan(mac)` | Time since the last input; wake another PC on the network. |
+
+More triggers, also under *More triggers and permissions*: a global **hotkey** (e.g. `Ctrl+Alt+K`), **when an app starts** or **closes** (`ctx.app`), **when the PC is idle** for some minutes, and **when a USB drive is plugged in** (`ctx.drive`; that run may read and write the drive).
+
 ### Sharing automations
 
 Press **Export** on an automation to save it as a `.localflow` file (plain JSON with the name, code and triggers) and send it to anyone. To import one, use **📥 Import** in the sidebar, double-click the file, or drag it onto the LocalFlow window.
