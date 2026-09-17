@@ -4,6 +4,7 @@ import { renderInline } from "../guide/GuideText";
 import { LANGUAGES, t } from "../i18n";
 import { applyTheme, type Theme } from "../theme";
 import BackupsCard from "./BackupsCard";
+import { announcePrefsChanged } from "../windowing";
 
 interface Props {
   onLanguageChange: (setting: string) => void;
@@ -54,12 +55,13 @@ export default function SettingsView({ onLanguageChange }: Props) {
   const changeTheme = (theme: Theme) => {
     applyTheme(theme); // instant, even before the backend confirms
     setSettings((s) => (s ? { ...s, theme } : s));
-    api.setTheme(theme).catch((e) => setMessage({ tone: "error", text: errorMessages(e).join(" ") }));
+    api.setTheme(theme).then(announcePrefsChanged).catch((e) => setMessage({ tone: "error", text: errorMessages(e).join(" ") }));
   };
 
   const changeLanguage = async (language: string) => {
     try {
       await api.setLanguage(language);
+      announcePrefsChanged(); // the guide window follows
       onLanguageChange(language); // re-renders the whole app in the new language
     } catch (e) {
       setMessage({ tone: "error", text: errorMessages(e).join(" ") });

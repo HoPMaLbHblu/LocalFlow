@@ -472,3 +472,57 @@ label input, label select { color: var(--text); font-size: .9rem; font-weight: n
 .backup-list li { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
 .card.version { margin-bottom: .6rem; }
 .card.version pre { margin-top: .75rem; }
+
+
+/* ---- more triggers & system control ------------------------------------ */
+
+.more-triggers { border: 1px solid var(--border); border-radius: var(--radius); padding: .5rem .8rem; background: var(--surface); }
+.more-triggers summary { cursor: pointer; font-weight: 600; font-size: .88rem; }
+.more-triggers[open] summary { margin-bottom: .6rem; }
+.more-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: .6rem; margin-bottom: .5rem; }
+.more-triggers label.check { flex-direction: row; align-items: center; gap: .5rem; font-size: .88rem; font-weight: 500; color: var(--text); }
+.more-triggers label.check input { width: auto; margin: 0; }
+.system-control { margin-top: .5rem; padding: .5rem .6rem; border-radius: 6px; border: 1px dashed var(--border); }
+.system-control.on { border-color: var(--warn); background: var(--warn-soft); }
+
+
+/* ---- back / forward, guide window --------------------------------------- */
+
+.brand-row { display: flex; align-items: center; justify-content: space-between; gap: .25rem; }
+.brand-row .brand { flex: 1; min-width: 0; }
+.after-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 10px 0 4px;
+}
+.after-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  min-width: 200px;
+}
+
+.history-arrows { display: flex; gap: 2px; }
+.history-arrows .arrow {
+  width: 30px; height: 30px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: none; border: 1px solid transparent; border-radius: 6px;
+  font-size: 1rem; color: var(--text);
+}
+.history-arrows .arrow:hover:not(:disabled) { background: var(--surface); border-color: var(--border); }
+.history-arrows .arrow:disabled { opacity: .3; }
+
+.guide-window { height: 100vh; display: flex; flex-direction: column; background: var(--bg); position: relative; }
+.guide-window .guide { flex: 1; min-height: 0; }
+.guide-toast {
+  position: absolute; top: .75rem; right: 1rem; z-index: 10;
+  background: var(--ok-soft); color: var(--ok);
+  border-radius: var(--radius); padding: .5rem .9rem; font-weight: 600;
+  box-shadow: 0 2px 8px rgb(0 0 0 / .15);
+}
+@media (max-width: 640px) {
+  .guide-window .guide-toc { width: 190px; }
+  .guide-window .guide-content { padding: 1.25rem 1rem 2rem; }
+}

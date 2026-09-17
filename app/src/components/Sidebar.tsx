@@ -15,6 +15,10 @@ interface Props {
   onGuide: () => void;
   onImport: () => void;
   onTrash: () => void;
+  canGoBack: boolean;
+  canGoForward: boolean;
+  onBack: () => void;
+  onForward: () => void;
 }
 
 /** Status dot: green/red for the last run, grey if it never ran, hollow if disabled. */
@@ -33,10 +37,32 @@ export default function Sidebar(props: Props) {
 
   return (
     <aside className="sidebar">
-      <button className="brand" onClick={props.onHome}>
-        <img src="/logo.svg" alt="" width={26} height={26} />
-        LocalFlow
-      </button>
+      <div className="brand-row">
+        <button className="brand" onClick={props.onHome}>
+          <img src="/logo.svg" alt="" width={26} height={26} />
+          LocalFlow
+        </button>
+        <div className="history-arrows">
+          <button
+            className="arrow"
+            onClick={props.onBack}
+            disabled={!props.canGoBack}
+            title={t("nav.back")}
+            aria-label={t("nav.back")}
+          >
+            ←
+          </button>
+          <button
+            className="arrow"
+            onClick={props.onForward}
+            disabled={!props.canGoForward}
+            title={t("nav.forward")}
+            aria-label={t("nav.forward")}
+          >
+            →
+          </button>
+        </div>
+      </div>
 
       <div className="new-row">
         <button className="primary new-button" onClick={props.onNew}>

@@ -18,6 +18,42 @@ export interface Automation {
   watch_pattern: string | null;
   /** Set when the automation is in the trash. */
   deleted_at?: string | null;
+  /** "Allow system control": commands, keystrokes, shutdown, ... */
+  allow_system?: boolean;
+  /** JSON of ExtraTriggers, or null. */
+  triggers?: string | null;
+}
+
+/** Hotkey, app start/exit, idle and USB triggers. */
+export interface ExtraTriggers {
+  hotkey?: string | null;
+  app_start?: string | null;
+  app_exit?: string | null;
+  idle_minutes?: number | null;
+  usb?: boolean;
+  /** Run when another automation finishes. */
+  after?: { automation_id: number; when: "success" | "failure" | "always" } | null;
+}
+
+export function parseTriggers(json: string | null | undefined): ExtraTriggers {
+  if (!json) return {};
+  try {
+    return JSON.parse(json) as ExtraTriggers;
+  } catch {
+    return {};
+  }
+}
+
+/** Empty strings and zero become "not set", so forms compare correctly. */
+export function cleanTriggers(tr: ExtraTriggers): ExtraTriggers {
+  const out: ExtraTriggers = {};
+  if (tr.hotkey?.trim()) out.hotkey = tr.hotkey.trim();
+  if (tr.app_start?.trim()) out.app_start = tr.app_start.trim();
+  if (tr.app_exit?.trim()) out.app_exit = tr.app_exit.trim();
+  if (tr.idle_minutes && tr.idle_minutes > 0) out.idle_minutes = tr.idle_minutes;
+  if (tr.usb) out.usb = true;
+  if (tr.after?.automation_id) out.after = { automation_id: tr.after.automation_id, when: tr.after.when || "success" };
+  return out;
 }
 
 /** An earlier saved state of an automation. */
@@ -87,6 +123,9 @@ export interface Template {
   run_on_startup?: boolean;
   watch_path?: string;
   watch_pattern?: string;
+  allow_system?: boolean;
+  /** JSON of ExtraTriggers ("" for none). */
+  triggers?: string;
 }
 
 export interface TestRunResult {
@@ -119,6 +158,8 @@ export interface AutomationInput {
   run_on_startup: boolean;
   watch_path: string | null;
   watch_pattern: string | null;
+  allow_system: boolean;
+  triggers: ExtraTriggers;
 }
 
 /** Contents of a .localflow file. */
@@ -145,7 +186,12 @@ export type Risk =
   | "uses_clipboard"
   | "runs_on_startup"
   | "watches_folder"
-  | "runs_on_schedule";
+  | "runs_on_schedule"
+  | "runs_commands"
+  | "controls_input"
+  | "controls_power"
+  | "needs_system_control"
+  | "runs_on_events";
 
 export interface ImportPreview {
   automation: SharedAutomation;
@@ -194,7 +240,8 @@ export const api = {
   setEnabled: (id: number, enabled: boolean) => invoke<Automation>("set_enabled", { id, enabled }),
   deleteAutomation: (id: number) => invoke<void>("delete_automation", { id }),
   runAutomation: (id: number) => invoke<AutomationRun>("run_automation", { id }),
-  testRun: (code: string, name: string) => invoke<TestRunResult>("test_run", { code, name }),
+  testRun: (code: string, name: string, allowSystem = false) =>
+    invoke<TestRunResult>("test_run", { code, name, allowSystem }),
   validateCode: (code: string) => invoke<string | null>("validate_code", { code }),
   validateSchedule: (schedule: string) => invoke<string | null>("validate_schedule", { schedule }),
   listRuns: (id: number, limit = 100) => invoke<AutomationRun[]>("list_runs", { id, limit }),

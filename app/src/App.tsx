@@ -11,6 +11,7 @@ import TrashView from "./components/TrashView";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { onOpenFile } from "./api";
+import { inDesktopApp, onOpenDraft, openGuideWindow } from "./windowing";
 import { t, tMaybe } from "./i18n";
 
 export type View =
@@ -41,7 +42,16 @@ interface Props {
 }
 
 export default function App({ initialView, onLanguageChange }: Props) {
-  const [view, setView] = useState<View>(initialView ?? { kind: "home" });
+  // Visited pages, for the back and forward arrows (like a browser).
+  const [history, setHistory] = useState<{ views: View[]; index: number }>(() => ({
+    views: [initialView ?? { kind: "home" }],
+    index: 0,
+  }));
+  const view = history.views[history.index];
+  /** Replace the current page without adding a history step (e.g. draft -> saved automation). */
+  const setView = useCallback((next: View) => {
+    setHistory((h) => ({ views: h.views.map((v, i) => (i === h.index ? next : v)), index: h.index }));
+  }, []);
   const [automations, setAutomations] = useState<AutomationSummary[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -71,11 +81,65 @@ export default function App({ initialView, onLanguageChange }: Props) {
     };
   }, [refresh]);
 
-  const navigate = useCallback((next: View) => {
-    if (dirty.current && !window.confirm(t("app.unsavedConfirm"))) return;
+  /** Leave the current page, asking first if it has unsaved changes. */
+  const leave = useCallback((): boolean => {
+    if (dirty.current && !window.confirm(t("app.unsavedConfirm"))) return false;
     dirty.current = false;
-    setView(next);
+    return true;
   }, []);
+
+  const navigate = useCallback(
+    (next: View) => {
+      if (!leave()) return;
+      setHistory((h) => {
+        if (JSON.stringify(h.views[h.index]) === JSON.stringify(next)) return h;
+        // Going somewhere new drops the "forward" pages, like a browser. Keep the last 50.
+        const views = [...h.views.slice(0, h.index + 1), next].slice(-50);
+        return { views, index: views.length - 1 };
+      });
+    },
+    [leave],
+  );
+
+  const canGoBack = history.index > 0;
+  const canGoForward = history.index < history.views.length - 1;
+  const goBack = useCallback(() => {
+    if (history.index > 0 && leave()) setHistory((h) => ({ ...h, index: Math.max(0, h.index - 1) }));
+  }, [history.index, leave]);
+  const goForward = useCallback(() => {
+    if (history.index < history.views.length - 1 && leave()) {
+      setHistory((h) => ({ ...h, index: Math.min(h.views.length - 1, h.index + 1) }));
+    }
+  }, [history.index, history.views.length, leave]);
+
+  // Alt+Left / Alt+Right, and the back/forward buttons on a mouse.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.altKey || e.ctrlKey || e.shiftKey || e.metaKey) return;
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        goBack();
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        goForward();
+      }
+    };
+    const onMouse = (e: MouseEvent) => {
+      if (e.button === 3) {
+        e.preventDefault();
+        goBack();
+      } else if (e.button === 4) {
+        e.preventDefault();
+        goForward();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("mouseup", onMouse);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("mouseup", onMouse);
+    };
+  }, [goBack, goForward]);
 
   const setDirty = useCallback((value: boolean) => {
     dirty.current = value;
@@ -135,13 +199,32 @@ export default function App({ initialView, onLanguageChange }: Props) {
   };
 
   const selectedId = view.kind === "automation" ? view.id : null;
-  const openGuide = () => navigate({ kind: "guide" });
+  // In the desktop app the guide gets its own window, so it can sit next to the editor.
+  const openGuide = () => {
+    if (inDesktopApp()) {
+      openGuideWindow(t("guide.windowTitle")).catch(() => navigate({ kind: "guide" }));
+    } else {
+      navigate({ kind: "guide" });
+    }
+  };
   const draftCounter = useRef(0);
-  const openDraft = (title: string, code: string) =>
-    navigate({
-      kind: "draft",
-      template: { slug: `guide-${++draftCounter.current}`, title, description: "", schedule: "", code },
-    });
+  const openDraft = useCallback(
+    (title: string, code: string) =>
+      navigate({
+        kind: "draft",
+        template: { slug: `guide-${++draftCounter.current}`, title, description: "", schedule: "", code },
+      }),
+    [navigate],
+  );
+
+  // "Open in editor" pressed in the guide window.
+  useEffect(() => {
+    if (!inDesktopApp()) return;
+    const unlisten = onOpenDraft(({ title, code }) => openDraft(title, code));
+    return () => {
+      unlisten.then((f) => f());
+    };
+  }, [openDraft]);
 
   return (
     <div className="app">
@@ -156,6 +239,10 @@ export default function App({ initialView, onLanguageChange }: Props) {
         onGuide={openGuide}
         onImport={pickImportFile}
         onTrash={() => navigate({ kind: "trash" })}
+        canGoBack={canGoBack}
+        canGoForward={canGoForward}
+        onBack={goBack}
+        onForward={goForward}
       />
       <main className="main">
         {notice && (
