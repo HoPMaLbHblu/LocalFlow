@@ -14,6 +14,8 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 localflow-core.workspace = true
+# TODO(lead): after merging the engine agent's work, enable the real speech engine:
+# localflow-core = { workspace = true, features = ["voice-engine"] }
 tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-notification = "2"
 tauri-plugin-autostart = "2"

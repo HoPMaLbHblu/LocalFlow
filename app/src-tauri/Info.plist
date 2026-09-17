@@ -5,5 +5,8 @@
   <!-- Shown when an automation with "Allow system control" controls other apps (windows, dialogs, volume). -->
   <key>NSAppleEventsUsageDescription</key>
   <string>LocalFlow automations with "Allow system control" can control windows, the volume and other apps.</string>
+  <!-- Voice control (off by default): the microphone is used only while it is switched on. -->
+  <key>NSMicrophoneUsageDescription</key>
+  <string>LocalFlow uses the microphone only while voice control is switched on, so you can run automations by speaking. Audio is processed on this Mac and is never stored or sent anywhere.</string>
 </dict>
 </plist>

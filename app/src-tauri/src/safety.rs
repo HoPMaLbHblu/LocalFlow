@@ -53,6 +53,7 @@ pub async fn backup_now(state: State<'_, AppState>) -> CommandResult<BackupInfo>
 pub async fn restore_backup(app: AppHandle, state: State<'_, AppState>, file_name: String) -> CommandResult<()> {
     state.flow.schedule_restore(&file_name).await?;
     state.flow.close().await;
+    crate::voice::shutdown(&app);
     app.restart();
 }
 

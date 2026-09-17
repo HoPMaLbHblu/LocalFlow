@@ -16,6 +16,7 @@ mod safety;
 mod settings;
 mod sharing;
 mod tray;
+mod voice;
 mod windows;
 
 use std::sync::{
@@ -112,6 +113,15 @@ fn handle_event(app: &AppHandle, prefs: &Prefs, event: CoreEvent) {
         tray::refresh(app);
         hotkeys::refresh(app);
     }
+    // The tray's "Stop all running automations" item exists only while something runs. A finished
+    // run leaves the running set just after its event, so look again a moment later.
+    if matches!(event, CoreEvent::RunStarted { .. } | CoreEvent::RunFinished { .. }) {
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+            tray::refresh(&app);
+        });
+    }
     let _ = app.emit(EVENT_NAME, event);
 }
 
@@ -160,10 +170,14 @@ fn init(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         sharing::file_argument(std::env::args()),
     )));
     app.manage(hotkeys::Hotkeys::default());
+    app.manage(hotkeys::VoiceKey::default());
+    // Voice control: settings are loaded now; the session starts after the tray is up.
+    app.manage(voice::VoiceManager::new(localflow_core::voice::settings::load()));
     app.manage(updates::UpdateCache::default());
     updates::start(handle.clone());
     tray::create(&handle)?;
     hotkeys::refresh(&handle);
+    voice::init(&handle);
 
     if std::env::args().any(|a| a == MINIMIZED_FLAG) {
         if let Some(window) = app.get_webview_window("main") {
@@ -321,6 +335,25 @@ pub fn run() {
             windows::open_ai_chat,
             windows::open_dota,
             windows::show_main,
+            voice::voice_get_settings,
+            voice::voice_set_settings,
+            voice::voice_status,
+            voice::voice_list_devices,
+            voice::voice_engines,
+            voice::voice_download_model,
+            voice::voice_cancel_download,
+            voice::voice_remove_model,
+            voice::voice_test_microphone,
+            voice::voice_set_enabled,
+            voice::voice_set_muted,
+            voice::voice_press,
+            voice::voice_release,
+            voice::voice_submit_text,
+            voice::voice_answer,
+            voice::voice_commands,
+            voice::running_automations,
+            voice::stop_run,
+            voice::stop_all_runs,
         ])
         .build(tauri::generate_context!())
         .expect("error while building LocalFlow")
@@ -338,6 +371,10 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Reopen { .. } = &event {
                 show_main_window(app);
+            }
+            // Release the microphone before the process goes away (never waits more than ~2 s).
+            if matches!(event, tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit) {
+                voice::shutdown(app);
             }
             let _ = (app, event);
         });
