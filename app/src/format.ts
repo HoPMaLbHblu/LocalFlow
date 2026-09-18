@@ -92,7 +92,49 @@ export function describeTriggers(a: {
 export function describeSchedule(schedule: string | null): string {
   if (!schedule) return t("trigger.manualOnly");
   const preset = PRESETS.find((p) => p.value === schedule);
-  return preset ? t(preset.key) : schedule;
+  return preset ? t(preset.key) : (humanizeCron(schedule) ?? schedule);
+}
+
+const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+
+/** "mon", "1" or "7" -> "Mon"; undefined if it isn't one day. */
+function dayName(field: string): (typeof DAYS)[number] | undefined {
+  const lower = field.toLowerCase();
+  const byName = DAYS.find((d) => d.toLowerCase() === lower.slice(0, 3) && lower.length >= 3);
+  if (byName) return byName;
+  const n = Number(field);
+  return Number.isInteger(n) && n >= 0 && n <= 7 ? DAYS[n % 7] : undefined;
+}
+
+/**
+ * Common schedules in words: every minute, every 10 minutes, every 2 hours,
+ * every day at 20:30, weekdays at 9:00, every Sunday at 12:00.
+ * Anything else returns undefined and is shown as written.
+ */
+export function humanizeCron(schedule: string): string | undefined {
+  const parts = schedule.trim().split(/\s+/);
+  if (parts.length !== 6) return undefined;
+  const [sec, min, hour, dom, month, dow] = parts;
+  if (dom !== "*" || month !== "*") return undefined;
+  const everyDay = dow === "*" || dow === "?";
+  const num = (s: string) => (/^\d{1,2}$/.test(s) ? Number(s) : undefined);
+  const step = (s: string) => /^\*\/(\d+)$/.exec(s)?.[1];
+
+  if (everyDay && sec === "*" && min === "*" && hour === "*") return t("cron.everySecond");
+  if (everyDay && num(sec) !== undefined && min === "*" && hour === "*") return t("cron.everyMinute");
+  if (everyDay && num(sec) !== undefined && step(min) && hour === "*") return t("cron.everyNMinutes", { n: step(min)! });
+  if (everyDay && num(sec) !== undefined && num(min) !== undefined && step(hour)) return t("cron.everyNHours", { n: step(hour)! });
+
+  const h = num(hour);
+  const m = num(min);
+  if (num(sec) === undefined || h === undefined || m === undefined || h > 23 || m > 59) return undefined;
+  const time = `${h}:${String(m).padStart(2, "0")}`;
+  if (everyDay) return t("cron.dailyAt", { time });
+  const lower = dow.toLowerCase();
+  if (lower === "mon-fri" || lower === "1-5") return t("cron.weekdaysAt", { time });
+  if (["sat,sun", "sun,sat", "0,6", "6,0", "6,7"].includes(lower)) return t("cron.weekendsAt", { time });
+  const day = dayName(dow);
+  return day ? t("cron.weeklyAt", { day: t(`cron.day.${day}` as Key), time }) : undefined;
 }
 
 /** Translated status word ("success", "failed", ...). */

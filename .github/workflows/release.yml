@@ -1,5 +1,5 @@
 # Builds the Windows installers and attaches them to a GitHub release.
-# Triggered by pushing a version tag, e.g. `git tag v2.0.0 && git push origin v2.0.0`.
+# Triggered by pushing a version tag, e.g. `git tag v1.0.0 && git push origin v1.0.0`.
 name: Release
 
 on:

@@ -12,7 +12,8 @@ async fn flow(dir: &TempDir) -> LocalFlow {
     let config = CoreConfig {
         database_url: "sqlite::memory:".into(),
         allowed_dirs: vec![dir.path().to_path_buf()],
-        script_timeout: Duration::from_secs(20),
+        // Generous: the first PowerShell start on a fresh CI machine can take 20+ seconds.
+        script_timeout: Duration::from_secs(90),
     };
     LocalFlow::open(config, None).await.unwrap()
 }

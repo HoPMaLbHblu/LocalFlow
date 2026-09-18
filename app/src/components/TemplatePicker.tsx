@@ -1,5 +1,5 @@
 import type { Template } from "../api";
-import { describeSchedule } from "../format";
+import { describeTriggers } from "../format";
 import { t } from "../i18n";
 
 const BLANK_CODE = `automation {
@@ -34,11 +34,14 @@ export default function TemplatePicker({ templates, onPick, onCancel }: Props) {
             <strong>{template.title}</strong>
             <span className="muted small">{template.description}</span>
             <span className="template-schedule small">
-              {template.watch_path
-                ? t("trigger.watching", { path: template.watch_path })
-                : template.run_on_startup
-                  ? t("trigger.onStartup")
-                  : describeSchedule(template.schedule || null)}
+              {describeTriggers({
+                enabled: true,
+                schedule: template.schedule || null,
+                run_on_startup: !!template.run_on_startup,
+                watch_path: template.watch_path || null,
+                watch_pattern: template.watch_pattern || null,
+                triggers: template.triggers || null,
+              })}
             </span>
           </button>
         ))}

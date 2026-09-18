@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, errorMessages, type Automation } from "../api";
 import { formatRelative } from "../format";
 import { t } from "../i18n";
+import { confirmAction } from "../confirm";
 
 /** Deleted automations, with Restore and Delete forever. */
 export default function TrashView({ onRestored }: { onRestored: (id: number) => void }) {
@@ -23,7 +24,7 @@ export default function TrashView({ onRestored }: { onRestored: (id: number) => 
   };
 
   const deleteForever = async (a: Automation) => {
-    if (!window.confirm(t("trash.deleteForeverConfirm", { name: a.name }))) return;
+    if (!(await confirmAction(t("trash.deleteForeverConfirm", { name: a.name })))) return;
     try {
       await api.deleteForever(a.id);
       load();

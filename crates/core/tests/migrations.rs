@@ -1,5 +1,5 @@
 //! Databases created by a build with other line endings must still open.
-//! (LocalFlow 2.3.0 crashed at startup because of this.)
+//! (An early LocalFlow build crashed at startup because of this.)
 
 use localflow_core::db;
 use sha2::{Digest, Sha384};

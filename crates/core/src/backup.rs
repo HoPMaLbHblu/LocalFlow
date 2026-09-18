@@ -138,7 +138,7 @@ impl Backups {
     fn replace_database_with(&self, source: &Path) -> Result<(), String> {
         for sidecar in Self::sidecars(&self.database) {
             if sidecar.exists() {
-                std::fs::remove_file(&sidecar).map_err(|e| format!("could not remove {}: {e}", sidecar.display()))?;
+                remove_with_retry(&sidecar)?;
             }
         }
         std::fs::copy(source, &self.database).map_err(|e| format!("could not restore backup: {e}"))?;
@@ -189,4 +189,19 @@ fn info(path: &Path) -> Option<BackupInfo> {
         size: meta.len(),
         kind: if kind.is_empty() { "manual".into() } else { kind },
     })
+}
+
+/// Remove a file, retrying for a few seconds: right after LocalFlow closes the
+/// database, Windows (or an antivirus scan) can still hold it for a moment.
+fn remove_with_retry(path: &Path) -> Result<(), String> {
+    let mut last = None;
+    for _ in 0..40 {
+        match std::fs::remove_file(path) {
+            Ok(()) => return Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(e) => last = Some(e),
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    Err(format!("could not remove {}: {}", path.display(), last.map(|e| e.to_string()).unwrap_or_default()))
 }

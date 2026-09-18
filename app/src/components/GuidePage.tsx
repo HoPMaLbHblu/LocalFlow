@@ -16,20 +16,24 @@ function asAutomation(title: string, code: string): string {
 }
 
 function CodeBlock({ code, runnable, title, onTry }: { code: string; runnable?: boolean; title: string; onTry: Props["onTry"] }) {
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<"no" | "yes" | "failed">("no");
+  const copy = async () => {
+    try {
+      if (!navigator.clipboard) throw new Error("no clipboard");
+      await navigator.clipboard.writeText(code);
+      setCopied("yes");
+    } catch {
+      // e.g. the window lost focus: say so instead of pretending it worked.
+      setCopied("failed");
+    }
+    setTimeout(() => setCopied("no"), 2000);
+  };
   return (
     <div className="guide-code">
       <pre>{code}</pre>
       <div className="guide-code-actions">
-        <button
-          className="link small"
-          onClick={() => {
-            navigator.clipboard?.writeText(code);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 1200);
-          }}
-        >
-          {copied ? t("guide.copied") : t("guide.copy")}
+        <button className="link small" onClick={copy}>
+          {copied === "yes" ? t("guide.copied") : copied === "failed" ? t("guide.copyFailed") : t("guide.copy")}
         </button>
         {runnable && (
           <button className="small" onClick={() => onTry(title, asAutomation(title, code))}>
