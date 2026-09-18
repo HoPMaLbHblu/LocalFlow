@@ -81,7 +81,7 @@ pub fn register(lua: &Lua, allowed: bool, policy: Arc<PathPolicy>, deadline: Ins
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 /// Run a program, capturing its output, and kill it if it runs past `timeout`.
-fn run_program(mut command: Command, timeout: Duration) -> Result<(i32, String, String), String> {
+pub(crate) fn run_program(mut command: Command, timeout: Duration) -> Result<(i32, String, String), String> {
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -137,7 +137,7 @@ fn base64(bytes: &[u8]) -> String {
 }
 
 /// A PowerShell command line that runs `script` with UTF-8 output.
-fn powershell_command(script: &str) -> Command {
+pub(crate) fn powershell_command(script: &str) -> Command {
     let full = format!("[Console]::OutputEncoding = [Text.Encoding]::UTF8\n$ProgressPreference = 'SilentlyContinue'\n{script}");
     let utf16: Vec<u8> = full.encode_utf16().flat_map(|u| u.to_le_bytes()).collect();
     let mut command = Command::new("powershell.exe");
