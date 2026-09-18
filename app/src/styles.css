@@ -456,9 +456,10 @@ label input, label select { color: var(--text); font-size: .9rem; font-weight: n
 
 /* ---- sharing ------------------------------------------------------------ */
 
-.new-row { display: flex; gap: .4rem; margin: .25rem 0 .35rem; }
-.new-row .new-button { flex: 1; margin: 0; }
-.import-button { padding-left: .6rem; padding-right: .6rem; white-space: nowrap; }
+/* Labels never break mid-phrase; if both don't fit (long languages, narrow window), Import moves below. */
+.new-row { display: flex; flex-wrap: wrap; gap: .4rem; margin: .25rem 0 .35rem; }
+.new-row .new-button { flex: 1 1 auto; margin: 0; white-space: nowrap; }
+.import-button { flex: 1 0 auto; padding-left: .6rem; padding-right: .6rem; white-space: nowrap; }
 .risk-list { list-style: none; padding: 0; margin: .25rem 0 .75rem; display: flex; flex-direction: column; gap: .3rem; }
 .risk-list li.serious { color: var(--warn); font-weight: 600; }
 .ok-text { color: var(--ok); }
