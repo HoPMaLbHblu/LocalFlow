@@ -241,6 +241,9 @@ impl LocalFlow {
         // App start/exit, idle and USB triggers.
         tokio::spawn(crate::triggers::monitor(self.clone()));
 
+        // CPU, memory, disk and battery history (stays on this PC).
+        tokio::spawn(crate::metrics::run(self.inner.repo.pool().clone()));
+
         // A backup every day, also when LocalFlow runs for weeks without a restart.
         if self.inner.backups.is_some() {
             let flow = self.clone();
@@ -269,6 +272,12 @@ impl LocalFlow {
             });
         }
         Ok(())
+    }
+
+    /// System samples from the last `minutes`, averaged down to at most `points`, for charts.
+    pub async fn metrics(&self, minutes: i64, points: usize) -> CoreResult<Vec<crate::metrics::Sample>> {
+        let samples = crate::metrics::load(self.inner.repo.pool(), minutes.clamp(1, 30 * 24 * 60)).await?;
+        Ok(crate::metrics::downsample(&samples, points.clamp(10, 1000)))
     }
 
     pub fn repo(&self) -> &Repository {

@@ -10,6 +10,7 @@ pub mod config;
 pub mod db;
 pub mod errors;
 pub mod lua;
+pub mod metrics;
 pub mod scheduler;
 pub mod sharing;
 pub mod triggers;

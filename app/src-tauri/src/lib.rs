@@ -237,6 +237,7 @@ pub fn run() {
             safety::restore_backup,
             safety::open_backups_folder,
             safety::startup_notice,
+            safety::get_metrics,
             windows::open_guide,
             windows::show_main,
         ])

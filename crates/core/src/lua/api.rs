@@ -106,7 +106,10 @@ pub fn register(
     )?;
 
     let fs = fs_table(lua, policy.clone())?;
-    super::files::register(lua, &fs, policy, deadline)?;
+    super::files::register(lua, &fs, policy.clone(), deadline)?;
+    super::media::register(lua, &fs, policy, deadline)?;
+    crate::metrics::register(lua)?;
+    super::lualib::register(lua)?;
     globals.set("fs", fs)?;
     Ok(())
 }

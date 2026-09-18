@@ -56,6 +56,15 @@ export function cleanTriggers(tr: ExtraTriggers): ExtraTriggers {
   return out;
 }
 
+/** One minute of system history; values are percentages. */
+export interface MetricSample {
+  at: number;
+  cpu: number;
+  memory: number;
+  disk: number;
+  battery: number | null;
+}
+
 /** An earlier saved state of an automation. */
 export interface AutomationVersion {
   id: number;
@@ -264,6 +273,7 @@ export const api = {
   listVersions: (id: number) => invoke<AutomationVersion[]>("list_versions", { id }),
   restoreVersion: (id: number, versionId: number) => invoke<Automation>("restore_version", { id, versionId }),
   listBackups: () => invoke<BackupInfo[]>("list_backups"),
+  getMetrics: (minutes: number, points: number) => invoke<MetricSample[]>("get_metrics", { minutes, points }),
   backupNow: () => invoke<BackupInfo>("backup_now"),
   restoreBackup: (fileName: string) => invoke<void>("restore_backup", { fileName }),
   openBackupsFolder: () => invoke<void>("open_backups_folder"),
