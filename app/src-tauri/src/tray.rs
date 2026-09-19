@@ -7,10 +7,39 @@ use tauri::{
     AppHandle, Manager,
 };
 
-use crate::{show_main_window, AppState};
+use localflow_core::voice::VoiceState;
+
+use crate::{i18n::Texts, show_main_window, AppState};
 
 const TRAY_ID: &str = "main";
 const RUN_PREFIX: &str = "run:";
+const VOICE_MUTE: &str = "voice:mute";
+const STOP_ALL: &str = "stop_all";
+
+/// The tray tooltip for a voice state. "LocalFlow" alone while voice control is off.
+pub fn tooltip(texts: &Texts, state: &VoiceState) -> &'static str {
+    match state {
+        VoiceState::Off => "LocalFlow",
+        VoiceState::Idle => texts.tip_idle,
+        VoiceState::Listening => texts.tip_listening,
+        VoiceState::Processing => texts.tip_processing,
+        VoiceState::Speaking => texts.tip_speaking,
+        VoiceState::Muted => texts.tip_muted,
+        VoiceState::Error(_) => texts.tip_error,
+    }
+}
+
+/// Voice state changed: update the tooltip and the menu (mute label).
+pub fn set_voice_state(app: &AppHandle, state: &VoiceState) {
+    if let Some(tray) = app.tray_by_id(TRAY_ID) {
+        let texts = app
+            .try_state::<AppState>()
+            .map(|s| s.prefs.texts())
+            .unwrap_or_else(|| crate::i18n::texts("en"));
+        let _ = tray.set_tooltip(Some(tooltip(texts, state)));
+    }
+    refresh(app);
+}
 
 /// Trigger name for runs started from the tray (shown in history, and notified on finish).
 pub const TRAY_TRIGGER: &str = "tray";
@@ -35,10 +64,20 @@ fn build_menu(app: &AppHandle, automations: &[(i64, String)]) -> tauri::Result<M
         )?)?;
     }
 
-    Menu::with_items(
-        app,
-        &[&open, &run, &PredefinedMenuItem::separator(app)?, &quit],
-    )
+    let mut items: Vec<Box<dyn tauri::menu::IsMenuItem<tauri::Wry>>> = vec![Box::new(open), Box::new(run)];
+    // Voice: only while the session runs; "stop all" only while something runs.
+    if let Some(muted) = crate::voice::tray_mute_state(app) {
+        let label = if muted { texts.voice_unmute } else { texts.voice_mute };
+        items.push(Box::new(MenuItem::with_id(app, VOICE_MUTE, label, true, None::<&str>)?));
+    }
+    let running = app.try_state::<AppState>().map(|s| s.flow.running().len()).unwrap_or(0);
+    if running > 0 {
+        items.push(Box::new(MenuItem::with_id(app, STOP_ALL, texts.stop_all, true, None::<&str>)?));
+    }
+    items.push(Box::new(PredefinedMenuItem::separator(app)?));
+    items.push(Box::new(quit));
+    let refs: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> = items.iter().map(|i| i.as_ref()).collect();
+    Menu::with_items(app, &refs)
 }
 
 pub fn create(app: &AppHandle) -> tauri::Result<()> {
@@ -53,7 +92,14 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
             if id == "open" {
                 show_main_window(app);
             } else if id == "quit" {
+                crate::voice::shutdown(app);
                 app.exit(0);
+            } else if id == VOICE_MUTE {
+                crate::voice::toggle_mute(app);
+            } else if id == STOP_ALL {
+                let stopped = app.state::<AppState>().flow.stop_all();
+                tracing::info!(stopped, "stop all runs from the tray");
+                refresh(app);
             } else if let Some(automation_id) = id
                 .strip_prefix(RUN_PREFIX)
                 .and_then(|n| n.parse::<i64>().ok())
