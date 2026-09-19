@@ -164,8 +164,11 @@ pub fn expand_home(raw: &str) -> PathBuf {
     }
 }
 
-/// Folders holding Start-menu shortcuts (Windows only; empty elsewhere).
+/// Folders holding Start-menu shortcuts on Windows, or apps on a Mac.
 fn start_menu_dirs() -> Vec<PathBuf> {
+    if cfg!(target_os = "macos") {
+        return super::mac::app_dirs();
+    }
     let mut dirs = Vec::new();
     if let Some(program_data) = std::env::var_os("ProgramData") {
         dirs.push(PathBuf::from(program_data).join(r"Microsoft\Windows\Start Menu\Programs"));
@@ -176,12 +179,19 @@ fn start_menu_dirs() -> Vec<PathBuf> {
     dirs
 }
 
-/// `(name, path)` for every app shortcut in the Start menu, skipping uninstallers.
+/// `(name, path)` for every app shortcut in the Start menu (or `.app` on a Mac), skipping uninstallers.
 pub fn start_menu_shortcuts() -> Vec<(String, PathBuf)> {
     fn walk(dir: &Path, depth: usize, out: &mut Vec<(String, PathBuf)>) {
         let Ok(entries) = std::fs::read_dir(dir) else { return };
         for entry in entries.flatten() {
             let path = entry.path();
+            // A Mac app is a folder named "Name.app": list it, don't look inside.
+            if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("app")) {
+                if let Some(name) = path.file_stem().map(|s| s.to_string_lossy().into_owned()) {
+                    out.push((name, path));
+                }
+                continue;
+            }
             if path.is_dir() {
                 if depth < 4 {
                     walk(&path, depth + 1, out);
@@ -450,7 +460,12 @@ pub(crate) fn battery_status() -> Option<(u8, bool, bool)> {
     Some((status.BatteryLifePercent, status.BatteryFlag & 8 != 0, status.ACLineStatus == 1))
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
+pub(crate) fn battery_status() -> Option<(u8, bool, bool)> {
+    super::mac::battery()
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
 pub(crate) fn battery_status() -> Option<(u8, bool, bool)> {
     None
 }
@@ -488,9 +503,14 @@ fn ask(question: &str, title: &str) -> Result<bool, String> {
     Ok(answer == rfd::MessageDialogResult::Yes)
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
+fn ask(question: &str, title: &str) -> Result<bool, String> {
+    super::mac::ask(question, title)
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
 fn ask(_question: &str, _title: &str) -> Result<bool, String> {
-    Err("dialogs are only available on Windows".into())
+    Err("dialogs are only available on Windows and macOS".into())
 }
 
 fn sound_table(lua: &Lua, policy: std::sync::Arc<super::sandbox::PathPolicy>) -> mlua::Result<Table> {
@@ -521,9 +541,14 @@ fn beep() -> Result<(), String> {
     Ok(())
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
 fn beep() -> Result<(), String> {
-    Err("sound is only available on Windows".into())
+    super::mac::beep()
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
+fn beep() -> Result<(), String> {
+    Err("sound is only available on Windows and macOS".into())
 }
 
 /// Starts playing and returns immediately; the sound keeps playing in the background.
@@ -541,9 +566,14 @@ fn play_wav(path: &Path) -> Result<(), String> {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
+fn play_wav(path: &Path) -> Result<(), String> {
+    super::mac::play(path)
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
 fn play_wav(_path: &Path) -> Result<(), String> {
-    Err("sound is only available on Windows".into())
+    Err("sound is only available on Windows and macOS".into())
 }
 
 // ---- time ----------------------------------------------------------------------

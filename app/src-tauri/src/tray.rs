@@ -1,4 +1,4 @@
-//! System tray icon: keeps LocalFlow reachable while the window is closed,
+//! System tray icon (the menu bar on a Mac): keeps LocalFlow reachable while the window is closed,
 //! and runs any automation in one click from the "Run" menu.
 
 use tauri::{
@@ -45,7 +45,9 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
     let mut builder = TrayIconBuilder::with_id(TRAY_ID)
         .tooltip("LocalFlow")
         .menu(&build_menu(app, &[])?)
-        .show_menu_on_left_click(false)
+        // On a Mac, clicking a menu-bar icon opens its menu (which has "Open").
+        // On Windows, a left click opens the window and a right click the menu.
+        .show_menu_on_left_click(cfg!(target_os = "macos"))
         .on_menu_event(|app, event| {
             let id = event.id().as_ref();
             if id == "open" {
@@ -71,7 +73,9 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
                 ..
             } = event
             {
-                show_main_window(tray.app_handle());
+                if !cfg!(target_os = "macos") {
+                    show_main_window(tray.app_handle());
+                }
             }
         });
 

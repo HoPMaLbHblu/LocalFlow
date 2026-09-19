@@ -35,6 +35,22 @@ pub fn open_from_second_instance(app: &AppHandle, args: Vec<String>) {
     }
 }
 
+/// A file opened on macOS (double-click, or "Open With"): remember it for a
+/// window that is still starting, and tell a window that is already running.
+#[allow(dead_code)]
+pub fn open_file(app: &AppHandle, path: String) {
+    if !PathBuf::from(&path).extension().is_some_and(|e| e.eq_ignore_ascii_case(EXTENSION)) {
+        return;
+    }
+    if let Some(pending) = app.try_state::<PendingImport>() {
+        if let Ok(mut slot) = pending.0.lock() {
+            *slot = Some(path.clone());
+        }
+    }
+    show_main_window(app);
+    let _ = app.emit(OPEN_FILE_EVENT, path);
+}
+
 fn read_file(path: &str) -> Result<String, CommandError> {
     std::fs::read_to_string(path).map_err(|e| CommandError::Error {
         message: format!("Could not read {path}: {e}"),

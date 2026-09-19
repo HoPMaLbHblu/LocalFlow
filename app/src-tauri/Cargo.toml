@@ -27,4 +27,5 @@ tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 chrono.workspace = true
+dirs.workspace = true
 sys-locale = "0.3"
