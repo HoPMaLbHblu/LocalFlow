@@ -5,6 +5,7 @@
 //! - `notify()` in scripts shows a native desktop notification.
 
 mod commands;
+mod ai;
 mod hotkeys;
 mod i18n;
 mod safety;
@@ -118,6 +119,7 @@ fn init(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let (flow, theme) = tauri::async_runtime::block_on(async {
         let flow = LocalFlow::open(config, Some(on_event)).await?;
         let theme = settings::apply_saved(&flow, &prefs).await?;
+        ai::load(&flow).await;
         flow.start().await?;
         Ok::<_, localflow_core::CoreError>((flow, theme))
     })?;
@@ -239,6 +241,11 @@ pub fn run() {
             safety::open_backups_folder,
             safety::startup_notice,
             safety::get_metrics,
+            ai::get_ai_settings,
+            ai::set_ai_settings,
+            ai::clear_ai_key,
+            ai::test_ai,
+            ai::ai_write_automation,
             windows::open_guide,
             windows::show_main,
         ])

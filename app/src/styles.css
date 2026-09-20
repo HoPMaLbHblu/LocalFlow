@@ -491,6 +491,11 @@ label input, label select { color: var(--text); font-size: .9rem; font-weight: n
 
 .brand-row { display: flex; align-items: center; justify-content: space-between; gap: .25rem; }
 .brand-row .brand { flex: 1; min-width: 0; }
+.ai-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin: 10px 0; }
+.ai-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; min-width: 0; }
+.ai-writer { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
+.ai-writer textarea { width: 100%; resize: vertical; font: inherit; }
+
 .system-card { margin: 16px 0; }
 .system-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .system-head h2 { margin: 0; }

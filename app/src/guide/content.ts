@@ -735,6 +735,27 @@ const API_DOCS: ApiDoc[] = [
     example: "local new_year = time.make({ year = 2027, month = 1, day = 1 })\nlog(\"Days left: \" .. math.floor((new_year - time.now()) / time.days(1)))",
   },
   {
+    name: "ai.ask",
+    signature: "ai.ask(question, options)",
+    summary: "Asks the AI (GigaChat) and waits for the answer. Needs a key in **Settings › AI**. `options` can hold `system` (instructions for how to answer), `model`, `temperature` (0 = precise, 1 = creative) and `max_tokens`. The text goes to Sber's servers.",
+    returns: "the answer as text",
+    example: "local summary = ai.ask(\"Summarize in 3 sentences:\\n\" .. fs.read(\"~/Documents/notes.txt\"))\nlog(summary)",
+  },
+  {
+    name: "ai.chat",
+    signature: "ai.chat(messages, options)",
+    summary: "A whole conversation: a list of `{ role = \"user\" | \"assistant\" | \"system\", content = \"...\" }`. Use it when the AI should remember earlier questions and answers.",
+    returns: "the next answer as text",
+    example: "local answer = ai.chat({\n    { role = \"system\", content = \"You answer in one word.\" },\n    { role = \"user\", content = \"Capital of France?\" },\n})\nlog(answer)",
+  },
+  {
+    name: "ai.available",
+    signature: "ai.available()",
+    summary: "True when a GigaChat key is saved in Settings, so a script can skip the AI part instead of failing.",
+    returns: "`true` or `false`",
+    example: "if not ai.available() then\n    log(\"No AI key yet, skipping the summary\")\n    return\nend",
+  },
+  {
     name: "ctx.input",
     signature: "ctx.input",
     summary: "Data from the automation that started this one: what was passed to `automations.call`, or what the previous automation returned for **Run after** triggers. `nil` otherwise.",

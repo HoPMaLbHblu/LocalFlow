@@ -187,6 +187,29 @@ Steps share the main automation's time limit and keep their own *Allow system co
 
 LocalFlow records CPU, memory, disk and battery use once a minute while it runs, keeps it for 30 days on your PC only, and shows it as a chart on the overview page.
 
+### AI (GigaChat)
+
+LocalFlow can use **GigaChat** by Sber, with your own key:
+
+1. Get an **authorization key** at [developers.sber.ru](https://developers.sber.ru/studio) (GigaChat API › your project › API settings).
+2. Paste it in **Settings › AI**, choose the account type (personal or business) and the model, and press **Test**.
+
+The key is kept in Windows Credential Manager (the Keychain on a Mac), never in LocalFlow's files, and scripts can use the AI but never read the key. Imported automations that use the AI are marked on the import screen.
+
+| Function | What it does |
+|---|---|
+| `ai.ask(question, { system, model, temperature, max_tokens })` | Asks GigaChat and returns the answer as text. |
+| `ai.chat({ { role = "user", content = "..." }, ... }, options)` | A whole conversation. |
+| `ai.available()` | `true` when a key is saved. |
+
+```lua
+local text = fs.read("~/Documents/meeting notes.txt")
+local summary = ai.ask("Summarize in 3 bullet points:\n" .. text, { system = "Answer in English." })
+fs.write("~/Documents/meeting summary.txt", summary)
+```
+
+**Write with AI**: in the editor, describe an automation in plain words and GigaChat writes the Lua code for you to review and test. The text you send to the AI goes to Sber's servers; LocalFlow's certificate for them (the Russian Trusted Root CA) is used only for GigaChat's own connection.
+
 ### Sharing automations
 
 Press **Export** on an automation to save it as a `.localflow` file (plain JSON with the name, code and triggers) and send it to anyone. To import one, use **📥 Import** in the sidebar, double-click the file, or drag it onto the LocalFlow window.

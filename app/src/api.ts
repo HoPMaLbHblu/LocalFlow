@@ -56,6 +56,15 @@ export function cleanTriggers(tr: ExtraTriggers): ExtraTriggers {
   return out;
 }
 
+/** Settings › AI. The key itself never reaches the window. */
+export interface AiSettings {
+  configured: boolean;
+  scope: string;
+  model: string;
+  scopes: string[];
+  models: string[];
+}
+
 /** One minute of system history; values are percentages. */
 export interface MetricSample {
   at: number;
@@ -274,6 +283,12 @@ export const api = {
   restoreVersion: (id: number, versionId: number) => invoke<Automation>("restore_version", { id, versionId }),
   listBackups: () => invoke<BackupInfo[]>("list_backups"),
   getMetrics: (minutes: number, points: number) => invoke<MetricSample[]>("get_metrics", { minutes, points }),
+  getAiSettings: () => invoke<AiSettings>("get_ai_settings"),
+  setAiSettings: (key: string | null, scope: string, model: string) => invoke<void>("set_ai_settings", { key, scope, model }),
+  clearAiKey: () => invoke<void>("clear_ai_key"),
+  testAi: (language: string) => invoke<string>("test_ai", { language }),
+  aiWriteAutomation: (description: string, language: string) =>
+    invoke<string>("ai_write_automation", { description, language }),
   backupNow: () => invoke<BackupInfo>("backup_now"),
   restoreBackup: (fileName: string) => invoke<void>("restore_backup", { fileName }),
   openBackupsFolder: () => invoke<void>("open_backups_folder"),
