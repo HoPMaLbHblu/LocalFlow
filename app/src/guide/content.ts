@@ -105,6 +105,13 @@ const API_DOCS: ApiDoc[] = [
     example: 'app.open("notepad")\napp.open("https://github.com")\napp.open("~/Documents")',
   },
   {
+    name: "app.close",
+    signature: "app.close(name)",
+    summary: "Closes every window of an app the polite way, like clicking ✕, so it can still ask you to save. Needs **Allow system control**. To force a program to stop, use `process.kill`.",
+    returns: "how many windows were closed",
+    example: "if app.running(\"Telegram\") then\n    app.close(\"Telegram\")\nend",
+  },
+  {
     name: "app.running",
     signature: "app.running(name)",
     summary: "Checks whether a program is running. Use the program's name, e.g. `\"Discord\"` or `\"chrome\"`; capital letters and `.exe` don't matter.",

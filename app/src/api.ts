@@ -288,7 +288,7 @@ export const api = {
   clearAiKey: () => invoke<void>("clear_ai_key"),
   testAi: (language: string) => invoke<string>("test_ai", { language }),
   aiWriteAutomation: (description: string, language: string) =>
-    invoke<string>("ai_write_automation", { description, language }),
+    invoke<{ code: string; warnings: string[]; needs_system_control: boolean }>("ai_write_automation", { description, language }),
   backupNow: () => invoke<BackupInfo>("backup_now"),
   restoreBackup: (fileName: string) => invoke<void>("restore_backup", { fileName }),
   openBackupsFolder: () => invoke<void>("open_backups_folder"),

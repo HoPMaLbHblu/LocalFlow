@@ -194,7 +194,7 @@ pub fn risks(shared: &SharedAutomation) -> Vec<Risk> {
     check(
         Risk::ControlsPower,
         &[
-            "process.kill", "window.close", "system.lock", "system.sleep", "system.shutdown", "system.restart",
+            "app.close", "process.kill", "window.close", "system.lock", "system.sleep", "system.shutdown", "system.restart",
             "system.wake_at", "system.set_wallpaper", "system.brightness",
         ],
     );

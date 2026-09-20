@@ -256,13 +256,122 @@ json.encode(value), json.decode(text), http.get(url) -> { ok, status, body }, ht
 store.get(key, default), store.set(key, value)  -- values kept between runs
 clipboard.get(), clipboard.set(text), sound.beep()
 ai.ask(question, { system = "..." }) -> text   -- GigaChat
-Need "Allow system control": shell.run(cmd), process.kill(name), window.find/focus/close/move, keyboard.press("ctrl+s"), keyboard.type(text), mouse.click(x, y), system.lock(), system.sleep(), system.shutdown(delay), system.mute(), system.volume_up(n)
+Need "Allow system control": app.close(name) (closes an app politely), shell.run(cmd), process.kill(name), window.find/focus/close/move, keyboard.press("ctrl+s"), keyboard.type(text), mouse.click(x, y), system.lock(), system.sleep(), system.shutdown(delay), system.mute(), system.volume_up(n)
 Helpers: local strings = require("lf.strings"), require("lf.tables"), require("lf.paths"), require("lf.dates").
 ctx.trigger tells how the run started; ctx.file is the new file for folder-watch runs.
-Prefer safe actions (move or copy instead of delete). Use log() so the user sees what happened."#;
+Prefer safe actions (move or copy instead of delete). Use log() so the user sees what happened.
 
-/// Turn a description into a Lua automation, checking that the code compiles.
-pub fn write_automation(description: &str, language: &str, timeout: Duration) -> Result<String, String> {
+Common mistakes to avoid:
+- Only call functions from the list below. There is no close(), exit(), sleep(), print_r(), os.*, io.*, file:read(). Use wait(seconds), not sleep().
+- Join text with .. (not +), and wrap numbers with tostring() when joining if unsure.
+- Loop over lists with: for _, item in ipairs(list) do ... end. Lists start at 1. #list is the length.
+- fs.list returns full paths; use fs.basename(path) for the file name.
+- Every if/for/function needs its own end. Strings use "double quotes".
+- notify(text) shows a desktop notification; log(text) writes to the log.
+- Folders on disk have English names in every language: ~/Downloads, ~/Documents, ~/Desktop, ~/Pictures, ~/Music, ~/Videos.
+- Times are numbers (seconds). fs.modified(path) and time.now() are timestamps; time.today() is TEXT like "2026-09-29", never do maths with it.
+  Age of a file in days: (time.now() - fs.modified(path)) / time.days(1). Older than a week: time.now() - fs.modified(path) > time.days(7).
+- Count only what you actually did (e.g. a moved counter), not the whole list.
+- Don't add fields like trigger, schedule or interval to automation { }: schedules and triggers are chosen in the editor, not in code.
+- Functions marked "Need Allow system control" only work when the user switches that on; mention it in a comment at the top when you use them."#;
+
+/// The full instructions for writing automations: the rules above, the exact list of
+/// functions from the real sandbox, and two real templates as examples.
+pub fn writer_prompt() -> String {
+    let examples: Vec<&str> = ["organize-pdfs", "low-disk-space"]
+        .iter()
+        .filter_map(|slug| crate::lua::find_example(slug))
+        .map(|e| e.code)
+        .collect();
+    format!(
+        "{WRITER_PROMPT}
+
+The complete list of functions that exist (nothing else does):
+{}
+
+Examples of good automations:
+
+{}",
+        crate::lua::catalog::catalog().summary(),
+        examples.join("
+
+")
+    )
+}
+
+/// Code written by the AI, and anything the checks still found wrong with it.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct WrittenCode {
+    pub code: String,
+    /// Syntax errors or calls to functions that don't exist (empty when all looks right).
+    pub warnings: Vec<String>,
+    /// The code uses functions that need "Allow system control".
+    pub needs_system_control: bool,
+}
+
+/// Functions that only work with "Allow system control" switched on.
+const SYSTEM_CONTROL: &[&str] = &[
+    "app.close", "shell.run", "shell.powershell", "process.kill", "window.focus", "window.minimize", "window.maximize", "window.restore",
+    "window.close", "window.move", "keyboard.press", "keyboard.type", "mouse.move", "mouse.click", "system.lock",
+    "system.sleep", "system.shutdown", "system.restart", "system.cancel_shutdown", "system.volume_up", "system.volume_down",
+    "system.mute", "system.brightness", "system.set_wallpaper", "system.wake_at", "system.cancel_wake",
+];
+
+pub fn needs_system_control(code: &str) -> bool {
+    let code: String = code.lines().map(|l| l.split("--").next().unwrap_or("")).collect::<Vec<_>>().join("
+");
+    SYSTEM_CONTROL.iter().any(|f| code.contains(&format!("{f}(")))
+}
+
+fn written(code: String, warnings: Vec<String>) -> WrittenCode {
+    let needs_system_control = needs_system_control(&code);
+    WrittenCode { code, warnings, needs_system_control }
+}
+
+/// Settings the AI likes to invent inside `automation { }`; LocalFlow ignores them.
+const MADE_UP_FIELDS: &[&str] = &["schedule", "trigger", "triggers", "interval", "cron", "every", "when", "enabled"];
+
+/// Problems in generated code: syntax errors first, then invented functions and fields.
+pub fn check_code(code: &str) -> Vec<String> {
+    if let Err(problem) = crate::lua::engine::validate(code) {
+        return vec![problem];
+    }
+    let mut problems = crate::lua::catalog::unknown_calls(code);
+    for line in code.lines() {
+        let line = line.trim();
+        for field in MADE_UP_FIELDS {
+            let assigned = line.strip_prefix(field).is_some_and(|rest| rest.trim_start().starts_with('=') && !rest.trim_start().starts_with("=="));
+            if assigned && !line.starts_with("local") {
+                problems.push(format!(
+                    "automation {{ }} has a \"{field} = …\" field, which LocalFlow ignores: remove it (schedules and triggers are chosen in the editor)"
+                ));
+            }
+        }
+    }
+    problems
+}
+
+/// Folder names the AI translates, and the names they really have on disk.
+const FOLDER_NAMES: &[(&str, &str)] = &[
+    ("Загрузки", "Downloads"), ("Документы", "Documents"), ("Рабочий стол", "Desktop"), ("Изображения", "Pictures"),
+    ("Картинки", "Pictures"), ("Музыка", "Music"), ("Видео", "Videos"), ("Dokumente", "Documents"), ("Bilder", "Pictures"),
+    ("Schreibtisch", "Desktop"), ("Musik", "Music"), ("Videos", "Videos"),
+];
+
+/// "~/Загрузки" → "~/Downloads": on disk these folders have English names in every language.
+pub fn fix_folder_names(code: &str) -> String {
+    let mut code = code.to_string();
+    for (local, real) in FOLDER_NAMES {
+        for prefix in ["~/", "~\\\\"] {
+            code = code.replace(&format!("{prefix}{local}"), &format!("~/{real}"));
+        }
+    }
+    code
+}
+
+/// Turn a description into a Lua automation. The code is checked for syntax errors
+/// and made-up functions; the AI gets up to two more tries with the exact problems.
+pub fn write_automation(description: &str, language: &str, timeout: Duration) -> Result<WrittenCode, String> {
     let description = description.trim();
     if description.is_empty() {
         return Err("describe what the automation should do".into());
@@ -273,25 +382,39 @@ pub fn write_automation(description: &str, language: &str, timeout: Duration) ->
         _ => "English",
     };
     let mut messages = vec![
-        ("system".to_string(), WRITER_PROMPT.to_string()),
+        ("system".to_string(), writer_prompt()),
         ("user".to_string(), format!("Write comments and log messages in {language}.\n\nThe automation should: {description}")),
     ];
     let options = AskOptions { temperature: Some(0.2), ..Default::default() };
     let started = Instant::now();
-    let mut code = String::new();
-    for _ in 0..2 {
-        code = strip_fences(&chat(&messages, &options, timeout.saturating_sub(started.elapsed()))?);
-        match crate::lua::engine::validate(&code) {
-            Ok(()) => return Ok(code),
-            // One more try, telling the AI what was wrong.
-            Err(problem) => {
-                messages.push(("assistant".to_string(), code.clone()));
-                messages.push(("user".to_string(), format!("That code has an error: {problem}. Send the corrected code only.")));
-            }
+    let mut best: Option<WrittenCode> = None;
+    for _ in 0..3 {
+        let code = fix_folder_names(&strip_fences(&chat(&messages, &options, timeout.saturating_sub(started.elapsed()))?));
+        let warnings = check_code(&code);
+        if warnings.is_empty() {
+            return Ok(written(code, warnings));
         }
+        // Keep the attempt with the fewest problems.
+        if best.as_ref().is_none_or(|b| warnings.len() < b.warnings.len()) {
+            best = Some(written(code.clone(), warnings.clone()));
+        }
+        if started.elapsed() >= timeout {
+            break;
+        }
+        messages.push(("assistant".to_string(), code));
+        messages.push((
+            "user".to_string(),
+            format!(
+                "That code has problems:
+- {}
+Use only functions from the list. Send the corrected code only.",
+                warnings.join("
+- ")
+            ),
+        ));
     }
-    // Still broken: hand it over anyway; the editor shows the error.
-    Ok(code)
+    // Still not right: hand over the best try; the editor shows what's wrong.
+    Ok(best.expect("at least one attempt"))
 }
 
 /// The code inside ```lua ... ``` fences, if the AI added them anyway.
@@ -387,6 +510,33 @@ mod tests {
         assert_eq!(strip_fences("```lua\nlog(1)\n```"), "log(1)\n");
         assert_eq!(strip_fences("Here you go:\n```\nlog(2)\n```\nEnjoy"), "log(2)\n");
         assert_eq!(strip_fences("log(3)"), "log(3)\n");
+    }
+
+    #[test]
+    fn translated_folders_and_made_up_fields_are_handled() {
+        assert_eq!(fix_folder_names(r#"fs.list("~/Загрузки", "*.pdf") fs.move(f, "~/Документы/Old")"#), r#"fs.list("~/Downloads", "*.pdf") fs.move(f, "~/Documents/Old")"#);
+        let problems = check_code("automation {
+  name = \"x\",
+  run = function(ctx) local every = 5 log(every) end,
+  schedule = \"0 * * * *\"
+}");
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert!(problems[0].contains("schedule"));
+    }
+
+    #[test]
+    fn system_control_is_noticed() {
+        assert!(needs_system_control("window.close(w)"));
+        assert!(!needs_system_control("-- window.close(w)
+log(1)"));
+        assert!(!needs_system_control("window.find(\"x\")"));
+    }
+
+    #[test]
+    fn the_writer_prompt_lists_real_functions_and_examples() {
+        let prompt = writer_prompt();
+        assert!(prompt.contains("fs: ") && prompt.contains("notify") && prompt.contains("Organize PDF files"));
+        assert!(!prompt.contains("close,") || prompt.contains("window: "), "close only appears as window.close");
     }
 
     #[test]
