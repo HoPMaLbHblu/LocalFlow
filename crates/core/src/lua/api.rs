@@ -65,6 +65,7 @@ pub fn register(
     let globals = lua.globals();
     super::system::register(lua, policy.clone(), deadline)?;
     super::control::register(lua, allow_system, policy.clone(), deadline)?;
+    super::desktop::register(lua, allow_system, policy.clone())?;
     super::data::register(lua, store, deadline)?;
 
     let sink = logs.clone();

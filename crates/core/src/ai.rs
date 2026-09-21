@@ -358,7 +358,7 @@ json.encode(value), json.decode(text), http.get(url) -> { ok, status, body }, ht
 store.get(key, default), store.set(key, value)  -- values kept between runs
 clipboard.get(), clipboard.set(text), sound.beep()
 ai.ask(question, { system = "..." }) -> text   -- GigaChat
-Need "Allow system control": app.close(name) (closes an app politely), shell.run(cmd), process.kill(name), window.find/focus/close/move, keyboard.press("ctrl+s"), keyboard.type(text), mouse.click(x, y), system.lock(), system.sleep(), system.shutdown(delay), system.mute(), system.volume_up(n)
+Need "Allow system control": all the set_ functions of desktop, power, explorer, system.set_volume/set_mute and mouse.set_speed; app.close(name) (closes an app politely), shell.run(cmd), process.kill(name), window.find/focus/close/move, keyboard.press("ctrl+s"), keyboard.type(text), mouse.click(x, y), system.lock(), system.sleep(), system.shutdown(delay), system.mute(), system.volume_up(n)
 Helpers: local strings = require("lf.strings"), require("lf.tables"), require("lf.paths"), require("lf.dates").
 ctx.trigger tells how the run started; ctx.file is the new file for folder-watch runs.
 Prefer safe actions (move or copy instead of delete). Use log() so the user sees what happened.
@@ -415,6 +415,7 @@ pub struct WrittenCode {
 
 /// Functions that only work with "Allow system control" switched on.
 const SYSTEM_CONTROL: &[&str] = &[
+    "desktop.set_dark_mode", "desktop.set_transparency", "desktop.set_accent_color", "desktop.set_wallpaper", "system.set_volume", "system.set_mute", "power.set_plan", "power.set_screen_off", "power.set_sleep", "mouse.set_speed", "explorer.set_hidden_files", "explorer.set_file_extensions",
     "app.close", "shell.run", "shell.powershell", "process.kill", "window.focus", "window.minimize", "window.maximize", "window.restore",
     "window.close", "window.move", "keyboard.press", "keyboard.type", "mouse.move", "mouse.click", "system.lock",
     "system.sleep", "system.shutdown", "system.restart", "system.cancel_shutdown", "system.volume_up", "system.volume_down",

@@ -3,6 +3,7 @@ pub mod catalog;
 pub mod chain;
 pub mod control;
 pub mod data;
+pub mod desktop;
 pub mod files;
 pub mod lualib;
 pub mod mac;
