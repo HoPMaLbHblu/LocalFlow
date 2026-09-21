@@ -3,7 +3,7 @@
 //! Reading is always allowed; changing needs "Allow system control".
 //!
 //! ```lua
-//! desktop.dark_mode()                 desktop.set_dark_mode(true)
+//! desktop.dark_mode() -> apps, taskbar   desktop.set_dark_mode(true, "apps" | "system" | nil for both)
 //! desktop.transparency()              desktop.set_transparency(false)
 //! desktop.accent_color()  -> "#0078d4"   desktop.set_accent_color("#e81123")
 //! desktop.wallpaper()     -> path        desktop.set_wallpaper(path, "fill")   -- fill, fit, stretch, center, tile, span
@@ -272,29 +272,48 @@ fn unsupported<T>() -> Result<T, String> {
 
 // Each setting per operating system. Windows reads and writes the same places the Settings app uses.
 
-fn dark_mode() -> Result<bool, String> {
+/// Windows keeps two separate settings: apps, and the "system" (taskbar, Start menu).
+/// Returns (apps dark, system dark).
+fn dark_mode() -> Result<(bool, bool), String> {
     #[cfg(windows)]
-    return Ok(win::read_dword(win::PERSONALIZE, "AppsUseLightTheme") == Some(0));
+    return Ok((
+        win::read_dword(win::PERSONALIZE, "AppsUseLightTheme") == Some(0),
+        win::read_dword(win::PERSONALIZE, "SystemUsesLightTheme") == Some(0),
+    ));
     #[cfg(target_os = "macos")]
-    return mac::dark_mode();
+    return mac::dark_mode().map(|d| (d, d));
     #[allow(unreachable_code)]
     unsupported()
 }
 
-fn set_dark_mode(on: bool) -> Result<(), String> {
+/// `part`: "apps", "system" (taskbar and Start menu), or `None` for both.
+fn set_dark_mode(on: bool, part: Option<&str>) -> Result<(), String> {
+    let (apps, system) = match part {
+        None | Some("both") => (true, true),
+        Some("apps") => (true, false),
+        Some("system") | Some("taskbar") => (false, true),
+        Some(other) => return Err(format!("unknown \"{other}\": use \"apps\", \"system\" or leave it out for both")),
+    };
     #[cfg(windows)]
     {
         let light = u32::from(!on);
-        win::write_dword(win::PERSONALIZE, "AppsUseLightTheme", light)?;
-        win::write_dword(win::PERSONALIZE, "SystemUsesLightTheme", light)?;
+        if apps {
+            win::write_dword(win::PERSONALIZE, "AppsUseLightTheme", light)?;
+        }
+        if system {
+            win::write_dword(win::PERSONALIZE, "SystemUsesLightTheme", light)?;
+        }
         win::broadcast("ImmersiveColorSet");
         return Ok(());
     }
     #[cfg(target_os = "macos")]
-    return mac::set_dark_mode(on);
+    {
+        let _ = (apps, system);
+        return mac::set_dark_mode(on);
+    }
     #[allow(unreachable_code)]
     {
-        let _ = on;
+        let _ = (on, apps, system);
         unsupported()
     }
 }
@@ -495,15 +514,18 @@ pub fn register(lua: &Lua, allowed: bool, policy: Arc<PathPolicy>) -> mlua::Resu
     let globals = lua.globals();
 
     let desktop = lua.create_table()?;
-    getter(lua, &desktop, "dark_mode", "desktop.dark_mode", dark_mode)?;
+    desktop.set(
+        "dark_mode",
+        lua.create_function(|_, ()| dark_mode().map_err(|e| err("desktop.dark_mode", e)))?,
+    )?;
     getter(lua, &desktop, "transparency", "desktop.transparency", transparency)?;
     getter(lua, &desktop, "accent_color", "desktop.accent_color", accent_color)?;
     getter(lua, &desktop, "wallpaper", "desktop.wallpaper", wallpaper)?;
     desktop.set(
         "set_dark_mode",
-        lua.create_function(move |_, on: bool| {
+        lua.create_function(move |_, (on, part): (bool, Option<String>)| {
             require(allowed, "desktop.set_dark_mode")?;
-            set_dark_mode(on).map_err(|e| err("desktop.set_dark_mode", e))
+            set_dark_mode(on, part.as_deref()).map_err(|e| err("desktop.set_dark_mode", e))
         })?,
     )?;
     desktop.set(

@@ -771,10 +771,10 @@ const API_DOCS: ApiDoc[] = [
   },
   {
     name: "desktop.set_dark_mode",
-    signature: "desktop.dark_mode() / desktop.set_dark_mode(on)",
-    summary: "Reads or switches Windows between dark and light mode (apps and the taskbar). Changing needs **Allow system control**.",
-    returns: "`true` when dark",
-    example: "if time.date().hour >= 20 then\n    desktop.set_dark_mode(true)\nend",
+    signature: "desktop.dark_mode() / desktop.set_dark_mode(on, part)",
+    summary: "Windows has two dark-mode settings: apps, and the taskbar and Start menu (\"system\"). `desktop.dark_mode()` returns both (`apps, taskbar`). `desktop.set_dark_mode(true)` changes both; add `\"apps\"` or `\"system\"` to change only one. Changing needs **Allow system control**.",
+    returns: "two values: apps dark, taskbar dark",
+    example: "local apps, taskbar = desktop.dark_mode()\nif time.date().hour >= 20 and not apps then\n    desktop.set_dark_mode(true, \"apps\")\nend",
   },
   {
     name: "desktop.set_transparency",
