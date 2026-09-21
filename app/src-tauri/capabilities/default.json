@@ -1,10 +1,11 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Permissions for LocalFlow's windows (the app and the guide). Everything else goes through LocalFlow's own commands.",
+  "description": "Permissions for LocalFlow's windows (the app, the guide and the AI chat). Everything else goes through LocalFlow's own commands.",
   "windows": [
     "main",
-    "guide"
+    "guide",
+    "aichat"
   ],
   "permissions": [
     "core:default",

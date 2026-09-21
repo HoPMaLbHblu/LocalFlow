@@ -4,8 +4,9 @@ import App, { type View } from "./App";
 import { api } from "./api";
 import { cachedLanguageSetting, setLanguage } from "./i18n";
 import { applyTheme, cachedTheme } from "./theme";
-import { inDesktopApp, isGuideWindow, onPrefsChanged } from "./windowing";
+import { inDesktopApp, isAiChatWindow, isGuideWindow, onPrefsChanged } from "./windowing";
 import GuideWindow from "./components/GuideWindow";
+import AiChatWindow from "./components/AiChatWindow";
 import "./styles.css";
 
 /**
@@ -28,7 +29,7 @@ function Root() {
         .catch(() => {});
     load();
     // The guide window follows theme and language changes made in the app window.
-    if (!inDesktopApp() || !isGuideWindow()) return;
+    if (!inDesktopApp() || !(isGuideWindow() || isAiChatWindow())) return;
     const unlisten = onPrefsChanged(load);
     return () => {
       unlisten.then((f) => f());
@@ -36,6 +37,7 @@ function Root() {
   }, []);
 
   if (isGuideWindow()) return <GuideWindow key={lang} />;
+  if (isAiChatWindow()) return <AiChatWindow key={lang} />;
 
   const changeLanguage = (setting: string) => {
     setInitialView({ kind: "settings" });

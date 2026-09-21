@@ -18,12 +18,20 @@ interface Props {
   chatId: string;
   /** The code in the editor now. */
   currentCode: string;
+  /** Shown in the header: which automation the chat is about. */
+  title?: string;
   /** Put the AI's code into the editor. */
   onCode: (code: string) => void;
   onClose: () => void;
 }
 
 const MAX_SAVED = 60;
+
+/** Code inside ``` fences in an answer, if there is any. */
+function codeIn(text: string): string | null {
+  const match = /```(?:lua)?\s*\n([\s\S]*?)```/.exec(text);
+  return match ? match[1].trimEnd() + "\n" : null;
+}
 
 function storageKey(chatId: string) {
   return `localflow.aichat.${chatId}`;
@@ -47,7 +55,7 @@ function saveMessages(chatId: string, messages: Message[]) {
 }
 
 /** The AI chat docked next to the editor. It remembers the whole dialogue for each automation. */
-export default function AiChat({ chatId, currentCode, onCode, onClose }: Props) {
+export default function AiChat({ chatId, currentCode, title, onCode, onClose }: Props) {
   const [messages, setMessages] = useState<Message[]>(() => loadMessages(chatId));
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -107,7 +115,7 @@ export default function AiChat({ chatId, currentCode, onCode, onClose }: Props) 
   return (
     <aside className="ai-chat" aria-label={t("ai.chat.title")}>
       <div className="help-panel-header">
-        <strong className="small">{t("ai.chat.title")}</strong>
+        <strong className="small ai-chat-heading">{title ? `${t("ai.chat.title")}: ${title}` : t("ai.chat.title")}</strong>
         {messages.length > 0 && (
           <button className="link small push-right" disabled={busy} onClick={() => setMessages([])}>
             {t("ai.chat.new")}
@@ -130,6 +138,11 @@ export default function AiChat({ chatId, currentCode, onCode, onClose }: Props) 
                   <li key={w}>{w}</li>
                 ))}
               </ul>
+            )}
+            {!m.code && m.from === "ai" && !m.error && codeIn(m.text) && (
+              <button className="link small" onClick={() => onCode(codeIn(m.text)!)}>
+                {t("ai.chat.putInEditor")}
+              </button>
             )}
             {m.code && (
               <details className="ai-msg-code">
