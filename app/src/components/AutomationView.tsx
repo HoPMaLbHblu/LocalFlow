@@ -20,7 +20,7 @@ import LogsTab from "./LogsTab";
 import VersionsTab from "./VersionsTab";
 import MoreTriggers from "./MoreTriggers";
 import { shortcut } from "../i18n/mac";
-import AiWriter from "./AiWriter";
+import AiChat from "./AiChat";
 import HelpPanel from "./HelpPanel";
 import type { EditorView } from "@codemirror/view";
 import { save as saveFileDialog } from "@tauri-apps/plugin-dialog";
@@ -498,17 +498,17 @@ export default function AutomationView({ id, template, setDirty, onSaved, onDele
                 onReady={(view) => (editorView.current = view)}
               />
             </div>
-            {helpOpen && <HelpPanel onInsert={insertSnippet} onOpenGuide={onOpenGuide} onClose={toggleHelp} />}
+            {aiOpen ? (
+              <AiChat
+                chatId={id === null ? "draft" : String(id)}
+                currentCode={form.lua_code}
+                onCode={(code) => update({ lua_code: code })}
+                onClose={() => setAiOpen(false)}
+              />
+            ) : (
+              helpOpen && <HelpPanel onInsert={insertSnippet} onOpenGuide={onOpenGuide} onClose={toggleHelp} />
+            )}
           </div>
-
-          {aiOpen && (
-            <AiWriter
-              onClose={() => setAiOpen(false)}
-              onCode={(code) => {
-                if (!form.lua_code.trim() || window.confirm(t("ai.replaceConfirm"))) update({ lua_code: code });
-              }}
-            />
-          )}
 
           <div className="editor-toolbar">
             <button className="secondary" onClick={testRun} disabled={busy !== null} title={shortcut("Enter")}>
@@ -520,7 +520,7 @@ export default function AutomationView({ id, template, setDirty, onSaved, onDele
                 {t("ai.button")}
               </button>
             )}
-            {!helpOpen && (
+            {!helpOpen && !aiOpen && (
               <button className="link small" onClick={toggleHelp}>
                 {t("view.showHelp")}
               </button>

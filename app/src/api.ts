@@ -63,6 +63,7 @@ export interface AiSettings {
   model: string;
   scopes: string[];
   models: string[];
+  cache_entries: number;
 }
 
 /** One minute of system history; values are percentages. */
@@ -287,8 +288,19 @@ export const api = {
   setAiSettings: (key: string | null, scope: string, model: string) => invoke<void>("set_ai_settings", { key, scope, model }),
   clearAiKey: () => invoke<void>("clear_ai_key"),
   testAi: (language: string) => invoke<string>("test_ai", { language }),
-  aiWriteAutomation: (description: string, language: string) =>
-    invoke<{ code: string; warnings: string[]; needs_system_control: boolean }>("ai_write_automation", { description, language }),
+  aiWriteAutomation: (
+    description: string,
+    language: string,
+    currentCode: string | null,
+    history: { request: string; reply: string }[] = [],
+  ) =>
+    invoke<{ code: string; warnings: string[]; needs_system_control: boolean; answer: string | null }>("ai_write_automation", {
+      description,
+      language,
+      currentCode,
+      history,
+    }),
+  clearAiCache: () => invoke<number>("clear_ai_cache"),
   backupNow: () => invoke<BackupInfo>("backup_now"),
   restoreBackup: (fileName: string) => invoke<void>("restore_backup", { fileName }),
   openBackupsFolder: () => invoke<void>("open_backups_folder"),

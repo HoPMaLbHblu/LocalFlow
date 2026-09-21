@@ -201,6 +201,8 @@ The key is kept in Windows Credential Manager (the Keychain on a Mac), never in 
 | `ai.ask(question, { system, model, temperature, max_tokens })` | Asks GigaChat and returns the answer as text. |
 | `ai.chat({ { role = "user", content = "..." }, ... }, options)` | A whole conversation. |
 | `ai.available()` | `true` when a key is saved. |
+| `ai.ask(question, { cache_hours = 24 })` | Reuses the saved answer to the exact same question (saves tokens). **Settings › AI** shows how many answers are saved and can clear them. |
+| `ai.conversation(name)` | A chat that remembers earlier questions between runs: `chat:ask(text)`, `chat:history()`, `chat:forget()`. |
 
 ```lua
 local text = fs.read("~/Documents/meeting notes.txt")
@@ -208,7 +210,7 @@ local summary = ai.ask("Summarize in 3 bullet points:\n" .. text, { system = "An
 fs.write("~/Documents/meeting summary.txt", summary)
 ```
 
-**Write with AI**: in the editor, describe an automation in plain words and GigaChat writes the Lua code for you to review and test. The text you send to the AI goes to Sber's servers; LocalFlow's certificate for them (the Russian Trusted Root CA) is used only for GigaChat's own connection.
+**Write with AI**: in the editor, describe an automation in plain words and GigaChat writes the Lua code for you to review and test. With **Change the current code** ticked, it edits what's already in the editor ("also send a notification at the end") instead of starting over. LocalFlow gives GigaChat the exact list of functions that exist and checks its code for syntax errors and made-up functions, giving it up to three tries before showing you what's still wrong. The text you send to the AI goes to Sber's servers; LocalFlow's certificate for them (the Russian Trusted Root CA) is used only for GigaChat's own connection.
 
 ### Sharing automations
 

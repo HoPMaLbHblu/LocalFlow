@@ -744,7 +744,7 @@ const API_DOCS: ApiDoc[] = [
   {
     name: "ai.ask",
     signature: "ai.ask(question, options)",
-    summary: "Asks the AI (GigaChat) and waits for the answer. Needs a key in **Settings › AI**. `options` can hold `system` (instructions for how to answer), `model`, `temperature` (0 = precise, 1 = creative) and `max_tokens`. The text goes to Sber's servers.",
+    summary: "Asks the AI (GigaChat) and waits for the answer. Needs a key in **Settings › AI**. `options` can hold `system` (instructions for how to answer), `model`, `temperature` (0 = precise, 1 = creative), `max_tokens`, and `cache_hours = 24` to reuse the answer to the exact same question instead of asking again. The text goes to Sber's servers.",
     returns: "the answer as text",
     example: "local summary = ai.ask(\"Summarize in 3 sentences:\\n\" .. fs.read(\"~/Documents/notes.txt\"))\nlog(summary)",
   },
@@ -754,6 +754,13 @@ const API_DOCS: ApiDoc[] = [
     summary: "A whole conversation: a list of `{ role = \"user\" | \"assistant\" | \"system\", content = \"...\" }`. Use it when the AI should remember earlier questions and answers.",
     returns: "the next answer as text",
     example: "local answer = ai.chat({\n    { role = \"system\", content = \"You answer in one word.\" },\n    { role = \"user\", content = \"Capital of France?\" },\n})\nlog(answer)",
+  },
+  {
+    name: "ai.conversation",
+    signature: "ai.conversation(name, options)",
+    summary: "A chat that remembers earlier questions and answers between runs of this automation (the last 20 messages, or `keep = n`). Use `chat:ask(text)`, `chat:history()` and `chat:forget()`. Test runs start with an empty memory.",
+    returns: "a chat object",
+    example: "local chat = ai.conversation(\"journal\", { system = \"You are my diary helper.\" })\nlog(chat:ask(\"What did I plan yesterday?\"))",
   },
   {
     name: "ai.available",
