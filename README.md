@@ -335,6 +335,44 @@ The page opens once per launch of the game (identified by the game's process and
 - Suggestions support your decisions; they don't promise wins. Each reason is labelled *Data* (statistics, with source and age) or *Rule of thumb*.
 - The post-game review needs a public match history. OpenDota may take a few minutes to list a finished match; the template waits about a minute (within the script's time limit) and says when the newest match is older.
 
+## Voice control
+
+Speak to LocalFlow to start and stop automations, ask what is running, or change a few safe settings. It is **off by default** and does nothing until you finish the setup.
+
+**Setup** (Settings › Voice control, or *Set up voice control* in the sidebar):
+
+1. Read the disclosure and tick the consent box.
+2. Choose the recognition language (English, Russian or German; *Automatic* follows the app language).
+3. Download the speech model for that language (about 120-150 MB, one time; recognition then works offline).
+4. Choose a microphone and press **Test microphone**. This opens the microphone for about 3 seconds because you pressed the button; nothing is recorded.
+5. Choose the listening mode and whether replies are read aloud.
+6. Finish. Voice control is switched on.
+
+**Modes.**
+
+- *Push to talk* (default): hold the push-to-talk key (default `Ctrl+Alt+Space`, changeable in the card; use the Cmd/Option keys on a Mac) or the on-screen **Hold to talk** button while you speak. The microphone is opened only while you hold it, plus about 0.3 seconds, and closed otherwise.
+- *Always on* (opt-in): LocalFlow listens continuously and reacts only after the **wake phrase** (default "hey localflow"). The microphone is in use the whole time voice control is on, so a clear warning is shown before you choose it.
+
+**What you can say.** For example `run <automation name>`, `stop`, `stop all`, `what is running`, `what can I say`, and yes or no to a question (also Russian and German equivalents). **Settings › Voice control › What can I say?** lists the exact phrases for your automations, and you can add your own spoken names ("backup" for "Zip backup"). **Try a phrase** lets you type a sentence and see the reply without a microphone. The sidebar status pill shows the state (with an icon and text), a push-to-talk button, mute, a stop button that turns voice off and releases the microphone, the automations running now with a Stop button each, and a Yes/No bar for confirmations.
+
+**Safety rules.**
+
+- Voice can only run a named automation, stop, list, change a short whitelist of settings (theme, language, notifications, update check, Dota live helper, autostart) and answer yes or no. It never runs recognised text as a command, and it cannot create, edit or delete automations or touch secrets, folders, backups or system security.
+- Automations with *Allow system control* start by voice only after you switch on *May start automations that control the PC*, and LocalFlow always asks first. In always-on mode that question can only be answered with the on-screen Yes and No buttons. *May change app settings* is off by default.
+- Unclear or ambiguous names are never guessed. Every command that was heard also shows a desktop notification.
+
+**Privacy.** Audio is processed on this PC and is never stored or sent anywhere; only the recognised text is shown in the app, in memory. The only download is the speech model, once, over HTTPS from the model publisher's public download server; nothing about you is sent with it. The models and their licences:
+
+| Language | Model | Licence |
+|---|---|---|
+| English | Kroko community model | CC-BY-SA 4.0 (attribution required; share-alike) |
+| German | Kroko community model | CC-BY-SA 4.0 (attribution required; share-alike) |
+| Russian | Open-source Russian model | Apache-2.0 |
+
+The Kroko models are by the Kroko community; if you redistribute them, keep this credit and the same licence. The models are downloaded on demand, not bundled in LocalFlow.
+
+**Limits.** Recognition is not perfect (noise, a poor microphone or a strong accent lower accuracy; push to talk is more reliable than always on). Automations are matched by name. The automated tests use typed text and recorded audio; **real microphone behaviour and macOS have not been verified by the automated tests.** Windows blocks the microphone unless *Settings > Privacy & security > Microphone > Let desktop apps access your microphone* is on (macOS: *System Settings > Privacy & Security > Microphone*).
+
 ## Your data is safe
 
 - **Backups.** LocalFlow backs up all automations, history, logs and settings every day, before every update, before permanently deleting anything, and before restoring an older backup. **Settings › Backups** lists them and can restore any of them. Only daily backups are ever cleaned up (the newest 30 are kept).
@@ -353,6 +391,7 @@ The page opens once per launch of the game (identified by the game's process and
 - **Limits.** Scripts are stopped after their time limit (30 seconds by default, adjustable in Settings) and may use at most 64 MB of memory.
 - **Test runs are real.** A test run doesn't save the automation or its history, but file operations really happen.
 - **Local only.** The desktop app opens no network ports, except `127.0.0.1:3417` (this PC only) while the Dota 2 companion's Game State Integration is installed. The web server listens on `127.0.0.1` unless you explicitly allow otherwise.
+- **Microphone.** The microphone is used only while voice control is on (push to talk: only while you hold the key). Audio is processed on this PC and never stored or sent; see Voice control above.
 - **Update check.** Once a day the desktop app asks GitHub's public API whether a newer LocalFlow has been released, and if so shows a notification (once per version) and a banner with a **Download** button. No data about you or your automations is sent. Switch it off in **Settings › Tell me about new versions**.
 
 ## Web server

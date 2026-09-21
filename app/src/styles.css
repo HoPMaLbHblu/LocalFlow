@@ -669,3 +669,82 @@ section.card label.check.nested { margin-left: 1.6rem; }
 .banner.info { background: var(--accent-soft); color: var(--text); }
 .update-banner { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
 .update-banner span { flex: 1; min-width: 200px; }
+
+/* ---- Voice control (card, setup, sidebar pill) -------------------------------------------- */
+.banner.warn { background: var(--warn-soft); color: var(--warn); }
+.voice-inline-banner { margin: .6rem 0 !important; }
+.voice-status-line { display: flex; align-items: center; gap: .45rem; margin: .5rem 0; }
+.voice-enable { margin-top: .75rem; align-items: flex-start; }
+.voice-field-error { color: var(--bad); }
+.voice-ok { color: var(--ok); font-weight: 600; }
+.voice-bullets { margin: .4rem 0 .6rem; padding-left: 1.2rem; }
+.voice-bullets li { margin: .2rem 0; }
+.voice-first-run, .voice-setup { margin: .75rem 0; padding: .9rem 1rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); }
+.voice-setup-head { display: flex; justify-content: space-between; gap: .5rem; flex-wrap: wrap; align-items: baseline; }
+.voice-steps { display: flex; gap: 4px; list-style: none; padding: 0; margin: .5rem 0 .9rem; }
+.voice-steps li { flex: 1; height: 5px; border-radius: 3px; background: var(--border); }
+.voice-steps li.done { background: var(--ok); }
+.voice-steps li.current { background: var(--accent); }
+.voice-nav { margin-top: 1rem; }
+.voice-mic-row { display: flex; gap: .5rem; align-items: flex-end; flex-wrap: wrap; }
+.voice-mic-row select { min-width: 0; max-width: 100%; }
+.voice-key { display: flex; flex-direction: column; gap: .25rem; margin: .75rem 0; }
+.voice-key label { flex-direction: row; }
+.voice-key .inline-form { margin-bottom: 0; }
+.voice-model { border: 1px solid var(--border); border-radius: var(--radius); padding: .6rem .8rem; margin: .5rem 0; background: var(--surface); }
+.voice-model p { margin: .2rem 0; }
+.voice-model-head { display: flex; flex-direction: column; gap: .1rem; }
+.voice-progress-wrap { display: flex; align-items: center; gap: .6rem; margin: .5rem 0; flex-wrap: wrap; }
+.voice-progress { flex: 1; min-width: 140px; height: 8px; border-radius: 4px; background: var(--border); overflow: hidden; }
+.voice-progress > div { height: 100%; background: var(--accent); transition: width .2s; }
+.voice-aliases { list-style: none; padding: 0; margin: .5rem 0; display: flex; flex-direction: column; gap: .4rem; }
+.voice-aliases li { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.voice-aliases li.stale { border-left: 3px solid var(--warn); padding-left: .5rem; }
+.voice-aliases select { width: auto; max-width: 100%; min-width: 0; }
+.voice-alias-phrase { font-weight: 600; }
+.voice-alias-form { display: flex; gap: .5rem; flex-wrap: wrap; margin: .5rem 0; }
+.voice-alias-form input { flex: 1; min-width: 140px; }
+.voice-alias-form select { width: auto; max-width: 100%; }
+.voice-commands { margin: .75rem 0; }
+.voice-commands summary { cursor: pointer; font-weight: 600; }
+.voice-commands h4 { margin: .6rem 0 .2rem; font-size: .85rem; color: var(--muted); }
+.voice-commands ul { margin: 0; padding-left: 1.1rem; }
+.voice-log ul { list-style: none; margin: .5rem 0; padding: .5rem .7rem; max-height: 220px; overflow-y: auto; background: var(--console-bg); border: 1px solid var(--border); border-radius: var(--radius); }
+.voice-log li { padding: .15rem 0; }
+.voice-log li.reply.problem, .voice-reply.problem { color: var(--bad); }
+.voice-log li.reply.done, .voice-reply.done { color: var(--ok); }
+.voice-confirm { margin: .6rem 0; padding: .7rem .8rem; border: 2px solid var(--warn); background: var(--warn-soft); border-radius: var(--radius); }
+.voice-confirm p { margin: .3rem 0 .5rem; }
+
+/* the pill in the sidebar */
+.voice-setup-link { display: flex; align-items: center; gap: .5rem; background: none; border: 1px dashed var(--border); color: var(--muted); text-align: left; }
+.voice-setup-link:hover:not(:disabled) { color: var(--text); }
+.voice-pill { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); padding: .5rem .6rem; display: flex; flex-direction: column; gap: .35rem; }
+.voice-pill.off { background: none; }
+.voice-pill.state-listening { border-color: var(--accent); }
+.voice-pill.state-error { border-color: var(--bad); }
+.voice-pill.state-muted { border-style: dashed; }
+.voice-pill-row { display: flex; justify-content: space-between; align-items: center; gap: .4rem; flex-wrap: wrap; }
+.voice-pill-buttons { display: flex; gap: .3rem; flex-wrap: wrap; }
+.voice-pill button.small { padding: .15rem .5rem; font-size: .78rem; }
+.voice-state { display: inline-flex; align-items: center; gap: .35rem; font-size: .85rem; }
+.voice-pill-text, .voice-pill-mic { line-height: 1.3; }
+.voice-pill.state-error .voice-pill-text { color: var(--bad); }
+.voice-talk { width: 100%; padding: .55rem; touch-action: none; user-select: none; -webkit-user-select: none; font-weight: 600; }
+.voice-talk.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.voice-pill .voice-confirm { margin: .2rem 0; }
+.voice-running ul { list-style: none; margin: .2rem 0 0; padding: 0; display: flex; flex-direction: column; gap: .25rem; }
+.voice-running li { display: flex; justify-content: space-between; align-items: center; gap: .4rem; }
+.voice-run-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .85rem; }
+.voice-last { display: flex; flex-direction: column; gap: .15rem; word-break: break-word; }
+.voice-pill-error { color: var(--bad); font-size: .8rem; }
+@media (max-width: 640px) {
+  .voice-card .setting-row { flex-direction: column; align-items: stretch; }
+  .voice-card .setting-row select { width: 100%; min-width: 0; }
+  .voice-setup, .voice-first-run { padding: .7rem .7rem; }
+  .voice-aliases li { align-items: flex-start; }
+}
+@media (prefers-reduced-motion: reduce) { .voice-progress > div { transition: none; } }
+
+.sidebar { overflow-y: auto; }
+.voice-pill, .voice-setup-link { flex-shrink: 0; }

@@ -7,6 +7,7 @@ import BackupsCard from "./BackupsCard";
 import AiCard from "./AiCard";
 import BotsCard from "./BotsCard";
 import DotaCard from "./DotaCard";
+import VoiceCard from "./VoiceCard";
 import { announcePrefsChanged } from "../windowing";
 
 interface Props {
@@ -207,6 +208,7 @@ export default function SettingsView({ onLanguageChange }: Props) {
       <AiCard />
       <BotsCard />
       <DotaCard />
+      <VoiceCard />
 
       <BackupsCard />
 

@@ -3,6 +3,7 @@ import { t } from "../i18n";
 import type { AutomationSummary } from "../api";
 import { describeTriggers, formatRelative, statusLabel } from "../format";
 import type { View } from "../App";
+import VoicePill from "./VoicePill";
 
 interface Props {
   automations: AutomationSummary[];
@@ -20,6 +21,8 @@ interface Props {
   canGoForward: boolean;
   onBack: () => void;
   onForward: () => void;
+  onVoiceSetup: () => void;
+  onVoiceSettings: () => void;
 }
 
 /** Status dot: green/red for the last run, grey if it never ran, hollow if disabled. */
@@ -103,6 +106,8 @@ export default function Sidebar(props: Props) {
         {props.automations.length === 0 && <p className="muted small pad">{t("sidebar.empty")}</p>}
         {props.automations.length > 0 && filtered.length === 0 && <p className="muted small pad">{t("sidebar.noMatches")}</p>}
       </nav>
+
+      <VoicePill onSetup={props.onVoiceSetup} onSettings={props.onVoiceSettings} />
 
       <button className={`sidebar-footer ${props.view === "links" ? "selected" : ""}`} onClick={props.onLinks}>
         {t("sidebar.links")}
