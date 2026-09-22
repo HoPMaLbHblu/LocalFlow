@@ -5,6 +5,7 @@ import { LANGUAGES, t } from "../i18n";
 import { applyTheme, type Theme } from "../theme";
 import BackupsCard from "./BackupsCard";
 import AiCard from "./AiCard";
+import BotsCard from "./BotsCard";
 import { announcePrefsChanged } from "../windowing";
 
 interface Props {
@@ -201,6 +202,7 @@ export default function SettingsView({ onLanguageChange }: Props) {
       </section>
 
       <AiCard />
+      <BotsCard />
 
       <BackupsCard />
 

@@ -245,6 +245,18 @@ label input, label select { color: var(--text); font-size: .9rem; font-weight: n
 .template-card { display: flex; flex-direction: column; gap: .3rem; text-align: left; font-weight: 400; padding: 1rem; }
 .template-card:hover { border-color: var(--accent) !important; }
 .template-card.blank { border-style: dashed; }
+.picker-tools { display: flex; flex-direction: column; gap: .6rem; margin: .5rem 0 .25rem; }
+.picker-search { max-width: 420px; }
+.picker-chips { display: flex; flex-wrap: wrap; gap: .4rem; }
+.picker-group { font-size: 1rem; margin: 1.25rem 0 0; }
+.bots-heading { font-size: .95rem; margin: 1rem 0 .25rem; }
+.bots-steps { margin: .25rem 0 .5rem; padding-left: 1.2rem; }
+.bots-found { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; margin: .4rem 0; }
+.bots-found p { margin: 0; width: 100%; }
+section.card label.check { display: flex; flex-direction: row; align-items: flex-start; gap: .5rem; margin-top: .75rem; font-weight: 500; }
+section.card label.check input { width: auto; margin: .2rem 0 0; }
+section.card label.check.nested { margin-left: 1.6rem; }
+.block { display: block; font-weight: 400; }
 .template-schedule { color: var(--accent); margin-top: auto; padding-top: .3rem; }
 
 .banner { margin: .75rem 2rem 0; padding: .6rem .9rem; border-radius: var(--radius); }

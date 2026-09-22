@@ -87,6 +87,7 @@ async fn run_records_history_and_emits_live_events() {
             CoreEvent::Log { .. } => "log",
             CoreEvent::RunFinished { .. } => "finished",
             CoreEvent::AutomationsChanged => "changed",
+            CoreEvent::Notice { .. } => "notice",
         })
         .collect();
     assert_eq!(kinds, ["changed", "started", "log", "log", "finished"]);

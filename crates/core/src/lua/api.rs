@@ -67,6 +67,7 @@ pub fn register(
     super::control::register(lua, allow_system, policy.clone(), deadline)?;
     super::desktop::register(lua, allow_system, policy.clone())?;
     super::data::register(lua, store, deadline)?;
+    super::tools::register(lua, allow_system, policy.clone(), deadline)?;
 
     let sink = logs.clone();
     globals.set(
@@ -108,9 +109,10 @@ pub fn register(
 
     let fs = fs_table(lua, policy.clone())?;
     super::files::register(lua, &fs, policy.clone(), deadline)?;
-    super::media::register(lua, &fs, policy, deadline)?;
+    super::media::register(lua, &fs, policy.clone(), deadline)?;
     crate::metrics::register(lua)?;
     crate::ai::register(lua, deadline)?;
+    crate::messaging::register(lua, policy, deadline)?;
     super::lualib::register(lua)?;
     globals.set("fs", fs)?;
     Ok(())
