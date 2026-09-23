@@ -229,6 +229,11 @@ impl LocalFlow {
         for task in self.inner.tasks.lock().unwrap_or_else(|e| e.into_inner()).drain(..) {
             task.abort();
         }
+        // Move everything from the write-ahead log into the database file itself, so
+        // the file is complete on its own (for backups, copies and recovery).
+        if let Err(e) = sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)").execute(self.inner.repo.pool()).await {
+            tracing::warn!("could not write the log into the database file: {e}");
+        }
         self.inner.repo.pool().close().await;
     }
 
