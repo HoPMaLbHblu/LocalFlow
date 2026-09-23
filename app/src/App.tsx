@@ -16,6 +16,7 @@ import { onOpenFile } from "./api";
 import { inDesktopApp, onOpenDraft, openGuideWindow } from "./windowing";
 import { t, tMaybe } from "./i18n";
 import { confirmAction } from "./confirm";
+import { requestVoiceSetup } from "./useVoice";
 
 export type View =
   | { kind: "home" }
@@ -250,6 +251,11 @@ export default function App({ initialView, onLanguageChange }: Props) {
         canGoForward={canGoForward}
         onBack={goBack}
         onForward={goForward}
+        onVoiceSetup={() => {
+          requestVoiceSetup();
+          navigate({ kind: "settings" });
+        }}
+        onVoiceSettings={() => navigate({ kind: "settings" })}
       />
       <main className="main">
         <UpdateBanner />

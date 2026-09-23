@@ -499,7 +499,160 @@ export function onCoreEvent(handler: (event: CoreEvent) => void): Promise<Unlist
   return listen<CoreEvent>("localflow://event", (e) => handler(e.payload));
 }
 
+
+// ---- Voice control (contract: crates/core/src/voice/mod.rs and app/src-tauri/src/voice.rs) ----
+
+export type ListenMode = "push_to_talk" | "always_on";
+
+export interface VoiceAlias {
+  phrase: string;
+  automation_id: number;
+  automation_name: string;
+}
+
+export interface VoiceSettings {
+  setup_done: boolean;
+  consented: boolean;
+  enabled: boolean;
+  mode: ListenMode;
+  push_key: string;
+  wake_phrase: string;
+  /** "auto" (the app language), "en", "ru" or "de". */
+  language: string;
+  /** Input device name; null = the system default. */
+  microphone: string | null;
+  engine: string;
+  spoken_feedback: boolean;
+  run_system_automations: boolean;
+  change_settings: boolean;
+  aliases: VoiceAlias[];
+}
+
+export type VoiceStateName = "off" | "idle" | "listening" | "processing" | "speaking" | "muted" | "error";
+
+/** `{ state, message? }`; `message` is the user-facing text of an error. */
+export interface VoiceState {
+  state: VoiceStateName;
+  message?: string | null;
+}
+
+export interface RunningInfo {
+  run_id: number;
+  automation_id: number;
+  name: string;
+}
+
+export interface VoiceStatus extends VoiceState {
+  enabled: boolean;
+  mode: ListenMode;
+  muted: boolean;
+  /** The resolved recognition language ("auto" became the app language). */
+  language: "en" | "ru" | "de";
+  /** The model for `language` (and the VAD model) is installed. */
+  model_ready: boolean;
+  pending_confirmation: string | null;
+  running: RunningInfo[];
+}
+
+export interface Reply {
+  kind: "info" | "done" | "problem" | "confirm";
+  text: string;
+  speak: boolean;
+}
+
+export interface CommandExample {
+  say: string;
+  does: string;
+  /** "automation", "alias", "control" or "setting". */
+  group: string;
+}
+
+export interface InputDevice {
+  name: string;
+  is_default: boolean;
+}
+
+export interface MicTest {
+  peak: number;
+  rms: number;
+  heard_sound: boolean;
+}
+
+export interface EngineInfo {
+  id: string;
+  name: string;
+  description: string;
+  download_bytes: number;
+  languages: string[];
+  local: boolean;
+  license: string;
+}
+
+export interface ModelStatus {
+  engine: string;
+  installed: boolean;
+  size_bytes: number;
+}
+
+export interface EngineView {
+  info: EngineInfo;
+  status: ModelStatus;
+  recommended: boolean;
+}
+
+export interface DownloadProgress {
+  engine: string;
+  done: number;
+  total: number;
+  finished: boolean;
+  error: string | null;
+}
+
+export type VoiceEvent =
+  | { type: "state"; state: VoiceState }
+  | { type: "heard"; text: string; confidence: number | null }
+  | { type: "reply"; reply: Reply }
+  | { type: "confirm"; prompt: string }
+  | { type: "settings"; settings: VoiceSettings };
+
+/** Accepts a flattened status ({state: "idle", message}) or a nested one ({state: {state, message}}). */
+function normalizeStatus(raw: VoiceStatus): VoiceStatus {
+  const inner = (raw as unknown as { state: unknown }).state;
+  if (inner && typeof inner === "object") {
+    const s = inner as VoiceState;
+    return { ...raw, state: s.state, message: s.message ?? null };
+  }
+  return { ...raw, running: raw.running ?? [] };
+}
+
+export function onVoiceEvent(handler: (event: VoiceEvent) => void): Promise<UnlistenFn> {
+  return listen<VoiceEvent>("localflow://voice", (e) => handler(e.payload));
+}
+
+export function onVoiceDownload(handler: (progress: DownloadProgress) => void): Promise<UnlistenFn> {
+  return listen<DownloadProgress>("localflow://voice-download", (e) => handler(e.payload));
+}
+
 export const api = {
+  voiceGetSettings: () => invoke<VoiceSettings>("voice_get_settings"),
+  voiceSetSettings: (settings: VoiceSettings) => invoke<VoiceStatus>("voice_set_settings", { settings }).then(normalizeStatus),
+  voiceStatus: () => invoke<VoiceStatus>("voice_status").then(normalizeStatus),
+  voiceListDevices: () => invoke<InputDevice[]>("voice_list_devices"),
+  voiceEngines: () => invoke<EngineView[]>("voice_engines"),
+  voiceDownloadModel: (engine: string) => invoke<void>("voice_download_model", { engine }),
+  voiceCancelDownload: (engine: string) => invoke<void>("voice_cancel_download", { engine }),
+  voiceRemoveModel: (engine: string) => invoke<void>("voice_remove_model", { engine }),
+  voiceTestMicrophone: (device: string | null) => invoke<MicTest>("voice_test_microphone", { device }),
+  voiceSetEnabled: (enabled: boolean) => invoke<VoiceStatus>("voice_set_enabled", { enabled }).then(normalizeStatus),
+  voiceSetMuted: (muted: boolean) => invoke<VoiceStatus>("voice_set_muted", { muted }).then(normalizeStatus),
+  voicePress: () => invoke<void>("voice_press"),
+  voiceRelease: () => invoke<void>("voice_release"),
+  voiceSubmitText: (text: string) => invoke<void>("voice_submit_text", { text }),
+  voiceAnswer: (yes: boolean) => invoke<void>("voice_answer", { yes }),
+  voiceCommands: () => invoke<CommandExample[]>("voice_commands"),
+  runningAutomations: () => invoke<RunningInfo[]>("running_automations"),
+  stopRun: (runId: number) => invoke<boolean>("stop_run", { runId }),
+  stopAllRuns: () => invoke<number>("stop_all_runs"),
   updateStatus: (refresh: boolean) => invoke<UpdateInfo | null>("update_status", { refresh }),
   dismissUpdate: (version: string) => invoke<void>("dismiss_update", { version }),
   getUpdateCheck: () => invoke<boolean>("get_update_check"),

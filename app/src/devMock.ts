@@ -3,6 +3,7 @@
 // Never included in the desktop app: main.tsx only loads this outside Tauri in dev builds.
 
 import { mockIPC } from "@tauri-apps/api/mocks";
+import { voiceMock } from "./devMockVoice";
 import type { AutomationRun, AutomationSummary, LogEntry } from "./api";
 
 const now = Date.now();
@@ -74,6 +75,8 @@ let linkTrash: MockLinkSet[] = [];
 export function installDevMock() {
   mockIPC((cmd, payload) => {
     const args = (payload ?? {}) as Args;
+    const voice = voiceMock(cmd, args);
+    if (voice.handled) return voice.value;
     const find = () => automations.find((a) => a.id === args.id)!;
     switch (cmd) {
       case "list_automations": return automations;
@@ -229,5 +232,5 @@ export function installDevMock() {
       case "links_import_bookmarks": throw { kind: "error", message: `no bookmarks folder called "${args.folder}"` };
       default: return null;
     }
-  });
+  }, { shouldMockEvents: true });
 }
