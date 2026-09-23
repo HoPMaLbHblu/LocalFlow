@@ -544,7 +544,7 @@ pub fn register(lua: &Lua, allowed: bool, policy: Arc<PathPolicy>) -> mlua::Resu
     )?;
     desktop.set(
         "set_wallpaper",
-        lua.create_function(move |_, (path, style): (String, Option<String>)| {
+        lua.create_function(move |_, (path, style): (String, Option<String>)| -> mlua::Result<()> {
             require(allowed, "desktop.set_wallpaper")?;
             let resolved = policy.resolve(&path).map_err(|e| err("desktop.set_wallpaper", e))?;
             if !resolved.is_file() {
