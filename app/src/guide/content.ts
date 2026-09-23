@@ -1325,6 +1325,22 @@ const LESSONS: Lesson[] = [
       tip("Try the templates *Find duplicate files*, *Sort photos by date taken*, *Weekly Downloads report*, *Monthly spending summary* and *PC health check*: each one uses these helpers, and reading them is a good way to learn."),
     ],
   },
+  {
+    id: "phone",
+    title: "16. Your phone, the internet and updates",
+    summary: "Telegram and Discord, remote control, internet checks, speech, screenshots and app updates.",
+    blocks: [
+      t("LocalFlow can talk to your phone. Set up your own Telegram bot (and, if you like, a Discord channel) in **Settings › Telegram and Discord**; the card walks you through it in three steps. Then any automation can send you messages, screenshots and files:"),
+      code("telegram.send(\"Backup finished\")\nlocal shot = screen.capture(\"~/Pictures/now.png\")\ntelegram.send_photo(shot, \"My screen right now\")\ndiscord.send(\"The server is back online\")\n"),
+      t("**Remote control.** Switch on *Remote control from Telegram* in the same card and send `/help` to your bot. It answers `/status`, `/screenshot`, `/top`, `/apps`, `/open`, `/lock`, `/volume`, `/say`, `/list` and `/run <automation>`, which runs any of your automations from wherever you are."),
+      warning("Only your own chat is obeyed, every command shows a notification on the PC, and shutdown, restart and closing apps are a separate switch that is off at first. The bot token is like a key to your PC: never share it."),
+      t("**The internet and your programs.** Check the connection, your router or a server, and find the program that slows the PC down:"),
+      code("if not network.online() then\n    log(\"No internet\")\nelseif network.ping(\"192.168.1.1\", 80) == nil then\n    log(\"The router does not answer\")\nend\nfor _, p in ipairs(process.top(3, \"cpu\")) do\n    log(p.name .. \": \" .. p.cpu .. \"%\")\nend\n"),
+      t("**Updates and speech.** `packages.updates()` lists apps with updates (from winget, which is built into Windows); `packages.upgrade(\"all\")` installs them. `speak` reads text aloud and `screen.capture` saves a screenshot:"),
+      code("local updates = packages.updates()\nlog(#updates .. \" apps can be updated\")\nspeak(\"You have \" .. #updates .. \" updates\")\n"),
+      tip("Look in the new template categories *Telegram and Discord*, *Internet* and *PC health and apps*: *Daily PC report to Telegram*, *Internet watch*, *Check for app updates*, *Quick screenshot* and *Talking clock* are good places to start."),
+    ],
+  },
 ];
 
 // ---- friendly error hints --------------------------------------------------
