@@ -689,7 +689,7 @@ impl LocalFlow {
         file: Option<String>,
         details: HashMap<String, String>,
     ) -> CoreResult<AutomationRun> {
-        self.run_full(id, trigger.to_string(), file, details, None, 0, None).await
+        self.run_full(id, trigger.to_string(), file, details, None, 0, None, false).await
     }
 
     // ---- stopping and listing runs ------------------------------------------
@@ -699,12 +699,12 @@ impl LocalFlow {
     // (a long `shell.run`, an `ask()` dialog, `speak`) is not interrupted; the stop
     // takes effect when it returns. Child processes are not killed.
 
-    /// Runs in progress, oldest id first.
+    /// Runs in progress, oldest id first. A run that is just being started (not yet in the
+    /// database) is listed too, with a temporary negative `run_id` that `stop_run` accepts.
     pub fn running(&self) -> Vec<RunningRun> {
         let map = self.inner.running.lock().unwrap_or_else(|e| e.into_inner());
         let mut list: Vec<RunningRun> = map
             .iter()
-            .filter(|(key, _)| **key > 0)
             .map(|(key, h)| RunningRun {
                 run_id: *key,
                 automation_id: h.automation_id,
@@ -712,7 +712,8 @@ impl LocalFlow {
                 started_at: h.started_at.clone(),
             })
             .collect();
-        list.sort_by_key(|r| r.run_id);
+        // Reservations (a run being started, negative temporary id) come last.
+        list.sort_by_key(|r| (r.run_id < 0, r.run_id.abs()));
         list
     }
 
@@ -720,11 +721,11 @@ impl LocalFlow {
     pub fn stop_run(&self, run_id: i64) -> bool {
         let map = self.inner.running.lock().unwrap_or_else(|e| e.into_inner());
         match map.get(&run_id) {
-            Some(h) if run_id > 0 => {
+            Some(h) => {
                 h.cancel.store(true, Ordering::Relaxed);
                 true
             }
-            _ => false,
+            None => false,
         }
     }
 
@@ -752,6 +753,18 @@ impl LocalFlow {
     /// already running. The check and the registration happen under one lock, so two
     /// simultaneous calls can't both start it.
     pub async fn run_guarded(&self, id: i64, trigger: &str) -> CoreResult<Option<AutomationRun>> {
+        self.guarded(id, trigger, false).await
+    }
+
+    /// A run started by voice (trigger "voice"), guarded like [`LocalFlow::run_guarded`].
+    /// `confirmed == false`: the user did not explicitly confirm this run, so "run after"
+    /// followers and `automations.call/run` steps that have "Allow system control" are
+    /// blocked, all the way down the chain. `confirmed == true`: the chain behaves as usual.
+    pub async fn run_voice(&self, id: i64, confirmed: bool) -> CoreResult<Option<AutomationRun>> {
+        self.guarded(id, "voice", !confirmed).await
+    }
+
+    async fn guarded(&self, id: i64, trigger: &str, voice_unconfirmed: bool) -> CoreResult<Option<AutomationRun>> {
         let automation = self.get(id).await?;
         let cancel = Arc::new(AtomicBool::new(false));
         let key = self.inner.pending_key.fetch_sub(1, Ordering::Relaxed);
@@ -771,7 +784,7 @@ impl LocalFlow {
             );
         }
         let guard = RunGuard { inner: self.inner.clone(), key, cancel };
-        self.run_full(id, trigger.to_string(), None, HashMap::new(), None, 0, Some(guard))
+        self.run_full(id, trigger.to_string(), None, HashMap::new(), None, 0, Some(guard), voice_unconfirmed)
             .await
             .map(Some)
     }
@@ -787,9 +800,10 @@ impl LocalFlow {
         input: Option<serde_json::Value>,
         depth: usize,
         guard: Option<RunGuard>,
+        voice_unconfirmed: bool,
     ) -> Pin<Box<dyn Future<Output = CoreResult<AutomationRun>> + Send + 'static>> {
         let this = self.clone();
-        Box::pin(async move { this.run_inner(id, &trigger, file, details, input, depth, guard).await })
+        Box::pin(async move { this.run_inner(id, &trigger, file, details, input, depth, guard, voice_unconfirmed).await })
     }
 
     async fn run_inner(
@@ -801,6 +815,7 @@ impl LocalFlow {
         input: Option<serde_json::Value>,
         depth: usize,
         guard: Option<RunGuard>,
+        voice_unconfirmed: bool,
     ) -> CoreResult<AutomationRun> {
         let repo = &self.inner.repo;
         let automation = self.get(id).await?;
@@ -838,6 +853,7 @@ impl LocalFlow {
             input,
             library: self.library_for(&automation.lua_code).await?,
             cancel: guard.cancel.clone(),
+            voice_unconfirmed,
             ..RunContext::new(id, automation.name.clone(), trigger, automation.allow_system)
         };
         let store = repo.load_store(id).await?;
@@ -874,14 +890,14 @@ impl LocalFlow {
         drop(guard);
         // A run the user stopped does not start its "run after" followers.
         if !stopped {
-            self.start_followers(id, &automation.name, result.success, result.result, depth).await;
+            self.start_followers(id, &automation.name, result.success, result.result, depth, voice_unconfirmed).await;
         }
         Ok(run)
     }
 
     /// Start the automations set to "run after" this one. Each gets what this one
     /// returned as `ctx.input`.
-    async fn start_followers(&self, id: i64, name: &str, success: bool, result: Option<serde_json::Value>, depth: usize) {
+    async fn start_followers(&self, id: i64, name: &str, success: bool, result: Option<serde_json::Value>, depth: usize, voice_unconfirmed: bool) {
         let Ok(list) = self.inner.repo.list_automations().await else { return };
         for follower in list.into_iter().filter(|a| a.enabled && a.id != id) {
             let Some(after) = ExtraTriggers::from_json(follower.triggers.as_deref()).after else { continue };
@@ -892,11 +908,20 @@ impl LocalFlow {
                 tracing::warn!(automation_id = follower.id, "not started: too many automations in a row");
                 continue;
             }
+            if voice_unconfirmed && follower.allow_system {
+                tracing::warn!(automation_id = follower.id, "not started: voice did not confirm a PC-controlling follower");
+                let note = format!(
+                    "\"{}\" was not started after this: it controls the PC. Run it yourself or confirm it by voice.",
+                    follower.name
+                );
+                let _ = self.inner.repo.add_log(id, "warn", &note).await;
+                continue;
+            }
             let details = HashMap::from([
                 ("previous".to_string(), name.to_string()),
                 ("previous_ok".to_string(), success.to_string()),
             ]);
-            let run = self.run_full(follower.id, "after".into(), None, details, result.clone(), depth + 1, None);
+            let run = self.run_full(follower.id, "after".into(), None, details, result.clone(), depth + 1, None, voice_unconfirmed);
             tokio::spawn(async move {
                 if let Err(e) = run.await {
                     tracing::error!("\"run after\" failed: {e}");

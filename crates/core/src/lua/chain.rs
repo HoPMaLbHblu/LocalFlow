@@ -28,6 +28,9 @@ use super::{
     sandbox::{self, PathPolicy},
 };
 
+/// Why a step or follower was refused in an unconfirmed voice chain.
+pub const VOICE_BLOCKED: &str = "this step controls the PC; run it yourself or confirm it by voice";
+
 /// How many automations may be running inside each other at once.
 pub const MAX_DEPTH: usize = 8;
 
@@ -78,6 +81,8 @@ pub struct ChainEnv {
     pub deadline: Instant,
     pub logs: LogSink,
     pub stores: StepStores,
+    /// The run was started by voice without confirmation: steps with "Allow system control" are refused.
+    pub voice_unconfirmed: bool,
 }
 
 fn err(function: &str, message: impl std::fmt::Display) -> mlua::Error {
@@ -158,6 +163,14 @@ fn run_step(lua: &Lua, env: &ChainEnv, function: &str, key: &Value, input: Value
         return Err(err(function, format!("steps can go at most {MAX_DEPTH} levels deep")));
     }
     sandbox::check_cancelled()?;
+    if env.voice_unconfirmed && step.allow_system {
+        return Ok(Outcome {
+            name: step.name.clone(),
+            success: false,
+            error: Some(VOICE_BLOCKED.to_string()),
+            result: Value::Nil,
+        });
+    }
     let remaining = env.deadline.saturating_duration_since(Instant::now());
     if remaining.is_zero() {
         return Err(err(function, "the time limit was reached"));
@@ -180,6 +193,7 @@ fn run_step(lua: &Lua, env: &ChainEnv, function: &str, key: &Value, input: Value
         library: Some(env.library.clone()),
         stack,
         cancel: sandbox::current_cancel().unwrap_or_default(),
+        voice_unconfirmed: env.voice_unconfirmed,
     };
     let store = env.stores.borrow().get(&step.id).cloned().unwrap_or_else(|| step.store.clone());
 

@@ -77,7 +77,7 @@ pub struct VoiceSettings {
     pub spoken_feedback: bool,
     /// May voice start automations that have "Allow system control"? Always asks first.
     pub run_system_automations: bool,
-    /// May voice change the whitelisted app settings?
+    /// May voice change the whitelisted app settings? Off by default.
     pub change_settings: bool,
     pub aliases: Vec<VoiceAlias>,
 }
@@ -96,7 +96,7 @@ impl Default for VoiceSettings {
             engine: String::new(),
             spoken_feedback: false,
             run_system_automations: false,
-            change_settings: true,
+            change_settings: false,
             aliases: Vec::new(),
         }
     }
@@ -138,6 +138,24 @@ pub enum SettingChange {
     Autostart(bool),
 }
 
+impl SettingChange {
+    /// Must the user answer a yes/no question first?
+    pub fn needs_confirmation(&self) -> bool {
+        match self {
+            SettingChange::Autostart(_) | SettingChange::Language(_) => true,
+            // Silencing notifications or the update check would hide what voice does.
+            SettingChange::Notifications(on) | SettingChange::UpdateCheck(on) => !*on,
+            SettingChange::Theme(_) | SettingChange::DotaLiveHelper(_) => false,
+        }
+    }
+
+    /// High-risk questions can only be confirmed with the on-screen button, by typing, or by a
+    /// confident spoken "yes" in push-to-talk mode; never by an always-on spoken "yes".
+    pub fn high_risk(&self) -> bool {
+        matches!(self, SettingChange::Autostart(_) | SettingChange::Notifications(false))
+    }
+}
+
 /// Everything the controller needs from the app. The real implementation (desktop crate) wraps
 /// `LocalFlow`; tests use a mock. Methods may block briefly and are called from the session
 /// thread, never from an async runtime thread.
@@ -145,7 +163,11 @@ pub trait VoiceBackend: Send + Sync {
     fn automations(&self) -> Vec<AutomationInfo>;
     fn running(&self) -> Vec<RunningInfo>;
     /// Start an automation (trigger "voice") and return at once; the run continues in the background.
-    fn start(&self, automation_id: i64) -> Result<(), String>;
+    /// `confirmed`: the user answered a confirmation question for this very run. When false, "run
+    /// after" followers and steps that have "Allow system control" are blocked (`LocalFlow::run_voice`).
+    fn start(&self, automation_id: i64, confirmed: bool) -> Result<(), String>;
+    /// Is this automation running (or being started) right now?
+    fn is_running(&self, automation_id: i64) -> bool;
     /// Ask a run to stop. `Ok(false)` = it had already finished.
     fn stop(&self, run_id: i64) -> Result<bool, String>;
     /// Apply a whitelisted setting; returns a short description of the new state.

@@ -115,7 +115,7 @@ function handleText(text: string) {
     if (/^(stop|stop all|стоп|stopp)\b/.test(said)) {
       const n = running.length;
       running = [];
-      finish({ kind: "done", text: n ? `Stopped ${n} running automation(s).` : "Nothing is running.", speak: true });
+      finish({ kind: "done", text: n ? `Asked ${n} running automation(s) to stop.` : "Nothing is running.", speak: true });
     } else if (/what can i say|help/.test(said)) {
       finish({ kind: "info", text: "You can say: run Organize PDF files, run Back up notes, stop, mute, what is running.", speak: true });
     } else if (/what.*running/.test(said)) {
@@ -125,14 +125,22 @@ function handleText(text: string) {
       const alias = settings.aliases.find((a) => a.phrase.toLowerCase() === wanted);
       const found = alias ? AUTOMATIONS.find((a) => a.id === alias.automation_id) : AUTOMATIONS.find((a) => a.name.toLowerCase().includes(wanted));
       if (!found) finish({ kind: "problem", text: `I could not find an automation called "${wanted}".`, speak: true });
-      else if (found.risky) {
+      else if (found.risky && !(alias || found.name.toLowerCase() === wanted)) {
+        finish({ kind: "problem", text: `"${found.name}" can control this PC, so I only run it when you say its exact name.`, speak: true });
+      } else if (found.risky) {
         pending = `Run "${found.name}"? It can control this PC. Say yes or no.`;
+        reply({ kind: "confirm", text: pending, speak: true });
+        send({ type: "confirm", prompt: pending });
+        setState(idleOrMuted());
+      } else if (!alias && found.name.toLowerCase() !== wanted) {
+        // A fuzzy match never runs at once: it asks first.
+        pending = `Did you mean "${found.name}"? Say yes to run it, or no.`;
         reply({ kind: "confirm", text: pending, speak: true });
         send({ type: "confirm", prompt: pending });
         setState(idleOrMuted());
       } else { startRun(found.name, found.id); finish({ kind: "done", text: `Started "${found.name}".`, speak: true }); }
     } else {
-      finish({ kind: "problem", text: `I did not understand "${text.trim()}". Say "what can I say" for a list.`, speak: true });
+      finish({ kind: "problem", text: `I did not understand that. Say "what can I say" for a list.`, speak: true });
     }
   }, 600);
 }

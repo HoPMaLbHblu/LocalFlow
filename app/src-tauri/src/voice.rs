@@ -318,11 +318,26 @@ pub trait Host: Send + Sync {
 pub struct AppVoiceBackend {
     flow: LocalFlow,
     host: Arc<dyn Host>,
+    /// Automations voice has just asked to start that the core may not have registered yet, so
+    /// "is it running?" is already true when `start` returns.
+    starting: Arc<Mutex<std::collections::HashSet<i64>>>,
 }
 
 impl AppVoiceBackend {
     pub fn new(flow: LocalFlow, host: Arc<dyn Host>) -> Self {
-        AppVoiceBackend { flow, host }
+        AppVoiceBackend { flow, host, starting: Arc::default() }
+    }
+}
+
+/// Removes an automation from the "starting" set when the run is over (or never began).
+struct StartingGuard {
+    set: Arc<Mutex<std::collections::HashSet<i64>>>,
+    id: i64,
+}
+
+impl Drop for StartingGuard {
+    fn drop(&mut self) {
+        lock(&self.set).remove(&self.id);
     }
 }
 
@@ -357,10 +372,21 @@ impl VoiceBackend for AppVoiceBackend {
             .collect()
     }
 
-    fn start(&self, automation_id: i64) -> Result<(), String> {
+    fn is_running(&self, automation_id: i64) -> bool {
+        self.flow.is_running(automation_id) || lock(&self.starting).contains(&automation_id)
+    }
+
+    fn start(&self, automation_id: i64, confirmed: bool) -> Result<(), String> {
+        if !lock(&self.starting).insert(automation_id) {
+            return Ok(()); // already being started
+        }
+        let guard = StartingGuard { set: self.starting.clone(), id: automation_id };
         let flow = self.flow.clone();
         tauri::async_runtime::spawn(async move {
-            match flow.run_guarded(automation_id, "voice").await {
+            let _guard = guard;
+            // `run_voice` blocks "run after" followers and steps that control the PC unless the
+            // user confirmed this very run.
+            match flow.run_voice(automation_id, confirmed).await {
                 Ok(Some(_)) => {}
                 Ok(None) => tracing::info!(automation_id, "voice: already running, skipped"),
                 // Failures of runs not started by hand already notify through RunFinished.
@@ -1236,7 +1262,8 @@ mod tests {
         let _ = quick;
 
         // Start returns at once; the run shows up in running() and can be stopped.
-        backend.start(slow.id).unwrap();
+        backend.start(slow.id, true).unwrap();
+        assert!(backend.is_running(slow.id), "running at once, before the core registered it");
         let deadline = Instant::now() + Duration::from_secs(5);
         let run = loop {
             if let Some(r) = backend.running().into_iter().find(|r| r.automation_id == slow.id) {
@@ -1247,7 +1274,7 @@ mod tests {
         };
         assert_eq!(run.name, "Slow one");
         // A second voice start is skipped (guarded), not doubled.
-        backend.start(slow.id).unwrap();
+        backend.start(slow.id, true).unwrap();
         std::thread::sleep(Duration::from_millis(100));
         assert_eq!(backend.running().iter().filter(|r| r.automation_id == slow.id).count(), 1);
         assert_eq!(backend.stop(run.run_id), Ok(true));
@@ -1263,6 +1290,101 @@ mod tests {
         backend.notice("Voice: run Quick one");
         assert_eq!(*lock(&host.applied), vec![SettingChange::Notifications(false)]);
         assert_eq!(*lock(&host.notices), vec!["Voice: run Quick one".to_string()]);
+    }
+
+    // -- locked JSON shapes (the frontend depends on them)
+
+    #[test]
+    fn status_json_shape_is_locked() {
+        let st = VoiceStatus {
+            state: "error".into(),
+            message: Some("no microphone".into()),
+            enabled: true,
+            mode: ListenMode::AlwaysOn,
+            muted: false,
+            language: "en".into(),
+            model_ready: true,
+            pending_confirmation: Some("Run X?".into()),
+            running: vec![RunningView { run_id: 7, automation_id: 3, name: "X".into() }],
+        };
+        assert_eq!(
+            serde_json::to_value(&st).unwrap(),
+            serde_json::json!({
+                "state": "error", "message": "no microphone", "enabled": true, "mode": "always_on", "muted": false,
+                "language": "en", "model_ready": true, "pending_confirmation": "Run X?",
+                "running": [{ "run_id": 7, "automation_id": 3, "name": "X" }]
+            })
+        );
+        let plain = VoiceStatus { message: None, pending_confirmation: None, running: vec![], mode: ListenMode::PushToTalk, ..st };
+        assert_eq!(
+            serde_json::to_value(&plain).unwrap(),
+            serde_json::json!({
+                "state": "error", "enabled": true, "mode": "push_to_talk", "muted": false,
+                "language": "en", "model_ready": true, "pending_confirmation": null, "running": []
+            })
+        );
+    }
+
+    #[test]
+    fn download_progress_json_shape_is_locked() {
+        let p = DownloadProgress { engine: "small-en".into(), done: 5, total: 10, finished: false, error: None };
+        assert_eq!(
+            serde_json::to_value(&p).unwrap(),
+            serde_json::json!({ "engine": "small-en", "done": 5, "total": 10, "finished": false, "error": null })
+        );
+        let p = DownloadProgress { finished: true, error: Some("offline".into()), ..p };
+        assert_eq!(serde_json::to_value(&p).unwrap()["error"], "offline");
+        assert_eq!(serde_json::to_value(&p).unwrap()["finished"], true);
+    }
+
+    #[test]
+    fn engine_view_json_shape_is_locked() {
+        let v = EngineView { info: info("tiny"), status: FakeStore::new(&["tiny"]).status("tiny"), recommended: true };
+        let json = serde_json::to_value(&v).unwrap();
+        let mut keys: Vec<_> = json.as_object().unwrap().keys().cloned().collect();
+        keys.sort();
+        assert_eq!(keys, vec!["info", "recommended", "status"]);
+        assert_eq!(json["recommended"], true);
+        assert!(json["info"].is_object() && json["status"].is_object());
+        assert_eq!(json["status"]["installed"], true);
+    }
+
+    #[test]
+    fn voice_event_json_shapes_are_locked() {
+        use localflow_core::voice::{Reply, ReplyKind};
+        use serde_json::json;
+        let ev = |e: VoiceEvent| serde_json::to_value(e).unwrap();
+        for (state, expected) in [
+            (VoiceState::Off, json!({ "state": "off" })),
+            (VoiceState::Idle, json!({ "state": "idle" })),
+            (VoiceState::Listening, json!({ "state": "listening" })),
+            (VoiceState::Processing, json!({ "state": "processing" })),
+            (VoiceState::Speaking, json!({ "state": "speaking" })),
+            (VoiceState::Muted, json!({ "state": "muted" })),
+            (VoiceState::Error("boom".into()), json!({ "state": "error", "message": "boom" })),
+        ] {
+            assert_eq!(ev(VoiceEvent::State { state }), json!({ "type": "state", "state": expected }));
+        }
+        assert_eq!(
+            ev(VoiceEvent::Heard { text: "run backup".into(), confidence: None }),
+            json!({ "type": "heard", "text": "run backup", "confidence": null })
+        );
+        assert_eq!(
+            ev(VoiceEvent::Heard { text: "x".into(), confidence: Some(0.5) }),
+            json!({ "type": "heard", "text": "x", "confidence": 0.5 })
+        );
+        for (kind, name) in [(ReplyKind::Info, "info"), (ReplyKind::Done, "done"), (ReplyKind::Problem, "problem"), (ReplyKind::Confirm, "confirm")] {
+            assert_eq!(
+                ev(VoiceEvent::Reply { reply: Reply { kind, text: "t".into(), speak: true } }),
+                json!({ "type": "reply", "reply": { "kind": name, "text": "t", "speak": true } })
+            );
+        }
+        assert_eq!(ev(VoiceEvent::Confirm { prompt: "Sure?".into() }), json!({ "type": "confirm", "prompt": "Sure?" }));
+        let settings = ev(VoiceEvent::Settings { settings: VoiceSettings::default() });
+        assert_eq!(settings["type"], "settings");
+        assert_eq!(settings["settings"]["change_settings"], false);
+        assert_eq!(settings["settings"]["mode"], "push_to_talk");
+        assert!(settings["settings"]["aliases"].as_array().unwrap().is_empty());
     }
 
     #[test]

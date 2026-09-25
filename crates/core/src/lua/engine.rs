@@ -38,6 +38,9 @@ pub struct RunContext {
     /// Limit: a blocking OS call already in flight (long `shell.run`, `ask()`, `speak`)
     /// is not interrupted; the stop takes effect when it returns or at the next check.
     pub cancel: Arc<std::sync::atomic::AtomicBool>,
+    /// A run started by voice without an explicit confirmation: steps (and "run after"
+    /// followers) that have "Allow system control" are refused, all the way down the chain.
+    pub voice_unconfirmed: bool,
 }
 
 impl RunContext {
@@ -54,6 +57,7 @@ impl RunContext {
             library: None,
             stack: Vec::new(),
             cancel: Arc::default(),
+            voice_unconfirmed: false,
         }
     }
 }
@@ -157,6 +161,7 @@ pub fn execute_with(
                 deadline,
                 logs: logs.clone(),
                 stores: step_stores.clone(),
+                voice_unconfirmed: ctx.voice_unconfirmed,
             },
         )?;
 

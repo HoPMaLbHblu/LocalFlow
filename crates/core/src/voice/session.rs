@@ -590,7 +590,11 @@ impl Worker {
             Cmd::Text(t) => {
                 let t = t.trim().to_string();
                 if !t.is_empty() {
-                    self.run_command(t, None, None);
+                    // Typed: the person is at the keyboard (full confidence), parsed like speech.
+                    self.set_state(VoiceState::Processing);
+                    self.emit(VoiceEvent::Heard { text: t.clone(), confidence: Some(1.0) });
+                    let replies = self.controller.handle_text(&t, self.now_ms());
+                    self.after_controller(replies);
                 }
             }
             Cmd::Answer(yes) => {
@@ -607,6 +611,8 @@ impl Worker {
 
     fn apply_mute(&mut self, mute: bool) {
         self.muted = mute;
+        // A question asked before muting (or unmuting) must not be answered afterwards.
+        self.controller.cancel_pending();
         if mute {
             self.close_source();
             self.ptt = None;
@@ -653,6 +659,7 @@ impl Worker {
         self.settings = new.clone();
         self.controller.update_settings(new);
         if old_mode != self.settings.mode {
+            self.controller.cancel_pending();
             self.close_source();
             self.ptt = None;
             self.armed_until = None;
@@ -874,12 +881,18 @@ impl Worker {
         if self.settings.spoken_feedback && self.speaker.is_some() {
             for r in replies.iter().chain(extra.iter()) {
                 if r.speak && !self.stopping {
-                    self.speak_blocking(&r.text);
+                    let question = r.kind == ReplyKind::Confirm;
+                    if self.always_on() && !question {
+                        // Speaking something else while a question waits: our own voice could be
+                        // heard as the answer, so the question is dropped.
+                        self.controller.cancel_pending();
+                    }
+                    self.speak_blocking(&r.text, question);
                 }
             }
         }
         // A question can be answered in the next breath without the wake phrase.
-        if confirm && self.always_on() && !self.muted && !self.stopping {
+        if confirm && self.always_on() && !self.muted && !self.stopping && self.controller.pending_confirmation(self.now_ms()).is_some() {
             self.armed_until = Some(Instant::now() + self.timings.armed);
         }
         self.settle();
@@ -887,7 +900,9 @@ impl Worker {
 
     /// Speak one reply. The microphone input is ignored while it plays and for a short guard time
     /// afterwards. The speaker runs on a helper thread so `stop`, mute and the cap still work.
-    fn speak_blocking(&mut self, text: &str) {
+    /// A spoken question gets a longer guard afterwards: its last words ("say yes or no") must not
+    /// come back through the microphone as an answer.
+    fn speak_blocking(&mut self, text: &str, question: bool) {
         let Some(speaker) = self.speaker.clone() else { return };
         self.set_state(VoiceState::Speaking);
         self.segmenter.reset();
@@ -933,7 +948,8 @@ impl Worker {
         }
         self.segmenter.reset();
         self.discard_audio();
-        self.ignore_until = Some(Instant::now() + self.timings.speak_guard);
+        let guard = if question { self.timings.speak_guard * 3 } else { self.timings.speak_guard };
+        self.ignore_until = Some(Instant::now() + guard);
         self.reset_pending = true;
     }
 

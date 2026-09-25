@@ -1,14 +1,21 @@
 //! `VoiceController`: recognised utterance -> replies.
 //!
 //! Safety design (mirrors the Telegram remote control, `remote.rs`):
-//! - every heard command is announced with `backend.notice("Voice: ...")` before anything is done;
+//! - every recognised command is announced with `backend.notice("Voice: <command>")` before anything
+//!   is done; speech that is not understood is announced as exactly "Voice: not understood", never
+//!   with the heard text;
 //! - speech is parsed by the closed grammar in `grammar.rs`; there is no free-form action;
 //! - automations are found by `matcher.rs`, which never guesses between close matches;
-//! - disabled automations are refused; automations with "Allow system control" need the
-//!   `run_system_automations` setting *and* a spoken or on-screen yes/no every time;
-//! - a weak match or a low-confidence recognition asks "did you mean ...?" first;
-//! - only the whitelisted settings can change, and only when `change_settings` is on;
-//!   autostart and language ask first;
+//! - the real recogniser reports no confidence (`None`), which counts as LOW everywhere: only an
+//!   exact name of an enabled, non-system automation runs at once; any fuzzy match asks
+//!   "did you mean ...?" first;
+//! - disabled automations are refused; automations with "Allow system control" need an exact name,
+//!   the `run_system_automations` setting *and* a yes/no question that names them every time;
+//! - high-risk questions (system automations, autostart, notifications off) are never confirmed by
+//!   a low-confidence spoken "yes", and in always-on mode never by a spoken "yes" at all: the
+//!   on-screen Yes button (or typing, or push-to-talk) is needed;
+//! - only the whitelisted settings can change, and only when `change_settings` is on (off by
+//!   default); autostart, language and switching notifications / update check off ask first;
 //! - a pending question expires after [`CONFIRM_TTL_MS`] and is cancelled by any other command;
 //! - duplicates (same transcript id, same text within [`DUPLICATE_TEXT_MS`], same automation
 //!   within [`LAUNCH_GUARD_MS`]) and automations that are already running are never started twice.
@@ -25,7 +32,7 @@ use std::{
 use super::{
     grammar::{self, detect_language, normalize, Intent, Lang},
     matcher::{self, Candidate, Match},
-    AutomationInfo, CommandExample, Reply, ReplyKind, RunningInfo, SettingChange, Transcript, VoiceBackend, VoiceSettings,
+    AutomationInfo, CommandExample, ListenMode, Reply, ReplyKind, RunningInfo, SettingChange, Transcript, VoiceBackend, VoiceSettings,
 };
 
 /// How long a yes/no question waits for an answer.
@@ -38,6 +45,9 @@ pub const LAUNCH_GUARD_MS: u64 = 5_000;
 pub const LOW_CONFIDENCE: f32 = 0.5;
 /// A "yes" recognised below this confidence is not trusted: it has to be repeated.
 pub const YES_MIN_CONFIDENCE: f32 = 0.4;
+/// A spoken "yes" to a high-risk question (push-to-talk only) needs at least this confidence. The
+/// real engine reports none, so in practice such questions are answered with the on-screen button.
+pub const HIGH_RISK_YES_CONFIDENCE: f32 = 0.8;
 /// Longest utterance considered (characters); the rest is cut off.
 pub const MAX_TEXT_CHARS: usize = 400;
 /// How many candidate names an "which one?" question lists.
@@ -56,8 +66,28 @@ pub enum ControlRequest {
 
 #[derive(Debug, Clone)]
 enum Action {
-    Run { id: i64, name: String },
+    Run { id: i64, name: String, system: bool },
     Setting(SettingChange),
+}
+
+impl Action {
+    fn high_risk(&self) -> bool {
+        match self {
+            Action::Run { system, .. } => *system,
+            Action::Setting(change) => change.high_risk(),
+        }
+    }
+}
+
+/// How a yes/no was given.
+#[derive(Debug, Clone, Copy)]
+enum Answer {
+    /// The on-screen button.
+    Button,
+    /// Typed in the app ("try a phrase"): the person is at the keyboard.
+    Typed,
+    /// Spoken, with the engine's confidence (`None` = the engine gives none = low).
+    Spoken(Option<f32>),
 }
 
 #[derive(Debug, Clone)]
@@ -66,6 +96,7 @@ struct Pending {
     prompt: String,
     expires_at: u64,
     lang: Lang,
+    high_risk: bool,
 }
 
 pub struct VoiceController {
@@ -208,8 +239,20 @@ fn setting_question(l: Lang, change: &SettingChange) -> String {
             let n = lang_name(l, code);
             t!(l, "Change the language to {n}? Say yes or no.", "Сменить язык на {n}? Скажите да или нет.", "Sprache auf {n} umstellen? Sagen Sie ja oder nein.")
         }
+        SettingChange::Notifications(false) => t!(l, "Turn notifications off? Then you won't see what voice does. Say yes or no.", "Выключить уведомления? Тогда вы не увидите, что делает голос. Скажите да или нет.", "Benachrichtigungen ausschalten? Dann sehen Sie nicht, was die Sprachsteuerung tut. Sagen Sie ja oder nein."),
+        SettingChange::UpdateCheck(false) => t!(l, "Turn the update check off? Say yes or no.", "Выключить проверку обновлений? Скажите да или нет.", "Die Update-Prüfung ausschalten? Sagen Sie ja oder nein."),
         other => setting_text(l, other),
     }
+}
+
+fn stale_alias_text(l: Lang, phrase: &str) -> String {
+    let phrase = clip(phrase, 60);
+    t!(
+        l,
+        "The alias '{phrase}' points to an automation that changed; set it up again.",
+        "Псевдоним «{phrase}» указывает на изменённую автоматизацию; настройте его заново.",
+        "Der Alias „{phrase}“ verweist auf eine geänderte Automatisierung; richten Sie ihn neu ein."
+    )
 }
 
 impl VoiceController {
@@ -232,6 +275,20 @@ impl VoiceController {
         self.settings = settings;
         // Anything asked under the old settings is no longer valid.
         self.pending = None;
+        self.expired_recently = false;
+    }
+
+    /// Drop the pending question without answering it (mute, mode change, the app speaking ...).
+    /// A question is never confirmed by being dropped or by expiring.
+    pub fn cancel_pending(&mut self) {
+        self.pending = None;
+        self.expired_recently = false;
+    }
+
+    /// Aliases that are ignored because their automation is gone or was renamed since the alias
+    /// was made (for the settings screen: "set it up again").
+    pub fn stale_aliases(&self) -> Vec<super::VoiceAlias> {
+        super::settings::stale_aliases(&self.settings, &self.backend.automations())
     }
 
     pub fn settings(&self) -> &VoiceSettings {
@@ -255,14 +312,16 @@ impl VoiceController {
                 self.seen_ids.remove(&old);
             }
         }
-        self.process(&transcript.text, transcript.confidence, transcript.language.as_deref(), now_ms)
+        self.process(&transcript.text, transcript.confidence, transcript.language.as_deref(), false, now_ms)
     }
 
-    /// Typed text ("try a phrase" in the UI): handled exactly like speech.
+    /// Typed text ("try a phrase" in the UI): parsed exactly like speech, but the person is at the
+    /// keyboard, so it counts as full confidence (and can confirm high-risk questions).
     pub fn handle_text(&mut self, text: &str, now_ms: u64) -> Vec<Reply> {
         self.text_seq += 1;
         let id = self.text_seq;
-        self.handle(&Transcript { id, text: text.to_string(), confidence: None, language: None }, now_ms)
+        let _ = id;
+        self.process(text, Some(1.0), None, true, now_ms)
     }
 
     /// The on-screen Yes/No buttons.
@@ -270,7 +329,7 @@ impl VoiceController {
         let lang = self.pending.as_ref().map(|p| p.lang).unwrap_or_else(|| self.default_lang());
         self.backend.notice(&format!("Voice: {}", if yes { "yes (button)" } else { "no (button)" }));
         self.expire(now_ms);
-        self.answer(yes, lang, now_ms)
+        self.answer(yes, Answer::Button, lang, now_ms)
     }
 
     /// The question waiting for an answer, if any (expires after a short time).
@@ -299,7 +358,7 @@ impl VoiceController {
         }
     }
 
-    fn process(&mut self, text: &str, confidence: Option<f32>, hint: Option<&str>, now: u64) -> Vec<Reply> {
+    fn process(&mut self, text: &str, confidence: Option<f32>, hint: Option<&str>, typed: bool, now: u64) -> Vec<Reply> {
         let text: String = text.chars().take(MAX_TEXT_CHARS).collect();
         let norm = normalize(&text);
         if norm.is_empty() {
@@ -310,28 +369,31 @@ impl VoiceController {
                 return Vec::new();
             }
         }
+        // The wake phrase on its own is not a command (in speech it only arms the session).
+        let wake = grammar::words(&self.settings.wake_phrase);
+        if !wake.is_empty() && grammar::words(&text) == wake {
+            return Vec::new();
+        }
         self.last_text = Some((norm, now));
-        self.backend.notice(&format!("Voice: {}", clip(text.trim(), 200)));
+        let intent = grammar::parse(&text, &self.settings);
+        if intent == Intent::Unknown {
+            // What was not understood is never repeated in notifications.
+            self.backend.notice("Voice: not understood");
+        } else {
+            self.backend.notice(&format!("Voice: {}", clip(text.trim(), 200)));
+        }
         self.expire(now);
         let lang = self.reply_lang(&text, hint);
-        let intent = grammar::parse(&text, &self.settings);
         let mut out = Vec::new();
 
         if self.pending.is_some() {
             match intent {
                 Intent::Yes => {
-                    if confidence.is_some_and(|c| c < YES_MIN_CONFIDENCE) {
-                        // The retry must not be mistaken for a re-emitted result.
-                        self.last_text = None;
-                        return vec![reply(
-                            ReplyKind::Confirm,
-                            t!(lang, "I'm not sure I heard \"yes\". Please say it again or press Yes.", "Не уверен, что услышал «да». Скажите ещё раз или нажмите «Да».", "Ich bin nicht sicher, ob ich „ja“ gehört habe. Bitte wiederholen oder Ja drücken."),
-                            true,
-                        )];
-                    }
-                    return self.answer(true, lang, now);
+                    let how = if typed { Answer::Typed } else { Answer::Spoken(confidence) };
+                    return self.answer(true, how, lang, now);
                 }
-                Intent::No | Intent::Stop { target: None } => return self.answer(false, lang, now),
+                Intent::No => return self.answer(false, Answer::Spoken(confidence), lang, now),
+                Intent::Stop { target: None } => return vec![self.decline_for_stop(lang)],
                 _ => {
                     self.pending = None;
                     out.push(info(t!(lang, "Cancelled.", "Отменено.", "Abgebrochen.")));
@@ -341,8 +403,27 @@ impl VoiceController {
             return vec![self.nothing_to_confirm(lang)];
         }
         self.expired_recently = false;
-        out.extend(self.run_intent(intent, &text, &norm_for_suggestions(&text), confidence, lang, now));
+        let norm = norm_for_suggestions(&text);
+        out.extend(self.run_intent(intent, &norm, confidence, lang, now));
         out
+    }
+
+    /// "stop" / "cancel" while a question is pending declines the question; it does not stop runs.
+    fn decline_for_stop(&mut self, lang: Lang) -> Reply {
+        self.pending = None;
+        self.expired_recently = false;
+        let running = self.backend.running();
+        if running.is_empty() {
+            return info(t!(lang, "Cancelled.", "Отменено.", "Abgebrochen."));
+        }
+        let names: Vec<String> = distinct_ids(&running).iter().filter_map(|i| running.iter().find(|r| r.automation_id == *i)).map(|r| r.name.clone()).collect();
+        let l = and_list(lang, &names);
+        info(t!(
+            lang,
+            "Cancelled the question. {l} is still running - say stop again to stop it.",
+            "Вопрос отменён. {l} всё ещё выполняется - скажите стоп ещё раз, чтобы остановить.",
+            "Frage abgebrochen. {l} läuft noch - sagen Sie noch einmal stopp, um es zu stoppen."
+        ))
     }
 
     fn nothing_to_confirm(&mut self, lang: Lang) -> Reply {
@@ -354,26 +435,66 @@ impl VoiceController {
         }
     }
 
-    fn answer(&mut self, yes: bool, lang: Lang, now: u64) -> Vec<Reply> {
-        let Some(p) = self.pending.take() else {
+    fn answer(&mut self, yes: bool, how: Answer, lang: Lang, now: u64) -> Vec<Reply> {
+        let Some(p) = self.pending.as_ref() else {
             return vec![self.nothing_to_confirm(lang)];
         };
         self.expired_recently = false;
+        let always_on = self.settings.mode == ListenMode::AlwaysOn;
+        let spoken = matches!(how, Answer::Spoken(_));
+        if yes {
+            if let Answer::Spoken(conf) = how {
+                if p.high_risk {
+                    let plang = p.lang;
+                    if always_on {
+                        return vec![info(t!(
+                            plang,
+                            "This must be confirmed with the Yes button on the screen, or switch to push-to-talk. A spoken yes is not enough in always-on mode.",
+                            "Это нужно подтвердить кнопкой «Да» на экране или переключитесь на режим «нажми и говори». В режиме постоянного прослушивания «да» голосом недостаточно.",
+                            "Das muss mit der Ja-Taste auf dem Bildschirm bestätigt werden, oder wechseln Sie zu Push-to-Talk. Ein gesprochenes Ja reicht im Dauerbetrieb nicht."
+                        ))];
+                    }
+                    if conf.map_or(true, |c| c < HIGH_RISK_YES_CONFIDENCE) {
+                        return vec![info(t!(
+                            plang,
+                            "I can't be sure that was you. Please press Yes on the screen.",
+                            "Не уверен, что это были вы. Нажмите «Да» на экране.",
+                            "Ich bin nicht sicher, dass Sie das waren. Bitte drücken Sie Ja auf dem Bildschirm."
+                        ))];
+                    }
+                } else if conf.is_some_and(|c| c < YES_MIN_CONFIDENCE) {
+                    // The retry must not be mistaken for a re-emitted result.
+                    self.last_text = None;
+                    return vec![reply(
+                        ReplyKind::Confirm,
+                        t!(lang, "I'm not sure I heard \"yes\". Please say it again or press Yes.", "Не уверен, что услышал «да». Скажите ещё раз или нажмите «Да».", "Ich bin nicht sicher, ob ich „ja“ gehört habe. Bitte wiederholen oder Ja drücken."),
+                        true,
+                    )];
+                }
+            }
+        }
+        let Some(p) = self.pending.take() else {
+            return vec![self.nothing_to_confirm(lang)];
+        };
         if !yes {
             return vec![info(t!(p.lang, "Cancelled.", "Отменено.", "Abgebrochen."))];
         }
+        // An always-on spoken yes can come from the room (or from our own voice): it starts the
+        // run, but does not count as a real confirmation for chained system steps.
+        let confirmed = !(always_on && spoken);
         match p.action {
-            Action::Run { id, name } => self.start(id, &name, p.lang, now),
+            Action::Run { id, name, .. } => self.start(id, &name, p.lang, now, confirmed),
             Action::Setting(change) => self.apply(&change, p.lang),
         }
     }
 
     fn ask(&mut self, action: Action, prompt: String, lang: Lang, now: u64) -> Reply {
-        self.pending = Some(Pending { action, prompt: prompt.clone(), expires_at: now + CONFIRM_TTL_MS, lang });
+        let high_risk = action.high_risk();
+        self.pending = Some(Pending { action, prompt: prompt.clone(), expires_at: now + CONFIRM_TTL_MS, lang, high_risk });
         reply(ReplyKind::Confirm, prompt, true)
     }
 
-    fn run_intent(&mut self, intent: Intent, text: &str, norm: &str, confidence: Option<f32>, lang: Lang, now: u64) -> Vec<Reply> {
+    fn run_intent(&mut self, intent: Intent, norm: &str, confidence: Option<f32>, lang: Lang, now: u64) -> Vec<Reply> {
         match intent {
             Intent::Run { target } => self.run(&target, confidence, lang, now),
             Intent::Stop { target } => self.stop(target.as_deref(), lang),
@@ -404,7 +525,7 @@ impl VoiceController {
                 })]
             }
             Intent::Yes | Intent::No => vec![self.nothing_to_confirm(lang)],
-            Intent::Unknown => vec![self.unknown(text, norm, lang)],
+            Intent::Unknown => vec![self.unknown(norm, lang)],
         }
     }
 
@@ -415,34 +536,57 @@ impl VoiceController {
             return vec![problem(t!(lang, "Which automation? Say 'run' and its name.", "Какую автоматизацию? Скажите «запусти» и название.", "Welche Automatisierung? Sagen Sie „starte“ und den Namen."))];
         }
         let list = self.backend.automations();
-        let m = matcher::find(target, &list, &self.settings.aliases);
-        let (id, weak) = match m {
-            Match::Exact(id) | Match::Likely(id) => (id, false),
-            Match::Weak(id) => (id, true),
+        let live = self.live_aliases(&list);
+        let m = matcher::find(target, &list, &live);
+        if !matches!(m, Match::Exact(_)) {
+            let wanted = normalize(target);
+            if let Some(stale) = super::settings::stale_aliases(&self.settings, &list).into_iter().find(|a| normalize(&a.phrase) == wanted) {
+                return vec![problem(stale_alias_text(lang, &stale.phrase))];
+            }
+        }
+        let (id, exact) = match m {
+            Match::Exact(id) => (id, true),
+            Match::Likely(id) | Match::Weak(id) => (id, false),
             Match::Ambiguous(c) => return vec![problem(self.which_one(lang, &c))],
-            Match::None => return vec![self.not_found(target, &list, lang)],
+            Match::None => return vec![self.not_found(target, &list, &live, lang)],
         };
         let Some(auto) = list.iter().find(|a| a.id == id) else {
-            return vec![self.not_found(target, &list, lang)];
+            return vec![self.not_found(target, &list, &live, lang)];
         };
         if let Some(refusal) = self.gate(auto, lang, now) {
             return vec![refusal];
         }
         let name = auto.name.clone();
         if auto.allow_system {
+            if !exact {
+                return vec![problem(t!(
+                    lang,
+                    "{name} can control this PC, so I only run it when you say its exact name.",
+                    "{name} может управлять компьютером, поэтому я запускаю её только по точному названию.",
+                    "{name} kann den PC steuern, deshalb starte ich sie nur beim genauen Namen."
+                ))];
+            }
             let prompt = t!(
                 lang,
-                "{name} can control this PC (commands, keys, programs). Run it? Say yes or no.",
-                "{name} может управлять этим компьютером (команды, клавиши, программы). Запустить? Скажите да или нет.",
-                "{name} kann diesen PC steuern (Befehle, Tasten, Programme). Ausführen? Sagen Sie ja oder nein."
+                "{name} can control this PC (commands, keys, programs). Run {name}? Say yes or no.",
+                "{name} может управлять этим компьютером (команды, клавиши, программы). Запустить {name}? Скажите да или нет.",
+                "{name} kann diesen PC steuern (Befehle, Tasten, Programme). {name} ausführen? Sagen Sie ja oder nein."
             );
-            return vec![self.ask(Action::Run { id, name }, prompt, lang, now)];
+            return vec![self.ask(Action::Run { id, name, system: true }, prompt, lang, now)];
         }
-        if weak || confidence.is_some_and(|c| c < LOW_CONFIDENCE) {
+        // No confidence (the real engine) counts as low, but only fuzzy matches and clearly
+        // low-confidence hearings ask; an exact name of an enabled automation runs at once.
+        if !exact || confidence.is_some_and(|c| c < LOW_CONFIDENCE) {
             let prompt = t!(lang, "Did you mean {name}? Say yes to run it, or no.", "Вы имели в виду {name}? Скажите да, чтобы запустить, или нет.", "Meinten Sie {name}? Sagen Sie ja zum Starten oder nein.");
-            return vec![self.ask(Action::Run { id, name }, prompt, lang, now)];
+            return vec![self.ask(Action::Run { id, name, system: false }, prompt, lang, now)];
         }
-        self.start(id, &name, lang, now)
+        self.start(id, &name, lang, now, false)
+    }
+
+    /// Aliases whose automation still exists under the name they were made for.
+    fn live_aliases(&self, list: &[AutomationInfo]) -> Vec<super::VoiceAlias> {
+        let stale = super::settings::stale_aliases(&self.settings, list);
+        self.settings.aliases.iter().filter(|a| !stale.contains(a)).cloned().collect()
     }
 
     /// Everything that can forbid starting this automation right now (None = fine).
@@ -464,7 +608,7 @@ impl VoiceController {
                 "{name} kann den PC steuern, und Sprache darf solche nicht starten. Erlauben Sie es in den Spracheinstellungen oder starten Sie sie selbst."
             )));
         }
-        if self.backend.running().iter().any(|r| r.automation_id == auto.id) {
+        if self.backend.is_running(auto.id) {
             return Some(info(t!(lang, "{name} is already running.", "{name} уже запущена.", "{name} läuft bereits.")));
         }
         if self.last_launch.get(&auto.id).is_some_and(|at| now.saturating_sub(*at) < LAUNCH_GUARD_MS) {
@@ -474,7 +618,7 @@ impl VoiceController {
     }
 
     /// Re-check and start (also after a confirmation, when the world may have changed).
-    fn start(&mut self, id: i64, name: &str, lang: Lang, now: u64) -> Vec<Reply> {
+    fn start(&mut self, id: i64, name: &str, lang: Lang, now: u64, confirmed: bool) -> Vec<Reply> {
         let list = self.backend.automations();
         let Some(auto) = list.iter().find(|a| a.id == id) else {
             return vec![problem(t!(lang, "{name} doesn't exist any more.", "{name} больше не существует.", "{name} gibt es nicht mehr."))];
@@ -483,7 +627,7 @@ impl VoiceController {
             return vec![refusal];
         }
         let name = auto.name.clone();
-        match self.backend.start(id) {
+        match self.backend.start(id, confirmed) {
             Ok(()) => {
                 self.last_launch.insert(id, now);
                 vec![done(t!(lang, "Running {name}.", "Запускаю {name}.", "Starte {name}."))]
@@ -505,9 +649,9 @@ impl VoiceController {
         )
     }
 
-    fn not_found(&self, target: &str, list: &[AutomationInfo], lang: Lang) -> Reply {
+    fn not_found(&self, target: &str, list: &[AutomationInfo], aliases: &[super::VoiceAlias], lang: Lang) -> Reply {
         let target = clip(target, 60);
-        let near = matcher::suggest(&target, list, &self.settings.aliases, 2);
+        let near = matcher::suggest(&target, list, aliases, 2);
         let mut text = t!(lang, "I couldn't find an automation called '{target}'.", "Не нашёл автоматизацию «{target}».", "Ich habe keine Automatisierung „{target}“ gefunden.");
         if !near.is_empty() {
             let names: Vec<String> = near.iter().map(|c| c.name.clone()).collect();
@@ -545,7 +689,7 @@ impl VoiceController {
                     .filter_map(|i| running.iter().find(|r| r.automation_id == *i))
                     .map(|r| AutomationInfo { id: r.automation_id, name: r.name.clone(), description: String::new(), enabled: true, allow_system: false })
                     .collect();
-                match matcher::find(target, &pseudo, &self.settings.aliases) {
+                match matcher::find(target, &pseudo, &self.live_aliases(&pseudo)) {
                     Match::Exact(id) | Match::Likely(id) => id,
                     Match::Weak(id) => {
                         let name = pseudo.iter().find(|a| a.id == id).map(|a| a.name.clone()).unwrap_or_default();
@@ -577,7 +721,7 @@ impl VoiceController {
         if let Some(e) = errors.first() {
             problem(t!(lang, "I couldn't stop {name}: {e}", "Не удалось остановить {name}: {e}", "{name} konnte nicht gestoppt werden: {e}"))
         } else if stopped > 0 {
-            done(t!(lang, "Stopping {name}.", "Останавливаю {name}.", "Stoppe {name}."))
+            done(t!(lang, "Asked {name} to stop.", "Попросил {name} остановиться.", "Habe {name} gebeten, zu stoppen."))
         } else {
             let _ = finished;
             info(t!(lang, "{name} had already finished.", "{name} уже завершилась.", "{name} war schon fertig."))
@@ -604,7 +748,7 @@ impl VoiceController {
         if stopped == 0 {
             return vec![info(t!(lang, "Everything had already finished.", "Всё уже завершилось.", "Alles war schon fertig."))];
         }
-        vec![done(t!(lang, "Stopping everything ({stopped}).", "Останавливаю всё ({stopped}).", "Stoppe alles ({stopped})."))]
+        vec![done(t!(lang, "Asked everything to stop ({stopped}).", "Попросил всё остановиться ({stopped}).", "Habe alles gebeten, zu stoppen ({stopped})."))]
     }
 
     fn whats_running(&self, lang: Lang) -> Reply {
@@ -649,7 +793,7 @@ impl VoiceController {
                 "Einstellungen per Sprache zu ändern ist ausgeschaltet. Sie können es in den Spracheinstellungen erlauben."
             ))];
         }
-        if matches!(change, SettingChange::Autostart(_) | SettingChange::Language(_)) {
+        if change.needs_confirmation() {
             let prompt = setting_question(lang, &change);
             return vec![self.ask(Action::Setting(change), prompt, lang, now)];
         }
@@ -668,14 +812,15 @@ impl VoiceController {
 
     // ---- not understood ------------------------------------------------------------------------
 
-    fn unknown(&self, text: &str, norm: &str, lang: Lang) -> Reply {
-        let shown = clip(text.trim(), 60);
-        let mut msg = t!(lang, "I didn't understand '{shown}'.", "Я не понял «{shown}».", "Ich habe „{shown}“ nicht verstanden.");
+    fn unknown(&self, norm: &str, lang: Lang) -> Reply {
+        // The heard text is not repeated: only commands that were understood are echoed.
+        let mut msg = t!(lang, "I didn't understand that.", "Я не понял.", "Das habe ich nicht verstanden.");
         let list = self.backend.automations();
+        let live = self.live_aliases(&list);
         let words: Vec<&str> = norm.split(' ').collect();
-        let mut near = matcher::suggest(norm, &list, &self.settings.aliases, 2);
+        let mut near = matcher::suggest(norm, &list, &live, 2);
         if near.is_empty() && words.len() > 1 {
-            near = matcher::suggest(&words[1..].join(" "), &list, &self.settings.aliases, 2);
+            near = matcher::suggest(&words[1..].join(" "), &list, &live, 2);
         }
         let verb = t!(lang, "Run", "Запусти", "Starte");
         let near: Vec<String> = near.into_iter().filter(|c| c.score >= 0.6).map(|c| format!("{verb} {}", c.name)).collect();
@@ -710,7 +855,7 @@ impl VoiceController {
             }
             ex("automation", format!("{verb} {}", a.name), does);
         }
-        for al in &self.settings.aliases {
+        for al in &self.live_aliases(&autos) {
             if let Some(a) = autos.iter().find(|a| a.id == al.automation_id).filter(|a| runnable(a)) {
                 let name = &a.name;
                 let mut does = t!(l, "Runs {name}", "Запускает {name}", "Startet {name}");
@@ -753,7 +898,7 @@ impl VoiceController {
             ];
             for (say, change) in rows {
                 let mut does = setting_text(l, &change);
-                if matches!(change, Autostart(_) | Language(_)) {
+                if change.needs_confirmation() {
                     does.push_str(&confirm_note);
                 }
                 ex("setting", say, does);

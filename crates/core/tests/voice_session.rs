@@ -166,6 +166,7 @@ impl Speaker for FakeSpeaker {
 struct BackendState {
     automations: Vec<AutomationInfo>,
     started: Vec<i64>,
+    confirmed: Vec<bool>,
 }
 
 #[derive(Clone, Default)]
@@ -178,8 +179,13 @@ impl VoiceBackend for MockBackend {
     fn running(&self) -> Vec<RunningInfo> {
         Vec::new()
     }
-    fn start(&self, id: i64) -> Result<(), String> {
-        self.0.lock().unwrap().started.push(id);
+    fn is_running(&self, _id: i64) -> bool {
+        false
+    }
+    fn start(&self, id: i64, confirmed: bool) -> Result<(), String> {
+        let mut s = self.0.lock().unwrap();
+        s.started.push(id);
+        s.confirmed.push(confirmed);
         Ok(())
     }
     fn stop(&self, _run_id: i64) -> Result<bool, String> {
@@ -252,6 +258,9 @@ fn rig(mode: ListenMode) -> Rig {
 impl Rig {
     fn started(&self) -> Vec<i64> {
         self.backend.0.lock().unwrap().started.clone()
+    }
+    fn confirmed(&self) -> Vec<bool> {
+        self.backend.0.lock().unwrap().confirmed.clone()
     }
     fn events(&self) -> Vec<VoiceEvent> {
         self.events.lock().unwrap().clone()
@@ -564,6 +573,20 @@ fn typed_commands_and_confirmations_work_while_muted() {
 
 #[test]
 fn a_spoken_confirmation_needs_no_wake_phrase() {
+    // a low-risk question ("did you mean ...?"): a spoken yes in the next breath is enough
+    let r = rig(ListenMode::AlwaysOn);
+    wait("open", || r.src.is_open());
+    r.rec.say("hey localflow run zip");
+    r.src.utterance();
+    wait("confirm", || r.events().iter().any(|e| matches!(e, VoiceEvent::Confirm { .. })));
+    r.rec.say("yes");
+    r.src.utterance();
+    wait("started", || r.started() == vec![1]);
+    assert_eq!(r.confirmed(), vec![false], "an always-on spoken yes does not count as a real confirmation");
+}
+
+#[test]
+fn an_always_on_spoken_yes_cannot_confirm_a_system_run_but_the_button_can() {
     let r = rig(ListenMode::AlwaysOn);
     wait("open", || r.src.is_open());
     r.rec.say("hey localflow run power off");
@@ -571,7 +594,70 @@ fn a_spoken_confirmation_needs_no_wake_phrase() {
     wait("confirm", || r.events().iter().any(|e| matches!(e, VoiceEvent::Confirm { .. })));
     r.rec.say("yes");
     r.src.utterance();
+    wait("refusal", || r.replies().iter().any(|(_, t)| t.contains("Yes button")));
+    pause(100);
+    assert!(r.started().is_empty());
+    r.session.answer_confirmation(true);
     wait("started", || r.started() == vec![9]);
+    assert_eq!(r.confirmed(), vec![true]);
+}
+
+#[test]
+fn muting_or_a_mode_change_cancels_the_pending_question() {
+    let r = rig(ListenMode::AlwaysOn);
+    wait("open", || r.src.is_open());
+    r.rec.say("hey localflow run power off");
+    r.src.utterance();
+    wait("confirm", || r.events().iter().any(|e| matches!(e, VoiceEvent::Confirm { .. })));
+    r.session.set_muted(true);
+    r.wait_state(VoiceState::Muted);
+    r.session.set_muted(false);
+    r.wait_state(VoiceState::Idle);
+    r.session.answer_confirmation(true);
+    wait("nothing to confirm", || r.replies().iter().any(|(_, t)| t.contains("nothing to confirm")));
+    assert!(r.started().is_empty());
+
+    // a mode change drops it as well (other words: the same text again would be a duplicate)
+    r.rec.say("hey localflow start power off");
+    r.src.utterance();
+    wait("second confirm", || r.events().iter().filter(|e| matches!(e, VoiceEvent::Confirm { .. })).count() == 2);
+    r.session.update_settings(VoiceSettings { mode: ListenMode::PushToTalk, run_system_automations: true, ..VoiceSettings::default() });
+    pause(100);
+    r.session.answer_confirmation(true);
+    wait("nothing to confirm again", || r.replies().iter().filter(|(_, t)| t.contains("nothing to confirm")).count() == 2);
+    assert!(r.started().is_empty());
+}
+
+#[test]
+fn typed_phrases_are_full_confidence_and_can_confirm() {
+    let r = rig(ListenMode::AlwaysOn);
+    wait("open", || r.src.is_open());
+    r.session.submit_text("run power off");
+    wait("confirm", || r.events().iter().any(|e| matches!(e, VoiceEvent::Confirm { .. })));
+    r.session.submit_text("yes");
+    wait("started", || r.started() == vec![9]);
+    assert_eq!(r.confirmed(), vec![true]);
+    assert!(r.events().iter().any(|e| matches!(e, VoiceEvent::Heard { text, confidence: Some(c) } if text == "run power off" && *c == 1.0)));
+}
+
+#[test]
+fn a_spoken_question_is_guarded_against_its_own_echo() {
+    let r = rig(ListenMode::AlwaysOn);
+    *r.speaker.echo_into.lock().unwrap() = Some(r.src.clone());
+    wait("open", || r.src.is_open());
+    r.session.update_settings(VoiceSettings { mode: ListenMode::AlwaysOn, spoken_feedback: true, run_system_automations: true, ..VoiceSettings::default() });
+    pause(30);
+    // the room echo of the question would be recognised as "yes"
+    r.rec.say("hey localflow run zip");
+    r.rec.say("yes");
+    r.src.utterance();
+    wait("spoken", || !r.speaker.spoken.lock().unwrap().is_empty());
+    r.src.chunk(tone(100));
+    r.src.chunk(quiet(300));
+    r.wait_state(VoiceState::Idle);
+    pause(250);
+    assert_eq!(r.rec.calls(), 1, "the echo of the prompt must not reach the recogniser");
+    assert!(r.started().is_empty());
 }
 
 #[test]

@@ -10,9 +10,18 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use super::{grammar, ListenMode, VoiceSettings};
+use super::{grammar, AutomationInfo, ListenMode, VoiceAlias, VoiceSettings};
 
-pub const WAKE_MIN_CHARS: usize = 2;
+/// A wake phrase needs at least this many words, or at least [`WAKE_MIN_CHARS`] characters.
+pub const WAKE_MIN_WORDS: usize = 2;
+pub const WAKE_MIN_CHARS: usize = 6;
+/// Words a wake phrase must not be or start with: it would collide with the control commands.
+// First words a wake phrase may not start with. "ok"/"okay" are allowed ("okay flow", like "OK Google"):
+// the grammar treats them as filler, never as a confirmation.
+pub const CONTROL_WORDS: &[&str] = &[
+    "stop", "stopp", "stoppe", "cancel", "abort", "mute", "unmute", "yes", "no", "yeah", "nope", "run", "start", "starte", "list", "show", "help", "what", "whats",
+    "ja", "nein", "da", "нет", "да", "стоп", "стой", "запусти", "запуск", "останови", "отмена", "отмени", "хватит", "покажи", "помощь", "hilfe", "zeige", "abbrechen", "fuhre",
+];
 pub const WAKE_MAX_CHARS: usize = 40;
 pub const ALIAS_MAX_CHARS: usize = 60;
 pub const LANGUAGES: [&str; 4] = ["auto", "en", "ru", "de"];
@@ -80,8 +89,8 @@ pub fn validate(settings: &VoiceSettings) -> Result<VoiceSettings, String> {
         if s.mode == ListenMode::AlwaysOn {
             return Err("Always-on listening needs a wake phrase.".into());
         }
-    } else if !(WAKE_MIN_CHARS..=WAKE_MAX_CHARS).contains(&wake_len) {
-        return Err(format!("The wake phrase must be {WAKE_MIN_CHARS}-{WAKE_MAX_CHARS} characters long."));
+    } else {
+        check_wake_phrase(&s.wake_phrase)?;
     }
     let mut seen = HashSet::new();
     for alias in &mut s.aliases {
@@ -101,6 +110,60 @@ pub fn validate(settings: &VoiceSettings) -> Result<VoiceSettings, String> {
         }
     }
     Ok(s)
+}
+
+fn check_wake_phrase(phrase: &str) -> Result<(), String> {
+    let len = phrase.chars().count();
+    if len > WAKE_MAX_CHARS {
+        return Err(format!("The wake phrase can be at most {WAKE_MAX_CHARS} characters long."));
+    }
+    let words = grammar::words(phrase);
+    if words.len() < WAKE_MIN_WORDS && len < WAKE_MIN_CHARS {
+        return Err(format!("The wake phrase needs at least {WAKE_MIN_WORDS} words or {WAKE_MIN_CHARS} characters, so ordinary speech does not trigger it."));
+    }
+    let Some(first) = words.first() else {
+        return Err("The wake phrase needs real words.".into());
+    };
+    if CONTROL_WORDS.contains(&first.as_str()) || grammar::is_reserved_phrase(&words.join(" ")) {
+        return Err(format!("\"{phrase}\" starts like a voice command (stop, mute, yes, run ...); choose another wake phrase."));
+    }
+    Ok(())
+}
+
+/// Aliases that are not used any more: their automation is gone, or it no longer has the name it
+/// had when the alias was made (an id can be reused after a backup is restored). Matching is
+/// case-insensitive. The settings screen lists these so the person can set them up again.
+pub fn stale_aliases(settings: &VoiceSettings, automations: &[AutomationInfo]) -> Vec<VoiceAlias> {
+    settings
+        .aliases
+        .iter()
+        .filter(|al| {
+            !automations
+                .iter()
+                .any(|a| a.id == al.automation_id && a.name.trim().to_lowercase() == al.automation_name.trim().to_lowercase())
+        })
+        .cloned()
+        .collect()
+}
+
+/// Checks that need the automations (so they are not part of [`validate`]): two automations whose
+/// names say the same phrase, or an alias that says another automation's name, would be
+/// ambiguous by voice. Call it when the person saves an alias.
+pub fn check_alias_conflicts(settings: &VoiceSettings, automations: &[AutomationInfo]) -> Result<(), String> {
+    for al in &settings.aliases {
+        let phrase = grammar::normalize(&al.phrase);
+        if let Some(other) = automations.iter().find(|a| a.id != al.automation_id && grammar::normalize(&a.name) == phrase) {
+            return Err(format!("The spoken name \"{}\" is also the name of the automation \"{}\"; pick another.", al.phrase, other.name));
+        }
+    }
+    let mut names = HashSet::new();
+    for a in automations {
+        let n = grammar::normalize(&a.name);
+        if !n.is_empty() && !names.insert(n) {
+            return Err(format!("Two automations sound the same (\"{}\"); voice could not tell them apart. Rename one.", a.name));
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -138,7 +201,7 @@ mod tests {
         let s = load_from(&f);
         assert!(s.enabled);
         assert_eq!(s.push_key, "Ctrl+Alt+Space");
-        assert!(s.change_settings);
+        assert!(!s.change_settings);
     }
 
     #[test]
@@ -188,5 +251,53 @@ mod tests {
         }
         s.aliases = vec![alias("my backup", 1), alias("фото", 2)];
         assert!(validate(&s).is_ok());
+    }
+
+    #[test]
+    fn wake_phrase_rules() {
+        let with = |p: &str| VoiceSettings { wake_phrase: p.into(), ..VoiceSettings::default() };
+        for ok in ["hey localflow", "computer please", "локалфлоу", "okay flow", "Hallo Fluss", "jarvis"] {
+            assert!(validate(&with(ok)).is_ok(), "{ok}");
+        }
+        for bad in ["x", "hey", "go", "stop", "stop it now", "mute", "mute mic", "yes sir", "no way", "run it", "start now", "стоп машина", "запусти", "ja bitte", &"a".repeat(41), "list things"] {
+            assert!(validate(&with(bad)).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn push_key_must_be_a_real_shortcut() {
+        let with = |k: &str| VoiceSettings { push_key: k.into(), ..VoiceSettings::default() };
+        for bad in ["Ctrl", "Ctrl+Alt", "Shift", "Space", "A", "Ctrl+Nonsense", ""] {
+            assert!(validate(&with(bad)).is_err(), "{bad}");
+        }
+        assert!(validate(&with("ctrl+shift+f9")).is_ok());
+    }
+
+    fn info(id: i64, name: &str) -> AutomationInfo {
+        AutomationInfo { id, name: name.into(), description: String::new(), enabled: true, allow_system: false }
+    }
+
+    #[test]
+    fn stale_aliases_follow_the_automation_name() {
+        let mut s = VoiceSettings::default();
+        s.aliases = vec![
+            VoiceAlias { phrase: "backup".into(), automation_id: 1, automation_name: "Zip Backup".into() },
+            VoiceAlias { phrase: "photos".into(), automation_id: 2, automation_name: "Photos".into() },
+            VoiceAlias { phrase: "gone".into(), automation_id: 3, automation_name: "Gone".into() },
+        ];
+        let list = vec![info(1, "zip backup "), info(2, "Something else")];
+        let stale = stale_aliases(&s, &list);
+        assert_eq!(stale.iter().map(|a| a.phrase.as_str()).collect::<Vec<_>>(), vec!["photos", "gone"]);
+    }
+
+    #[test]
+    fn alias_conflicts_with_automation_names_are_reported() {
+        let mut s = VoiceSettings::default();
+        s.aliases = vec![VoiceAlias { phrase: "Photos!".into(), automation_id: 1, automation_name: "Zip".into() }];
+        let list = vec![info(1, "Zip"), info(2, "photos")];
+        assert!(check_alias_conflicts(&s, &list).is_err());
+        s.aliases[0].phrase = "pictures".into();
+        assert!(check_alias_conflicts(&s, &list).is_ok());
+        assert!(check_alias_conflicts(&s, &[info(1, "Sync A"), info(2, "sync a!")]).is_err());
     }
 }
