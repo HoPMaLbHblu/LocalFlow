@@ -6,6 +6,7 @@
 //! talk to the [`LocalFlow`] service.
 
 pub mod ai;
+pub mod dota;
 pub mod messaging;
 pub mod remote;
 pub mod backup;

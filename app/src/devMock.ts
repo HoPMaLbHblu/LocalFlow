@@ -42,6 +42,26 @@ const logs: LogEntry[] = [
 
 type Args = Record<string, any>;
 
+// Dota 2 companion preview data (open http://localhost:1420/#dota for the window).
+const dotaHeroes = [
+  [1, "antimage", "Anti-Mage"], [2, "axe", "Axe"], [5, "crystal_maiden", "Crystal Maiden"], [8, "juggernaut", "Juggernaut"],
+  [11, "nevermore", "Shadow Fiend"], [14, "pudge", "Pudge"], [26, "lion", "Lion"], [44, "phantom_assassin", "Phantom Assassin"],
+  [53, "furion", "Nature's Prophet"], [74, "invoker", "Invoker"], [86, "rubick", "Rubick"], [129, "mars", "Mars"],
+].map(([id, short, name]) => ({ id, name: `npc_dota_hero_${short}`, localized_name: name, primary_attr: "str", attack_type: "Melee", roles: ["Carry"] }));
+const dotaSlot = (slot: number, hero_id: number | null, confidence = 0.92, source: string | null = "screenshot") => ({
+  slot, hero_id, hero: dotaHeroes.find((h) => h.id === hero_id)?.localized_name ?? null, confidence: hero_id ? confidence : 0,
+  source: hero_id ? source : null, uncertain: !!hero_id && confidence < 0.6 && source === "screenshot",
+  alternatives: hero_id && confidence < 0.6 ? [{ hero_id: 26, hero: "Lion", confidence: 0.41 }, { hero_id: 5, hero: "Crystal Maiden", confidence: 0.22 }] : [],
+});
+const dotaNow = Math.floor(Date.now() / 1000);
+let dotaDraft = {
+  allies: [dotaSlot(1, 2, 1, "gsi"), dotaSlot(2, 86), dotaSlot(3, null), dotaSlot(4, null), dotaSlot(5, null)],
+  enemies: [dotaSlot(1, 14), dotaSlot(2, 11, 0.48), dotaSlot(3, 44), dotaSlot(4, null), dotaSlot(5, null)],
+  player_hero_id: 2, player_hero: "Axe", team: "radiant", team_assumed: true, role: "offlane", captures: 2,
+  updated_at: dotaNow, complete: false, uncertain: ["enemies 2"], note: null,
+};
+const dotaSourced = (detail: string) => ({ kind: "sourced", source: "OpenDota", detail, fetched_at: dotaNow - 7200 });
+
 export function installDevMock() {
   mockIPC((cmd, payload) => {
     const args = (payload ?? {}) as Args;
@@ -130,6 +150,32 @@ export function installDevMock() {
         automations = [...automations, a];
         return a;
       }
+      case "dota_get_settings": return { launch_url: "https://www.dotabuff.com/heroes/meta", role: "offlane", gsi_port: 3417, launch_assistant: true,
+        cfg_text: '"LocalFlow Dota 2 companion"\n{\n    "uri"  "http://127.0.0.1:3417/"\n    ...\n}\n' };
+      case "dota_status": return { gsi_installed: true, dota_found: true, dota_dir: "C:\\Steam\\steamapps\\common\\dota 2 beta",
+        cfg_path: "C:\\Steam\\steamapps\\common\\dota 2 beta\\game\\dota\\cfg\\gamestate_integration\\gamestate_integration_localflow.cfg",
+        listening: true, port: 3417, listen_error: null, dota_running: true, in_menu: false, state: "hero_selection", team: null, hero_id: 2,
+        hero_name: "npc_dota_hero_axe", last_update: dotaNow, launch_assistant: true, launch_url: "https://www.dotabuff.com/heroes/meta",
+        source: { name: "OpenDota", fetched_at: dotaNow - 7200, patch: "7.39", offline: false, note: "" } };
+      case "dota_heroes": return dotaHeroes;
+      case "dota_draft": case "dota_reset": case "dota_set_hero": case "dota_correct": return dotaDraft;
+      case "dota_set_team": dotaDraft = { ...dotaDraft, team: args.team, team_assumed: false }; return dotaDraft;
+      case "dota_capture": return { draft: dotaDraft, recognized: 5, layout: "16:9 top bar", width: 1920, height: 1080, warnings: [], image: "capture.png" };
+      case "dota_suggest": return [
+        { hero_id: 129, hero: "Mars", score: 0.8, reasons: [
+          { text: "Strong against Phantom Assassin", evidence: dotaSourced("54.1% win rate over 3,812 games") },
+          { text: "Your team has no initiator yet", evidence: { kind: "heuristic", rule: "every draft wants a way to start fights" } }] },
+        { hero_id: 26, hero: "Lion", score: 0.6, reasons: [{ text: "Instant disable against Pudge", evidence: { kind: "heuristic", rule: "hex stops channelled and melee heroes" } }] },
+      ];
+      case "dota_build": return { hero_id: 2, hero: "Axe", data_note: "OpenDota, fetched 2 h ago",
+        starting: [{ item: "Tango", key: "tango", priority: 1, why: "Lane sustain", evidence: dotaSourced("bought in 93% of games"), alternatives: [] }],
+        core: [{ item: "Blink Dagger", key: "blink", priority: 1, why: "Starts fights with Berserker's Call", evidence: dotaSourced("bought in 88% of games"), alternatives: [] },
+          { item: "Blade Mail", key: "blade_mail", priority: 2, why: "Punishes focus", evidence: { kind: "heuristic", rule: "damage return fits a tank" }, alternatives: ["Crimson Guard"] }],
+        situational: [{ item: "Black King Bar", key: "black_king_bar", priority: 3, why: "Lots of disables in the enemy draft", evidence: { kind: "heuristic", rule: "magic immunity against disables" }, alternatives: ["Linken's Sphere"] }],
+        adaptations: [{ text: "Phantom Assassin: consider Heaven's Halberd", evidence: { kind: "heuristic", rule: "disarm stops physical carries" } }] };
+      case "dota_set_settings": case "dota_set_role": case "open_dota": return null;
+      case "dota_install_gsi": throw { kind: "error", message: "Could not write C:\\Steam\\...\\gamestate_integration_localflow.cfg (access denied). Create that file yourself and paste the text shown below into it." };
+      case "dota_uninstall_gsi": return true;
       default: return null;
     }
   });

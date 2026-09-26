@@ -192,19 +192,36 @@ mod win {
         if ok == 0 { Err("Windows refused this picture".into()) } else { Ok(()) }
     }
 
-    fn with_endpoint<T>(f: impl FnOnce(&windows::Win32::Media::Audio::Endpoints::IAudioEndpointVolume) -> windows::core::Result<T>) -> Result<T, String> {
+    /// Core Audio needs COM. It runs on a thread of its own, so the COM mode it sets never
+    /// leaks into the caller's thread (a leaked multithreaded COM mode made opening web pages
+    /// from that thread silently do nothing).
+    fn with_endpoint<T: Send>(f: impl FnOnce(&windows::Win32::Media::Audio::Endpoints::IAudioEndpointVolume) -> windows::core::Result<T> + Send) -> Result<T, String> {
         use windows::Win32::{
             Media::Audio::{eConsole, eRender, Endpoints::IAudioEndpointVolume, IMMDeviceEnumerator, MMDeviceEnumerator},
-            System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_MULTITHREADED},
+            System::Com::{CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_ALL, COINIT_MULTITHREADED},
         };
-        // SAFETY: standard Core Audio calls; COM is initialised on this thread first.
-        unsafe {
-            let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
-            let enumerator: IMMDeviceEnumerator = CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL).map_err(|e| e.to_string())?;
-            let device = enumerator.GetDefaultAudioEndpoint(eRender, eConsole).map_err(|_| "no speakers or headphones found".to_string())?;
-            let volume: IAudioEndpointVolume = device.Activate(CLSCTX_ALL, None).map_err(|e| e.to_string())?;
-            f(&volume).map_err(|e| e.to_string())
-        }
+        std::thread::scope(|scope| {
+            scope
+                .spawn(|| {
+                    // SAFETY: standard Core Audio calls; COM is initialised on this thread first
+                    // and released at the end, after every interface has been dropped.
+                    unsafe {
+                        let initialised = CoInitializeEx(None, COINIT_MULTITHREADED).is_ok();
+                        let result = (|| {
+                            let enumerator: IMMDeviceEnumerator = CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL).map_err(|e| e.to_string())?;
+                            let device = enumerator.GetDefaultAudioEndpoint(eRender, eConsole).map_err(|_| "no speakers or headphones found".to_string())?;
+                            let volume: IAudioEndpointVolume = device.Activate(CLSCTX_ALL, None).map_err(|e| e.to_string())?;
+                            f(&volume).map_err(|e| e.to_string())
+                        })();
+                        if initialised {
+                            CoUninitialize();
+                        }
+                        result
+                    }
+                })
+                .join()
+                .unwrap_or_else(|_| Err("the sound system stopped unexpectedly".into()))
+        })
     }
 
     pub fn volume() -> Result<u32, String> {

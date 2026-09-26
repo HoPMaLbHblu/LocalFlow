@@ -42,6 +42,10 @@ pub enum CoreEvent {
     AutomationsChanged,
     /// Something the user should see on the desktop (e.g. a remote command arrived).
     Notice { message: String },
+    /// A script asked for the Dota 2 companion window (`dota.show()`).
+    ShowDota,
+    /// The Dota 2 draft or game state changed; the companion window refreshes.
+    DotaChanged,
 }
 
 pub type EventHandler = Arc<dyn Fn(CoreEvent) + Send + Sync>;
@@ -264,6 +268,10 @@ impl LocalFlow {
 
         // Telegram remote control (idle until switched on in Settings).
         self.keep_task(tokio::spawn(crate::remote::serve(self.clone())));
+
+        // Dota 2 companion: Game State Integration listener (only while its file is
+        // installed) and the once-per-launch page (only when switched on).
+        self.keep_task(tokio::spawn(crate::dota::launch::serve(self.inner.events.clone())));
 
         // A backup every day, also when LocalFlow runs for weeks without a restart.
         if self.inner.backups.is_some() {

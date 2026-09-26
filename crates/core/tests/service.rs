@@ -88,6 +88,8 @@ async fn run_records_history_and_emits_live_events() {
             CoreEvent::RunFinished { .. } => "finished",
             CoreEvent::AutomationsChanged => "changed",
             CoreEvent::Notice { .. } => "notice",
+            CoreEvent::ShowDota => "show_dota",
+            CoreEvent::DotaChanged => "dota_changed",
         })
         .collect();
     assert_eq!(kinds, ["changed", "started", "log", "log", "finished"]);

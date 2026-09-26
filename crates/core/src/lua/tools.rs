@@ -93,7 +93,7 @@ fn run(mut command: Command, timeout: Duration, env: &[(&str, &str)]) -> Result<
 
 // ---- screenshots and speech -------------------------------------------------------------
 
-fn capture(path: &Path, timeout: Duration) -> Result<(), String> {
+pub(crate) fn capture(path: &Path, timeout: Duration) -> Result<(), String> {
     let text = path.to_string_lossy();
     if cfg!(target_os = "macos") {
         let mut command = Command::new("screencapture");

@@ -113,6 +113,7 @@ pub fn register(
     crate::metrics::register(lua)?;
     crate::ai::register(lua, deadline)?;
     crate::messaging::register(lua, policy, deadline)?;
+    super::dota_api::register(lua, deadline)?;
     super::lualib::register(lua)?;
     globals.set("fs", fs)?;
     Ok(())

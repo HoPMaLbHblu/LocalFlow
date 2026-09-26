@@ -582,3 +582,31 @@ section.card label.check.nested { margin-left: 1.6rem; }
   .guide-window .guide-toc { width: 190px; }
   .guide-window .guide-content { padding: 1.25rem 1rem 2rem; }
 }
+
+/* ---- Dota 2 companion (window and settings card) ---- */
+.dota-window { height: 100vh; overflow-y: auto; box-sizing: border-box; padding: 12px 14px 16px; background: var(--bg); display: flex; flex-direction: column; gap: .5rem; }
+.dota-header { display: flex; justify-content: space-between; align-items: baseline; gap: .5rem; }
+.dota-banner { margin: 0; }
+.dota-section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: .6rem .8rem; }
+.dota-row { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; margin: .25rem 0; }
+.dota-inline { display: flex; align-items: center; gap: .4rem; flex-direction: row; margin-left: auto; }
+.dota-heading { font-size: .95rem; margin: .6rem 0 .3rem; }
+.dota-subheading { font-size: .85rem; margin: .6rem 0 .2rem; }
+.dota-slots { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .3rem; }
+.dota-slot { display: grid; grid-template-columns: 1.2rem 1fr 7.5rem; align-items: center; gap: .4rem; }
+.dota-slot-uncertain .dota-hero-input { border-color: var(--warn); }
+.dota-slot-n { color: var(--muted); font-size: .8rem; text-align: right; }
+.dota-slot-meta { display: flex; align-items: center; gap: .3rem; color: var(--muted); min-width: 4.5rem; justify-content: flex-end; }
+.dota-alternatives { grid-column: 2 / 4; display: flex; flex-wrap: wrap; gap: .3rem; align-items: center; color: var(--muted); }
+.dota-hero-input { min-width: 0; width: 100%; }
+.dota-row .dota-hero-input { flex: 1; }
+.segmented button.assumed { font-style: italic; }
+.dota-suggestions, .dota-items { margin: .2rem 0; padding-left: 1.3rem; display: flex; flex-direction: column; gap: .45rem; }
+.dota-reasons { margin: .15rem 0 0; padding-left: 1rem; display: flex; flex-direction: column; gap: .15rem; }
+.dota-tag { display: inline-block; border-radius: 999px; padding: 0 .45rem; font-size: .72rem; font-weight: 600; vertical-align: 1px; }
+.dota-tag-data { background: var(--ok-soft); color: var(--ok); }
+.dota-tag-rule { background: var(--surface-2); color: var(--muted); }
+.dota-footer { padding: .25rem .2rem 0; }
+.dota-gsi { margin: .3rem 0; display: flex; flex-direction: column; gap: .2rem; }
+.dota-path { word-break: break-all; font-family: var(--mono); font-size: .78rem; }
+.dota-cfg { max-height: 240px; overflow: auto; font-size: .78rem; background: var(--surface-2); padding: .5rem .7rem; border-radius: 6px; user-select: all; }

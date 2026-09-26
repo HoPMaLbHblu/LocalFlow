@@ -295,6 +295,31 @@ Then send `/help` to the bot. It answers `/status`, `/screenshot`, `/top`, `/app
 
 Discord works for messages only: create a webhook in a channel and paste it in the same card, then use `discord.send`.
 
+## Dota 2 companion
+
+Opens your page (for example your Dotabuff profile) when Dota 2 starts, recognises the heroes in the draft from a screenshot, and suggests heroes and items with the reasons behind them.
+
+**Setup**
+
+1. Open **Settings › Dota 2 companion**. Enter the page to open (e.g. `https://www.dotabuff.com/players/<your id>`, or leave it empty) and your position.
+2. Press **Install** under *Game State Integration*. LocalFlow finds the game through Steam and writes one file, `game/dota/cfg/gamestate_integration/gamestate_integration_localflow.cfg`, and nothing else. If the folder can't be written, the card shows the path and the text to paste in yourself. **Remove** deletes only that file.
+3. In Steam: right-click Dota 2 › **Properties** › **Launch options**, add `-gamestateintegration` (the game only sends its state with this option), and restart Dota 2.
+4. Switch on **Open this page when Dota 2 reaches its menu**, or use the templates in the *Games* category: *Dota 2: open my page at launch*, *Dota 2: draft assistant* (Ctrl+Alt+D) and *Dota 2: item build* (Ctrl+Alt+B).
+
+The page opens once per launch of the game (identified by the game's process and start time), also if LocalFlow restarts meanwhile. Scripts use the `dota` table: `dota.capture_draft()`, `dota.suggest(3)`, `dota.build()`, `dota.correct("enemies", 2, "Axe")` and more (see the guide).
+
+**Privacy and fair play**
+
+- Game State Integration is Valve's official feature: the game posts its state (menu or match phase, your team and hero) to `127.0.0.1` only, with a secret token that LocalFlow checks on every post.
+- Nothing reads the game's memory, injects anything, or presses keys in the game. The draft comes from screenshots you ask for; they stay on this PC and only the last 10 are kept.
+- Hero statistics are downloaded from public sources; nothing about you is uploaded.
+
+**Limitations**
+
+- Recognition needs the draft screen or the top bar to be visible; it works best at 16:9 and may need a correction (slots with low confidence are marked *check*).
+- Without Game State Integration, your team is assumed to be Radiant (switch it in the Dota 2 window), your hero must be picked by hand, and the menu is assumed a minute after the game starts.
+- Suggestions support your decisions; they don't promise wins. Each reason is labelled *Data* (statistics, with source and age) or *Rule of thumb*.
+
 ## Your data is safe
 
 - **Backups.** LocalFlow backs up all automations, history, logs and settings every day, before every update, before permanently deleting anything, and before restoring an older backup. **Settings › Backups** lists them and can restore any of them. Only daily backups are ever cleaned up (the newest 30 are kept).

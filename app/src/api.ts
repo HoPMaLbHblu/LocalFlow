@@ -235,6 +235,131 @@ export interface ImportPreview {
   problems: string[];
 }
 
+// ---- Dota 2 companion (src-tauri/src/dota.rs) ----
+
+export type DotaTeam = "radiant" | "dire";
+export type DotaRole = "carry" | "mid" | "offlane" | "soft_support" | "hard_support";
+export type DotaPhase = "unknown" | "menu" | "loading" | "hero_selection" | "strategy_time" | "pre_game" | "playing" | "post_game";
+
+/** Where a piece of advice comes from: statistics, or a rule of thumb. */
+export type DotaEvidence =
+  | { kind: "sourced"; source: string; detail: string; fetched_at: number }
+  | { kind: "heuristic"; rule: string };
+
+export interface DotaReason {
+  text: string;
+  evidence: DotaEvidence;
+}
+
+export interface DotaHeroSuggestion {
+  hero_id: number;
+  hero: string;
+  /** For ordering only; not a win probability. */
+  score: number;
+  reasons: DotaReason[];
+}
+
+export interface DotaItemAdvice {
+  item: string;
+  key: string;
+  priority: number;
+  why: string;
+  evidence: DotaEvidence;
+  alternatives: string[];
+}
+
+export interface DotaItemPlan {
+  hero_id: number;
+  hero: string;
+  starting: DotaItemAdvice[];
+  core: DotaItemAdvice[];
+  situational: DotaItemAdvice[];
+  adaptations: DotaReason[];
+  data_note: string;
+}
+
+export interface DotaSlot {
+  /** 1-5 */
+  slot: number;
+  hero_id: number | null;
+  hero: string | null;
+  confidence: number;
+  source: "screenshot" | "manual" | "gsi" | null;
+  uncertain: boolean;
+  alternatives: { hero_id: number; hero: string; confidence: number }[];
+}
+
+export interface DotaDraft {
+  allies: DotaSlot[];
+  enemies: DotaSlot[];
+  player_hero_id: number | null;
+  player_hero: string | null;
+  team: DotaTeam;
+  team_assumed: boolean;
+  role: DotaRole | null;
+  captures: number;
+  updated_at: number;
+  complete: boolean;
+  uncertain: string[];
+  note: string | null;
+}
+
+export interface DotaCapture {
+  draft: DotaDraft;
+  recognized: number;
+  layout: string;
+  width: number;
+  height: number;
+  warnings: string[];
+  image: string;
+}
+
+export interface DotaSourceInfo {
+  name: string;
+  fetched_at: number | null;
+  patch: string | null;
+  offline: boolean;
+  note: string;
+}
+
+export interface DotaStatus {
+  gsi_installed: boolean;
+  dota_found: boolean;
+  dota_dir: string | null;
+  cfg_path: string | null;
+  listening: boolean;
+  port: number;
+  listen_error: string | null;
+  dota_running: boolean;
+  in_menu: boolean;
+  state: DotaPhase;
+  team: DotaTeam | null;
+  hero_id: number | null;
+  hero_name: string | null;
+  last_update: number | null;
+  launch_assistant: boolean;
+  launch_url: string;
+  source: DotaSourceInfo;
+}
+
+export interface DotaHero {
+  id: number;
+  name: string;
+  localized_name: string;
+  primary_attr: string;
+  attack_type: string;
+  roles: string[];
+}
+
+export interface DotaSettings {
+  launch_url: string;
+  role: DotaRole | null;
+  gsi_port: number;
+  launch_assistant: boolean;
+  /** The Game State Integration file's text, to copy by hand if needed. */
+  cfg_text: string;
+}
+
 export type CommandError =
   | { kind: "validation"; messages: string[] }
   | { kind: "not_found" }
@@ -255,7 +380,10 @@ export type CoreEvent =
   | { type: "run_started"; automation_id: number; run_id: number; name: string; trigger: string }
   | { type: "log"; automation_id: number | null; run_id: number | null; level: string; message: string }
   | { type: "run_finished"; automation_id: number; name: string; trigger: string; run: AutomationRun }
-  | { type: "automations_changed" };
+  | { type: "automations_changed" }
+  | { type: "notice"; message: string }
+  | { type: "show_dota" }
+  | { type: "dota_changed" };
 
 /** A .localflow file was opened while LocalFlow was already running. */
 export function onOpenFile(handler: (path: string) => void): Promise<UnlistenFn> {
@@ -323,8 +451,27 @@ export const api = {
   clearBot: (which: "telegram" | "discord") => invoke<void>("clear_bot", { which }),
   findTelegramChats: (token: string | null) => invoke<[string, FoundChat[]]>("find_telegram_chats", { token }),
   testBots: () => invoke<string>("test_bots"),
+  dotaKeySaved: () => invoke<boolean>("dota_key_saved"),
+  dotaSetKey: (key: string | null) => invoke<void>("dota_set_key", { key }),
   backupNow: () => invoke<BackupInfo>("backup_now"),
   restoreBackup: (fileName: string) => invoke<void>("restore_backup", { fileName }),
   openBackupsFolder: () => invoke<void>("open_backups_folder"),
   startupNotice: () => invoke<StartupNotice | null>("startup_notice"),
+  dotaGetSettings: () => invoke<DotaSettings>("dota_get_settings"),
+  dotaSetSettings: (launchUrl: string, role: DotaRole | null, gsiPort: number, launchAssistant: boolean) =>
+    invoke<void>("dota_set_settings", { launchUrl, role, gsiPort, launchAssistant }),
+  dotaStatus: () => invoke<DotaStatus>("dota_status"),
+  dotaInstallGsi: () => invoke<string>("dota_install_gsi"),
+  dotaUninstallGsi: () => invoke<boolean>("dota_uninstall_gsi"),
+  dotaDraft: () => invoke<DotaDraft>("dota_draft"),
+  dotaCapture: () => invoke<DotaCapture>("dota_capture"),
+  dotaCorrect: (side: "allies" | "enemies", slot: number, hero: string | null) =>
+    invoke<DotaDraft>("dota_correct", { side, slot, hero }),
+  dotaSetHero: (hero: string | null) => invoke<DotaDraft>("dota_set_hero", { hero }),
+  dotaSetTeam: (team: DotaTeam) => invoke<DotaDraft>("dota_set_team", { team }),
+  dotaSetRole: (role: DotaRole | null) => invoke<void>("dota_set_role", { role }),
+  dotaReset: () => invoke<DotaDraft>("dota_reset"),
+  dotaSuggest: (count = 8) => invoke<DotaHeroSuggestion[]>("dota_suggest", { count }),
+  dotaBuild: (hero: string | null = null) => invoke<DotaItemPlan>("dota_build", { hero }),
+  dotaHeroes: () => invoke<DotaHero[]>("dota_heroes"),
 };

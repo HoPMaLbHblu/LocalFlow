@@ -1,4 +1,4 @@
-//! Separate windows next to the app: the guide, and the AI chat.
+//! Separate windows next to the app: the guide, the AI chat and the Dota 2 companion.
 
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 
@@ -6,6 +6,7 @@ use crate::{commands::CommandError, show_main_window};
 
 pub const GUIDE_LABEL: &str = "guide";
 pub const AI_CHAT_LABEL: &str = "aichat";
+pub const DOTA_LABEL: &str = "dota";
 
 // Must be async: on Windows, creating a window inside a synchronous command deadlocks the app.
 /// Open the guide window, or bring it to the front if it's already open.
@@ -41,6 +42,24 @@ pub async fn open_ai_chat(app: AppHandle, title: String) -> Result<(), CommandEr
         .min_inner_size(340.0, 420.0)
         .build()
         .map_err(|e| CommandError::Error { message: format!("could not open the AI chat window: {e}") })?;
+    Ok(())
+}
+
+/// Open the Dota 2 companion window, or bring it to the front if it's already open.
+#[tauri::command]
+pub async fn open_dota(app: AppHandle, title: String) -> Result<(), CommandError> {
+    if let Some(window) = app.get_webview_window(DOTA_LABEL) {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+        return Ok(());
+    }
+    WebviewWindowBuilder::new(&app, DOTA_LABEL, WebviewUrl::App("index.html".into()))
+        .title(title)
+        .inner_size(460.0, 780.0)
+        .min_inner_size(380.0, 480.0)
+        .build()
+        .map_err(|e| CommandError::Error { message: format!("could not open the Dota 2 window: {e}") })?;
     Ok(())
 }
 
