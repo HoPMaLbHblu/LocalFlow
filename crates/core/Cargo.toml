@@ -34,6 +34,16 @@ getrandom = "0.2"
 # GigaChat's servers use the Russian Trusted Root CA, trusted only for GigaChat's own connection.
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
 rustls-pki-types = { version = "1", features = ["std"] }
+# Voice control engine (feature `voice-engine`, off by default): microphone capture, voice activity
+# detection and offline speech recognition. bzip2 uses the pure-Rust backend (no C toolchain).
+cpal = { version = "0.18", optional = true }
+sherpa-onnx = { version = "1.13.8", optional = true }
+bzip2 = { version = "0.5", default-features = false, features = ["libbz2-rs-sys"], optional = true }
+tar = { version = "0.4", default-features = false, optional = true }
+
+[features]
+default = []
+voice-engine = ["dep:cpal", "dep:sherpa-onnx", "dep:bzip2", "dep:tar"]
 
 # Keyboard and mouse control on Windows and macOS.
 [target.'cfg(any(windows, target_os = "macos"))'.dependencies]
