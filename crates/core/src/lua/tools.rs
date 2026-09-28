@@ -119,7 +119,7 @@ $g.Dispose(); $bmp.Dispose()",
     run(powershell_command(&script), timeout, &[("LF_PATH", &text)]).map(|_| ())
 }
 
-fn speak(text: &str, timeout: Duration) -> Result<(), String> {
+pub(crate) fn speak(text: &str, timeout: Duration) -> Result<(), String> {
     if cfg!(target_os = "macos") {
         let mut command = Command::new("say");
         command.arg(text);
