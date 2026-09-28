@@ -322,6 +322,18 @@ fn parse_windows_apps(json: &str) -> Vec<(String, Launch)> {
     apps
 }
 
+/// The program file of an installed program such as "chrome" or "msedge" (Windows: the
+/// "App Paths" list), or `None`. Used to open links in a particular browser.
+pub(crate) fn program_path(stem: &str) -> Option<PathBuf> {
+    if !cfg!(windows) {
+        return None;
+    }
+    windows_apps().into_iter().find_map(|(name, launch)| match launch {
+        Launch::Path(path) if name.eq_ignore_ascii_case(stem) && path.extension().is_some_and(|e| e.eq_ignore_ascii_case("exe")) => Some(path),
+        _ => None,
+    })
+}
+
 /// Best match for `name`: exact name first, then names starting with it, then names containing it.
 fn find_app(name: &str) -> Option<Launch> {
     let wanted = name.to_lowercase();

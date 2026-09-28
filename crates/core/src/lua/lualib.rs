@@ -20,6 +20,7 @@ pub const MODULES: &[(&str, &str)] = &[
     ("lf.template", include_str!("../../lualib/lf/template.lua")),
     ("lf.report", include_str!("../../lualib/lf/report.lua")),
     ("lf.test", include_str!("../../lualib/lf/test.lua")),
+    ("lf.plan", include_str!("../../lualib/lf/plan.lua")),
 ];
 
 /// Registry key of the table holding modules that were already loaded in this run.

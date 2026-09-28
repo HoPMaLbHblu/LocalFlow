@@ -1,3 +1,4 @@
+import LinksView from "./components/LinksView";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, onCoreEvent, type AutomationSummary, type Template } from "./api";
 import Sidebar from "./components/Sidebar";
@@ -23,7 +24,8 @@ export type View =
   | { kind: "settings" }
   | { kind: "guide" }
   | { kind: "import"; path: string }
-  | { kind: "trash" };
+  | { kind: "trash" }
+  | { kind: "links" };
 
 const isLocalflowFile = (path: string) => path.toLowerCase().endsWith(".localflow");
 
@@ -242,6 +244,7 @@ export default function App({ initialView, onLanguageChange }: Props) {
         onGuide={openGuide}
         onImport={pickImportFile}
         onTrash={() => navigate({ kind: "trash" })}
+        onLinks={() => navigate({ kind: "links" })}
         canGoBack={canGoBack}
         canGoForward={canGoForward}
         onBack={goBack}
@@ -300,6 +303,7 @@ export default function App({ initialView, onLanguageChange }: Props) {
         )}
         {view.kind === "settings" && <SettingsView onLanguageChange={onLanguageChange} />}
         {view.kind === "guide" && <GuidePage onTry={openDraft} />}
+        {view.kind === "links" && <LinksView onAutomate={openDraft} />}
         {view.kind === "trash" && <TrashView onRestored={(id) => navigate({ kind: "automation", id })} />}
         {view.kind === "import" && (
           <ImportView

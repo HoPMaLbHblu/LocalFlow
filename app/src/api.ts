@@ -66,6 +66,20 @@ export interface AiSettings {
   cache_entries: number;
 }
 
+/** A link set on the Links page. */
+export interface Link {
+  url: string;
+  title: string;
+}
+
+export interface LinkSet {
+  name: string;
+  links: Link[];
+  browser: string;
+  new_window: boolean;
+  updated_at: number;
+}
+
 /** Settings › Telegram and Discord. Secrets never reach the window. */
 export interface BotSettings {
   telegram_token: boolean;
@@ -451,6 +465,14 @@ export const api = {
   clearBot: (which: "telegram" | "discord") => invoke<void>("clear_bot", { which }),
   findTelegramChats: (token: string | null) => invoke<[string, FoundChat[]]>("find_telegram_chats", { token }),
   testBots: () => invoke<string>("test_bots"),
+  linksList: () => invoke<LinkSet[]>("links_list"),
+  linksTrash: () => invoke<LinkSet[]>("links_trash"),
+  linksSave: (set: LinkSet, oldName: string | null) => invoke<LinkSet>("links_save", { set, oldName }),
+  linksDelete: (name: string) => invoke<boolean>("links_delete", { name }),
+  linksRestore: (name: string) => invoke<void>("links_restore", { name }),
+  linksOpen: (name: string) => invoke<number>("links_open", { name }),
+  linksParse: (text: string) => invoke<Link[]>("links_parse", { text }),
+  linksImportBookmarks: (folder: string, browser: string) => invoke<Link[]>("links_import_bookmarks", { folder, browser }),
   dotaKeySaved: () => invoke<boolean>("dota_key_saved"),
   dotaSetKey: (key: string | null) => invoke<void>("dota_set_key", { key }),
   backupNow: () => invoke<BackupInfo>("backup_now"),

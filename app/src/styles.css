@@ -245,6 +245,19 @@ label input, label select { color: var(--text); font-size: .9rem; font-weight: n
 .template-card { display: flex; flex-direction: column; gap: .3rem; text-align: left; font-weight: 400; padding: 1rem; }
 .template-card:hover { border-color: var(--accent) !important; }
 .template-card.blank { border-style: dashed; }
+.links-layout { display: grid; grid-template-columns: 220px 1fr; gap: 1rem; align-items: start; }
+@media (max-width: 800px) { .links-layout { grid-template-columns: 1fr; } }
+.links-list { display: flex; flex-direction: column; gap: .2rem; padding: .5rem; }
+.links-item { display: flex; justify-content: space-between; gap: .5rem; text-align: left; border: 1px solid transparent; background: none; padding: .4rem .6rem; border-radius: var(--radius); }
+.links-item.selected { border-color: var(--accent); background: var(--accent-soft); }
+.links-editor { display: flex; flex-direction: column; gap: .6rem; }
+.links-table { width: 100%; border-collapse: collapse; }
+.links-table th { text-align: left; font-size: .8rem; color: var(--muted); font-weight: 500; padding: .2rem .3rem; }
+.links-table td { padding: .15rem .3rem; }
+.links-table td:nth-child(2) { width: 30%; }
+.links-row-actions { white-space: nowrap; }
+.links-trash { margin-top: .6rem; }
+.links-trash-row { display: flex; justify-content: space-between; gap: .4rem; padding: .15rem .6rem; }
 .picker-tools { display: flex; flex-direction: column; gap: .6rem; margin: .5rem 0 .25rem; }
 .picker-search { max-width: 420px; }
 .picker-chips { display: flex; flex-wrap: wrap; gap: .4rem; }

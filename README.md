@@ -150,6 +150,10 @@ These functions control the whole PC. Everything marked 🔒 only works when **A
 | 🔒 `power.set_screen_off(minutes)` / 🔒 `power.set_sleep(minutes)` | Screen-off and sleep timers (0 = never), optionally just `"plugged"` or `"battery"`. |
 | `mouse.speed()` / 🔒 `mouse.set_speed(10)` | Pointer speed, 1 to 20. |
 | `explorer.hidden_files()` / 🔒 `explorer.set_hidden_files(on)` · `explorer.file_extensions()` / 🔒 `explorer.set_file_extensions(on)` | What File Explorer shows. |
+| 🔒 `process.set_efficiency(app, on)` · `process.efficiency(app)` | Efficiency mode, like Task Manager's leaf button: lowest priority plus Windows power throttling (EcoQoS). |
+| 🔒 `process.set_priority(app, level)` · `process.priority(app)` | Priority: `low`, `below_normal`, `normal`, `above_normal`, `high`. |
+| `links.open(set_or_list, { browser, new_window })` | Open a link set (from the **Links** page) or a list of addresses in Chrome, Edge, Firefox, Brave, Opera, Yandex or the default browser. |
+| `links.save` · `links.get` · `links.add` · `links.remove` · `links.list` · `links.delete` · `links.import_bookmarks(folder, browser, save_as)` | Manage link sets; import a bookmarks folder. |
 | `screen.capture(path)` | Saves a screenshot (`.png` or `.jpg`); never overwrites. |
 | `speak(text)` | Reads text aloud. |
 | `network.online()` · `network.ping(host, port)` · `network.port_open(host, port)` · `network.wifi()` · `network.local_ip()` | Internet and home-network checks. |
@@ -266,6 +270,7 @@ Scripts can load helpers written in Lua with `require`. They live in [`crates/co
 | `lf.retry` | try again, wait for something, "at most every 6 hours" |
 | `lf.template` | fill `{placeholders}` with filters like `{size\|size}` |
 | `lf.report` | build tidy text reports with aligned tables |
+| `lf.plan` | training programs and routines: reminders, weekly progression, lighter weeks, a log and weekly summaries |
 | `lf.test` | a tiny test framework |
 
 ```lua

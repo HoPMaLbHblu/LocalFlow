@@ -242,3 +242,16 @@ fn wildcards() {
     assert!(wildcard_match("*", "anything"));
     assert!(wildcard_match("a*b*c", "aXXbYYc"));
 }
+
+#[test]
+fn template_hotkeys_are_unique() {
+    let mut seen = std::collections::HashMap::new();
+    for example in EXAMPLES {
+        let triggers = localflow_core::triggers::ExtraTriggers::from_json(Some(example.triggers).filter(|t| !t.is_empty()));
+        if let Some(key) = triggers.hotkey {
+            if let Some(other) = seen.insert(key.to_lowercase(), example.slug) {
+                panic!("{} and {} both use {key}", other, example.slug);
+            }
+        }
+    }
+}

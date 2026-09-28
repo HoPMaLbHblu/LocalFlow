@@ -62,6 +62,13 @@ let dotaDraft = {
 };
 const dotaSourced = (detail: string) => ({ kind: "sourced", source: "OpenDota", detail, fetched_at: dotaNow - 7200 });
 
+type MockLinkSet = { name: string; links: { url: string; title: string }[]; browser: string; new_window: boolean; updated_at: number };
+let linkSets: MockLinkSet[] = [
+  { name: "Work", browser: "chrome", new_window: true, updated_at: 0, links: Array.from({ length: 42 }, (_, i) => ({ url: `https://example.com/tab-${i + 1}`, title: i === 0 ? "Mail" : "" })) },
+  { name: "Morning", browser: "default", new_window: true, updated_at: 0, links: [{ url: "https://news.ycombinator.com", title: "HN" }, { url: "https://www.bbc.com/news", title: "" }] },
+];
+let linkTrash: MockLinkSet[] = [];
+
 export function installDevMock() {
   mockIPC((cmd, payload) => {
     const args = (payload ?? {}) as Args;
@@ -176,6 +183,18 @@ export function installDevMock() {
       case "dota_set_settings": case "dota_set_role": case "open_dota": return null;
       case "dota_install_gsi": throw { kind: "error", message: "Could not write C:\\Steam\\...\\gamestate_integration_localflow.cfg (access denied). Create that file yourself and paste the text shown below into it." };
       case "dota_uninstall_gsi": return true;
+      case "links_list": return linkSets;
+      case "links_trash": return linkTrash;
+      case "links_save": {
+        const set = args.set as MockLinkSet;
+        linkSets = linkSets.filter((l) => l.name !== args.oldName && l.name !== set.name).concat([{ ...set, updated_at: Date.now() / 1000 }]);
+        return set;
+      }
+      case "links_delete": { const gone = linkSets.find((l) => l.name === args.name); linkSets = linkSets.filter((l) => l.name !== args.name); if (gone) linkTrash = [gone, ...linkTrash]; return !!gone; }
+      case "links_restore": { const back = linkTrash.find((l) => l.name === args.name); linkTrash = linkTrash.filter((l) => l !== back); if (back) linkSets = [...linkSets, back]; return null; }
+      case "links_open": return linkSets.find((l) => l.name === args.name)?.links.length ?? 0;
+      case "links_parse": return String(args.text).split(/\r?\n/).map((l) => l.match(/https?:\/\/\S+/)?.[0]).filter(Boolean).map((url) => ({ url, title: "" }));
+      case "links_import_bookmarks": throw { kind: "error", message: `no bookmarks folder called "${args.folder}"` };
       default: return null;
     }
   });

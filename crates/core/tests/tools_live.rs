@@ -90,3 +90,22 @@ async fn link_opens_after_reading_the_volume() {
     println!("{:?} {:?}", result.error, result.logs.iter().map(|l| &l.message).collect::<Vec<_>>());
     assert!(result.success);
 }
+
+/// A 45-link set opened in Chrome in a new window. Needs the local counter at 127.0.0.1:8765.
+#[tokio::test]
+#[ignore = "opens a Chrome window with 45 local test tabs"]
+async fn link_set_opens_in_chrome() {
+    let dir = TempDir::new().unwrap();
+    std::env::set_var("LOCALFLOW_DATA_DIR", dir.path());
+    let config = CoreConfig { database_url: "sqlite::memory:".into(), allowed_dirs: vec![dir.path().to_path_buf()], script_timeout: Duration::from_secs(60) };
+    let flow = LocalFlow::open(config, None).await.unwrap();
+    let code = r#"
+        local list = {}
+        for i = 1, 45 do list[#list + 1] = "http://127.0.0.1:8765/tab-" .. i end
+        log("saved " .. links.save("Test tabs", list, { browser = "chrome", new_window = true }))
+        log("opened " .. links.open("Test tabs"))
+    "#;
+    let result = flow.test_run(code.into(), "tabs".into()).await;
+    println!("{:?} {:?}", result.error, result.logs.iter().map(|l| &l.message).collect::<Vec<_>>());
+    assert!(result.success);
+}
