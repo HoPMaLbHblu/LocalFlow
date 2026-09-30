@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, errorMessages, type AiSettings } from "../api";
 import { language, t } from "../i18n";
+import FoldCard from "./FoldCard";
 
 /** Settings › AI: the GigaChat key (stored by the operating system), scope and model. */
 export default function AiCard() {
@@ -48,8 +49,7 @@ export default function AiCard() {
   const changed = key.trim() !== "" || scope !== settings.scope || model !== settings.model;
 
   return (
-    <section className="card">
-      <strong>{t("ai.title")}</strong>
+    <FoldCard title={t("ai.title")}>
       <p className="muted small">{t("ai.intro")}</p>
       {message && <div className={`banner ${message.tone}`}>{message.text}</div>}
 
@@ -115,6 +115,6 @@ export default function AiCard() {
         )}
       </div>
       <p className="muted small">{t("ai.help")}</p>
-    </section>
+    </FoldCard>
   );
 }

@@ -3,6 +3,7 @@ import { api, errorMessages, type BackupInfo } from "../api";
 import { formatTime } from "../format";
 import { t, tMaybe } from "../i18n";
 import { confirmAction } from "../confirm";
+import FoldCard from "./FoldCard";
 
 const SHOWN = 12;
 
@@ -44,8 +45,7 @@ export default function BackupsCard() {
   };
 
   return (
-    <section className="card">
-      <strong>{t("backups.title")}</strong>
+    <FoldCard title={t("backups.title")}>
       <p className="muted small">{t("backups.intro")}</p>
       {message && <div className={`banner ${message.tone}`}>{message.text}</div>}
       <div className="actions">
@@ -76,6 +76,6 @@ export default function BackupsCard() {
           ))}
         </ul>
       )}
-    </section>
+    </FoldCard>
   );
 }

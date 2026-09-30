@@ -748,3 +748,16 @@ section.card label.check.nested { margin-left: 1.6rem; }
 
 .sidebar { overflow-y: auto; }
 .voice-pill, .voice-setup-link { flex-shrink: 0; }
+
+/* Settings cards that fold away (AI, bots, Dota, voice, backups): closed by default. */
+.fold-card { padding-top: 0; padding-bottom: 0; }
+.fold-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  width: 100%; padding: 14px 0; background: none; border: none; color: inherit;
+  text-align: left; cursor: pointer; font: inherit;
+}
+.fold-head:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.fold-chevron { color: var(--muted); font-size: 1.35rem; line-height: 1; width: 1.2em; text-align: center; transition: transform 0.15s ease; }
+.fold-head:hover .fold-chevron { color: var(--text); }
+.fold-card.open .fold-chevron { transform: rotate(90deg); }
+.fold-card.open .fold-body { padding-bottom: 16px; }

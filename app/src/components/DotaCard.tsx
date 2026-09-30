@@ -4,6 +4,7 @@ import { formatRelative } from "../format";
 import { renderInline } from "../guide/GuideText";
 import { t, type Key } from "../i18n";
 import { openDotaWindow } from "../windowing";
+import FoldCard from "./FoldCard";
 
 /** The Steam launch option Dota 2 needs before it sends Game State Integration data. */
 const LAUNCH_OPTION = "-gamestateintegration";
@@ -108,8 +109,7 @@ export default function DotaCard() {
   const hasData = !!source && source.name !== "none" && !!source.fetched_at;
 
   return (
-    <section className="card">
-      <strong>{t("dota.card.title")}</strong>
+    <FoldCard title={t("dota.card.title")}>
       <p className="muted small">{t("dota.card.intro")}</p>
       {message && <div className={`banner ${message.tone}`}>{message.text}</div>}
 
@@ -318,6 +318,6 @@ export default function DotaCard() {
       </div>
       <p className="muted small">{t("dota.key.help")}</p>
       <p className="muted small">{t("dota.card.privacy")}</p>
-    </section>
+    </FoldCard>
   );
 }

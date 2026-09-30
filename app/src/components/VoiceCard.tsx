@@ -6,6 +6,7 @@ import { takeVoiceSetupRequest, useVoice } from "../useVoice";
 import VoiceSetup from "./VoiceSetup";
 import { ModelRow, PushKeyField } from "./VoiceParts";
 import { StateIcon } from "./VoicePill";
+import FoldCard from "./FoldCard";
 
 const GROUPS = ["automation", "alias", "control", "setting"] as const;
 
@@ -50,10 +51,13 @@ export default function VoiceCard() {
     api.listAutomations().then(setAutomations).catch(() => {});
   }, [loadEngines, loadDevices]);
 
+  // The card starts folded; asking for the setup unfolds it.
+  const [cardOpen, setCardOpen] = useState(false);
   // "Set up voice control" in the sidebar opens the setup here.
   useEffect(() => {
     const open = () => {
       if (takeVoiceSetupRequest()) {
+        setCardOpen(true);
         setSetupOpen(true);
         root.current?.scrollIntoView?.({ block: "start" });
       }
@@ -153,8 +157,7 @@ export default function VoiceCard() {
   const modelEngine = engines ? engineFor(engines, resolved) : undefined;
 
   return (
-    <section className="card voice-card" id="voice-card" ref={root}>
-      <strong>{t("voice.title")}</strong>
+    <FoldCard title={t("voice.title")} className="voice-card" id="voice-card" ref={root} open={cardOpen} onOpenChange={setCardOpen}>
       <p className="muted small">{t("voice.intro")}</p>
       {message && (
         <div className={`banner ${message.tone}`} role={message.tone === "error" ? "alert" : "status"}>
@@ -455,6 +458,6 @@ export default function VoiceCard() {
         <li>{t("voice.limits.scope")}</li>
         <li>{t("voice.limits.pcSpeech")}</li>
       </ul>
-    </section>
+    </FoldCard>
   );
 }

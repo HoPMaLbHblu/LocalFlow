@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, errorMessages, type BotSettings, type FoundChat } from "../api";
 import { renderInline } from "../guide/GuideText";
 import { t } from "../i18n";
+import FoldCard from "./FoldCard";
 
 /** Settings › Telegram and Discord: the bot, your chat, remote control, the webhook. */
 export default function BotsCard() {
@@ -67,8 +68,7 @@ export default function BotsCard() {
     });
 
   return (
-    <section className="card">
-      <strong>{t("bots.title")}</strong>
+    <FoldCard title={t("bots.title")}>
       <p className="muted small">{t("bots.intro")}</p>
       {message && <div className={`banner ${message.tone}`}>{message.text}</div>}
 
@@ -171,6 +171,6 @@ export default function BotsCard() {
         )}
       </div>
       <p className="muted small">{t("bots.privacy")}</p>
-    </section>
+    </FoldCard>
   );
 }
