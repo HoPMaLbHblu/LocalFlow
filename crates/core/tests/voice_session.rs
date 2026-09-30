@@ -565,7 +565,7 @@ fn typed_commands_and_confirmations_work_while_muted() {
     r.session.submit_text("run power off");
     wait("confirm", || r.events().iter().any(|e| matches!(e, VoiceEvent::Confirm { .. })));
     assert!(r.started() == vec![1]);
-    r.session.answer_confirmation(true);
+    r.session.answer_confirmation(r.last_question(), true);
     wait("power off started", || r.started() == vec![1, 9]);
     assert_eq!(r.session.state(), VoiceState::Muted);
     assert!(!r.src.is_open());
@@ -597,7 +597,7 @@ fn an_always_on_spoken_yes_cannot_confirm_a_system_run_but_the_button_can() {
     wait("refusal", || r.replies().iter().any(|(_, t)| t.contains("Yes button")));
     pause(100);
     assert!(r.started().is_empty());
-    r.session.answer_confirmation(true);
+    r.session.answer_confirmation(r.last_question(), true);
     wait("started", || r.started() == vec![9]);
     assert_eq!(r.confirmed(), vec![true]);
 }
@@ -613,7 +613,7 @@ fn muting_or_a_mode_change_cancels_the_pending_question() {
     r.wait_state(VoiceState::Muted);
     r.session.set_muted(false);
     r.wait_state(VoiceState::Idle);
-    r.session.answer_confirmation(true);
+    r.session.answer_confirmation(r.last_question(), true);
     wait("nothing to confirm", || r.replies().iter().any(|(_, t)| t.contains("nothing to confirm")));
     assert!(r.started().is_empty());
 
@@ -623,7 +623,7 @@ fn muting_or_a_mode_change_cancels_the_pending_question() {
     wait("second confirm", || r.events().iter().filter(|e| matches!(e, VoiceEvent::Confirm { .. })).count() == 2);
     r.session.update_settings(VoiceSettings { mode: ListenMode::PushToTalk, run_system_automations: true, ..VoiceSettings::default() });
     pause(100);
-    r.session.answer_confirmation(true);
+    r.session.answer_confirmation(r.last_question(), true);
     wait("nothing to confirm again", || r.replies().iter().filter(|(_, t)| t.contains("nothing to confirm")).count() == 2);
     assert!(r.started().is_empty());
 }
@@ -885,4 +885,53 @@ fn heavy_input_is_bounded_and_the_session_stays_usable() {
     r.rec.say("hey localflow run zip backup");
     r.src.utterance();
     wait("started", || r.started() == vec![1]);
+}
+
+
+impl Rig {
+    /// The id of the newest question shown (0 if none was asked).
+    fn last_question(&self) -> u64 {
+        self.events().iter().rev().find_map(|e| match e {
+            VoiceEvent::Confirm { id, .. } => Some(*id),
+            _ => None,
+        }).unwrap_or(0)
+    }
+}
+
+#[test]
+fn a_stale_on_screen_yes_does_not_approve_a_newer_question() {
+    let r = rig(ListenMode::AlwaysOn);
+    wait("open", || r.src.is_open());
+    r.session.submit_text("run zip");
+    wait("first question", || r.events().iter().filter(|e| matches!(e, VoiceEvent::Confirm { .. })).count() == 1);
+    let stale = r.last_question();
+    // a new question replaces it before the old card's Yes is clicked
+    r.session.submit_text("run power off");
+    wait("second question", || r.events().iter().filter(|e| matches!(e, VoiceEvent::Confirm { .. })).count() == 2);
+    let fresh = r.last_question();
+    assert_ne!(stale, fresh);
+    r.session.answer_confirmation(stale, true);
+    wait("refused", || r.replies().iter().any(|(_, t)| t.contains("earlier question")));
+    pause(100);
+    assert!(r.started().is_empty(), "the old Yes must not start the system automation");
+    r.session.answer_confirmation(fresh, true);
+    wait("started", || r.started() == vec![9]);
+}
+
+#[test]
+fn a_question_asked_right_after_cancelled_survives_spoken_replies() {
+    // always-on with spoken replies: "Cancelled." is spoken, then the new question; the new
+    // question must still be waiting afterwards.
+    let r = rig(ListenMode::AlwaysOn);
+    wait("open", || r.src.is_open());
+    r.session.update_settings(VoiceSettings { mode: ListenMode::AlwaysOn, spoken_feedback: true, run_system_automations: true, ..VoiceSettings::default() });
+    pause(30);
+    r.session.submit_text("run zip");
+    wait("first question", || r.events().iter().filter(|e| matches!(e, VoiceEvent::Confirm { .. })).count() == 1);
+    r.session.submit_text("run power off");
+    wait("second question", || r.events().iter().filter(|e| matches!(e, VoiceEvent::Confirm { .. })).count() == 2);
+    wait("spoken", || r.speaker.spoken.lock().unwrap().len() >= 3);
+    r.session.submit_text("yes");
+    wait("started", || r.started() == vec![9]);
+    assert!(!r.replies().iter().any(|(_, t)| t.contains("nothing to confirm")), "{:?}", r.replies());
 }

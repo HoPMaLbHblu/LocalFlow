@@ -209,8 +209,8 @@ export default function VoiceCard() {
           <strong>{t("voice.pill.confirmTitle")}</strong>
           <p>{status.pending_confirmation}</p>
           <div className="actions">
-            <button className="primary" onClick={() => api.voiceAnswer(true).catch(() => {})}>{t("voice.pill.yes")}</button>
-            <button className="secondary" onClick={() => api.voiceAnswer(false).catch(() => {})}>{t("voice.pill.no")}</button>
+            <button className="primary" onClick={() => api.voiceAnswer(status.pending_question_id ?? 0, true).catch(() => {})}>{t("voice.pill.yes")}</button>
+            <button className="secondary" onClick={() => api.voiceAnswer(status.pending_question_id ?? 0, false).catch(() => {})}>{t("voice.pill.no")}</button>
           </div>
         </div>
       )}

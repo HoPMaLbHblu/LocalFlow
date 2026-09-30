@@ -551,6 +551,8 @@ export interface VoiceStatus extends VoiceState {
   /** The model for `language` (and the VAD model) is installed. */
   model_ready: boolean;
   pending_confirmation: string | null;
+  /** Number of the waiting question; sent back with the Yes/No answer. */
+  pending_question_id: number | null;
   running: RunningInfo[];
 }
 
@@ -612,7 +614,7 @@ export type VoiceEvent =
   | { type: "state"; state: VoiceState }
   | { type: "heard"; text: string; confidence: number | null }
   | { type: "reply"; reply: Reply }
-  | { type: "confirm"; prompt: string }
+  | { type: "confirm"; prompt: string; id: number }
   | { type: "settings"; settings: VoiceSettings };
 
 /** Accepts a flattened status ({state: "idle", message}) or a nested one ({state: {state, message}}). */
@@ -648,7 +650,8 @@ export const api = {
   voicePress: () => invoke<void>("voice_press"),
   voiceRelease: () => invoke<void>("voice_release"),
   voiceSubmitText: (text: string) => invoke<void>("voice_submit_text", { text }),
-  voiceAnswer: (yes: boolean) => invoke<void>("voice_answer", { yes }),
+  /** Answer the question with this number (an answer to an older question is ignored). */
+  voiceAnswer: (id: number, yes: boolean) => invoke<void>("voice_answer", { id, yes }),
   voiceCommands: () => invoke<CommandExample[]>("voice_commands"),
   runningAutomations: () => invoke<RunningInfo[]>("running_automations"),
   stopRun: (runId: number) => invoke<boolean>("stop_run", { runId }),

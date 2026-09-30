@@ -37,6 +37,8 @@ let settings: VoiceSettings = {
 let muted = false;
 let voiceState: VoiceState = ready ? { state: "idle" } : { state: "off" };
 let pending: string | null = null;
+// Number of the waiting question, like the real app: a stale answer is ignored.
+let questionId = 0;
 let running: RunningInfo[] = [];
 let nextRun = 100;
 
@@ -69,7 +71,7 @@ function modelReady(): boolean {
 function status(): VoiceStatus {
   return {
     ...voiceState, enabled: settings.enabled, mode: settings.mode as ListenMode, muted, language: resolvedLanguage(),
-    model_ready: modelReady(), pending_confirmation: pending, running,
+    model_ready: modelReady(), pending_confirmation: pending, pending_question_id: pending ? questionId : null, running,
   };
 }
 
@@ -130,13 +132,13 @@ function handleText(text: string) {
       } else if (found.risky) {
         pending = `Run "${found.name}"? It can control this PC. Say yes or no.`;
         reply({ kind: "confirm", text: pending, speak: true });
-        send({ type: "confirm", prompt: pending });
+        send({ type: "confirm", prompt: pending, id: ++questionId });
         setState(idleOrMuted());
       } else if (!alias && found.name.toLowerCase() !== wanted) {
         // A fuzzy match never runs at once: it asks first.
         pending = `Did you mean "${found.name}"? Say yes to run it, or no.`;
         reply({ kind: "confirm", text: pending, speak: true });
-        send({ type: "confirm", prompt: pending });
+        send({ type: "confirm", prompt: pending, id: ++questionId });
         setState(idleOrMuted());
       } else { startRun(found.name, found.id); finish({ kind: "done", text: `Started "${found.name}".`, speak: true }); }
     } else {
@@ -291,7 +293,7 @@ export function voiceMock(cmd: string, args: Record<string, any>): { handled: bo
       handleText(String(args.text));
       return ok();
     case "voice_answer":
-      if (pending && answerFn) answerFn(!!args.yes);
+      if (pending && answerFn && args.id === questionId) answerFn(!!args.yes);
       return ok();
     case "voice_commands": return ok(commands());
     case "running_automations": return ok(running);
@@ -304,5 +306,5 @@ export function voiceMock(cmd: string, args: Record<string, any>): { handled: bo
 /** With `?voice=ready,confirm` a confirmation is pending shortly after the page loads. */
 if (has("confirm") && ready) {
   pending = 'Run "Back up notes"? It can control this PC. Say yes or no.';
-  setTimeout(() => send({ type: "confirm", prompt: pending ?? "" }), 800);
+  setTimeout(() => send({ type: "confirm", prompt: pending ?? "", id: ++questionId }), 800);
 }

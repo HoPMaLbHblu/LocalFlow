@@ -119,7 +119,8 @@ enum Cmd {
     Release,
     Mute(bool),
     Text(String),
-    Answer(bool),
+    /// The on-screen Yes/No buttons: (question id, yes).
+    Answer(u64, bool),
     Update(Box<VoiceSettings>),
     Commands(Sender<Vec<CommandExample>>),
     Stop,
@@ -234,9 +235,9 @@ impl Session {
     pub fn submit_text(&self, text: &str) {
         self.send(Cmd::Text(text.to_string()));
     }
-    /// The on-screen Yes/No buttons.
-    pub fn answer_confirmation(&self, yes: bool) {
-        self.send(Cmd::Answer(yes));
+    /// The on-screen Yes/No buttons, for the question with this id.
+    pub fn answer_confirmation(&self, question_id: u64, yes: bool) {
+        self.send(Cmd::Answer(question_id, yes));
     }
     /// Apply new settings live where possible (wake phrase, spoken feedback, aliases, confirmations,
     /// push-to-talk vs always-on). Returns true if the microphone, language or engine changed and the
@@ -597,9 +598,9 @@ impl Worker {
                     self.after_controller(replies);
                 }
             }
-            Cmd::Answer(yes) => {
+            Cmd::Answer(id, yes) => {
                 self.set_state(VoiceState::Processing);
-                let replies = self.controller.answer_confirmation(yes, self.now_ms());
+                let replies = self.controller.answer_confirmation(id, yes, self.now_ms());
                 self.after_controller(replies);
             }
             Cmd::Update(new) => self.apply_update(*new),
@@ -844,7 +845,8 @@ impl Worker {
             self.emit(VoiceEvent::Reply { reply: r.clone() });
             if r.kind == ReplyKind::Confirm {
                 confirm = true;
-                self.emit(VoiceEvent::Confirm { prompt: r.text.clone() });
+                let id = self.controller.pending_question_id(self.now_ms()).unwrap_or(0);
+                self.emit(VoiceEvent::Confirm { prompt: r.text.clone(), id });
             }
         }
         let mut extra = Vec::new();
@@ -882,9 +884,11 @@ impl Worker {
             for r in replies.iter().chain(extra.iter()) {
                 if r.speak && !self.stopping {
                     let question = r.kind == ReplyKind::Confirm;
-                    if self.always_on() && !question {
+                    if self.always_on() && !question && !confirm {
                         // Speaking something else while a question waits: our own voice could be
-                        // heard as the answer, so the question is dropped.
+                        // heard as the answer, so the question is dropped. Not when this same batch
+                        // asks a new question ("Cancelled." then "Did you mean ...?"): that question
+                        // is meant to be answered, and it is spoken with the echo guard.
                         self.controller.cancel_pending();
                     }
                     self.speak_blocking(&r.text, question);

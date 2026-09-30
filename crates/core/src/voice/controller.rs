@@ -92,6 +92,8 @@ enum Answer {
 
 #[derive(Debug, Clone)]
 struct Pending {
+    /// Numbers each question, so an answer meant for an older question can't approve a newer one.
+    id: u64,
     action: Action,
     prompt: String,
     expires_at: u64,
@@ -103,6 +105,7 @@ pub struct VoiceController {
     backend: Arc<dyn VoiceBackend>,
     settings: VoiceSettings,
     pending: Option<Pending>,
+    next_question_id: u64,
     expired_recently: bool,
     seen_ids: HashSet<u64>,
     seen_order: VecDeque<u64>,
@@ -261,6 +264,7 @@ impl VoiceController {
             backend,
             settings,
             pending: None,
+            next_question_id: 1,
             expired_recently: false,
             seen_ids: HashSet::new(),
             seen_order: VecDeque::new(),
@@ -324,12 +328,28 @@ impl VoiceController {
         self.process(text, Some(1.0), None, true, now_ms)
     }
 
-    /// The on-screen Yes/No buttons.
-    pub fn answer_confirmation(&mut self, yes: bool, now_ms: u64) -> Vec<Reply> {
+    /// The on-screen Yes/No buttons. `question_id` is the id of the question the buttons were
+    /// shown for: an answer to an older question never answers a newer one.
+    pub fn answer_confirmation(&mut self, question_id: u64, yes: bool, now_ms: u64) -> Vec<Reply> {
         let lang = self.pending.as_ref().map(|p| p.lang).unwrap_or_else(|| self.default_lang());
         self.backend.notice(&format!("Voice: {}", if yes { "yes (button)" } else { "no (button)" }));
         self.expire(now_ms);
+        if let Some(p) = &self.pending {
+            if p.id != question_id {
+                return vec![info(t!(
+                    p.lang,
+                    "That answer was for an earlier question, so nothing was done. Please answer the question shown now.",
+                    "Этот ответ был на предыдущий вопрос, поэтому ничего не сделано. Ответьте на вопрос, который показан сейчас.",
+                    "Diese Antwort war für eine frühere Frage, daher wurde nichts getan. Bitte beantworten Sie die jetzt angezeigte Frage."
+                ))];
+            }
+        }
         self.answer(yes, Answer::Button, lang, now_ms)
+    }
+
+    /// The id of the question waiting for an answer, if any.
+    pub fn pending_question_id(&self, now_ms: u64) -> Option<u64> {
+        self.pending.as_ref().filter(|p| now_ms < p.expires_at).map(|p| p.id)
     }
 
     /// The question waiting for an answer, if any (expires after a short time).
@@ -490,7 +510,9 @@ impl VoiceController {
 
     fn ask(&mut self, action: Action, prompt: String, lang: Lang, now: u64) -> Reply {
         let high_risk = action.high_risk();
-        self.pending = Some(Pending { action, prompt: prompt.clone(), expires_at: now + CONFIRM_TTL_MS, lang, high_risk });
+        let id = self.next_question_id;
+        self.next_question_id += 1;
+        self.pending = Some(Pending { id, action, prompt: prompt.clone(), expires_at: now + CONFIRM_TTL_MS, lang, high_risk });
         reply(ReplyKind::Confirm, prompt, true)
     }
 

@@ -72,6 +72,8 @@ pub struct VoiceStatus {
     /// The model for `language` is installed.
     pub model_ready: bool,
     pub pending_confirmation: Option<String>,
+    /// Number of the waiting question; the Yes/No buttons send it back with the answer.
+    pub pending_question_id: Option<u64>,
     pub running: Vec<RunningView>,
 }
 
@@ -197,7 +199,7 @@ pub fn build_status(
     language: &str,
     model_ready: bool,
     session_muted: bool,
-    pending_confirmation: Option<String>,
+    pending: Option<(String, u64)>,
     running: Vec<RunningView>,
 ) -> VoiceStatus {
     let (name, message) = state_parts(state);
@@ -213,7 +215,8 @@ pub fn build_status(
         muted: session_muted || *state == VoiceState::Muted,
         language: language.to_string(),
         model_ready,
-        pending_confirmation,
+        pending_question_id: pending.as_ref().map(|p| p.1),
+        pending_confirmation: pending.map(|p| p.0),
         running,
     }
 }
@@ -482,7 +485,8 @@ pub struct VoiceManager {
     state: Mutex<VoiceState>,
     /// Why the push-to-talk key isn't working, if it isn't.
     hotkey_notice: Mutex<Option<String>>,
-    pending: Mutex<Option<String>>,
+    /// The waiting question and its number.
+    pending: Mutex<Option<(String, u64)>>,
     /// Serialises start/stop/restart.
     ops: Mutex<()>,
     downloads: Arc<Downloads>,
@@ -525,7 +529,7 @@ fn publish(app: &AppHandle, event: VoiceEvent) {
             VoiceEvent::State { state } => {
                 *lock(&mgr.state) = state.clone();
             }
-            VoiceEvent::Confirm { prompt } => *lock(&mgr.pending) = Some(prompt.clone()),
+            VoiceEvent::Confirm { prompt, id } => *lock(&mgr.pending) = Some((prompt.clone(), *id)),
             VoiceEvent::Reply { reply } if reply.kind != localflow_core::voice::ReplyKind::Confirm => {
                 *lock(&mgr.pending) = None;
             }
@@ -914,10 +918,12 @@ pub async fn voice_submit_text(app: AppHandle, text: String) -> Result<(), Comma
 }
 
 #[tauri::command]
-pub async fn voice_answer(app: AppHandle, yes: bool) -> Result<(), CommandError> {
+/// The on-screen Yes/No buttons. `id` is the number of the question they were shown for, so a
+/// click on an old question never answers a newer one.
+pub async fn voice_answer(app: AppHandle, id: u64, yes: bool) -> Result<(), CommandError> {
     if let Some(mgr) = manager(&app) {
         if let Some(s) = lock(&mgr.session).as_ref() {
-            s.answer_confirmation(yes);
+            s.answer_confirmation(id, yes);
         }
     }
     Ok(())
@@ -1125,9 +1131,10 @@ mod tests {
         // An error message wins over the key notice; muted follows the state or the session.
         let st = build_status(&VoiceState::Error("no microphone".into()), Some("key taken"), &s, "en", false, false, None, vec![]);
         assert_eq!((st.state.as_str(), st.message.as_deref()), ("error", Some("no microphone")));
-        let st = build_status(&VoiceState::Muted, None, &s, "en", true, false, Some("Stop?".into()), vec![]);
+        let st = build_status(&VoiceState::Muted, None, &s, "en", true, false, Some(("Stop?".into(), 4)), vec![]);
         assert!(st.muted);
         assert_eq!(st.pending_confirmation.as_deref(), Some("Stop?"));
+        assert_eq!(st.pending_question_id, Some(4));
         let st = build_status(&VoiceState::Idle, None, &s, "en", true, true, None, vec![]);
         assert!(st.muted);
 
@@ -1305,22 +1312,23 @@ mod tests {
             language: "en".into(),
             model_ready: true,
             pending_confirmation: Some("Run X?".into()),
+            pending_question_id: Some(5),
             running: vec![RunningView { run_id: 7, automation_id: 3, name: "X".into() }],
         };
         assert_eq!(
             serde_json::to_value(&st).unwrap(),
             serde_json::json!({
                 "state": "error", "message": "no microphone", "enabled": true, "mode": "always_on", "muted": false,
-                "language": "en", "model_ready": true, "pending_confirmation": "Run X?",
+                "language": "en", "model_ready": true, "pending_confirmation": "Run X?", "pending_question_id": 5,
                 "running": [{ "run_id": 7, "automation_id": 3, "name": "X" }]
             })
         );
-        let plain = VoiceStatus { message: None, pending_confirmation: None, running: vec![], mode: ListenMode::PushToTalk, ..st };
+        let plain = VoiceStatus { message: None, pending_confirmation: None, pending_question_id: None, running: vec![], mode: ListenMode::PushToTalk, ..st };
         assert_eq!(
             serde_json::to_value(&plain).unwrap(),
             serde_json::json!({
                 "state": "error", "enabled": true, "mode": "push_to_talk", "muted": false,
-                "language": "en", "model_ready": true, "pending_confirmation": null, "running": []
+                "language": "en", "model_ready": true, "pending_confirmation": null, "pending_question_id": null, "running": []
             })
         );
     }
@@ -1379,7 +1387,7 @@ mod tests {
                 json!({ "type": "reply", "reply": { "kind": name, "text": "t", "speak": true } })
             );
         }
-        assert_eq!(ev(VoiceEvent::Confirm { prompt: "Sure?".into() }), json!({ "type": "confirm", "prompt": "Sure?" }));
+        assert_eq!(ev(VoiceEvent::Confirm { prompt: "Sure?".into(), id: 3 }), json!({ "type": "confirm", "prompt": "Sure?", "id": 3 }));
         let settings = ev(VoiceEvent::Settings { settings: VoiceSettings::default() });
         assert_eq!(settings["type"], "settings");
         assert_eq!(settings["settings"]["change_settings"], false);

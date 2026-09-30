@@ -252,7 +252,8 @@ pub enum VoiceEvent {
     Heard { text: String, confidence: Option<f32> },
     Reply { reply: Reply },
     /// A yes/no question is waiting for an answer.
-    Confirm { prompt: String },
+    /// A yes/no question; `id` must be sent back with the on-screen answer.
+    Confirm { prompt: String, id: u64 },
     /// Voice changed one of its own settings (for example "turn spoken feedback on"). The app saves them.
     Settings { settings: VoiceSettings },
 }

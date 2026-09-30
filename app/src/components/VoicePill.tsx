@@ -215,10 +215,10 @@ export default function VoicePill({ onSetup, onSettings }: Props) {
           <strong>{t("voice.pill.confirmTitle")}</strong>
           <p>{status.pending_confirmation}</p>
           <div className="actions">
-            <button className="primary" autoFocus onClick={() => call(() => api.voiceAnswer(true).then(() => undefined))}>
+            <button className="primary" autoFocus onClick={() => call(() => api.voiceAnswer(status.pending_question_id ?? 0, true).then(() => undefined))}>
               {t("voice.pill.yes")}
             </button>
-            <button className="secondary" onClick={() => call(() => api.voiceAnswer(false).then(() => undefined))}>
+            <button className="secondary" onClick={() => call(() => api.voiceAnswer(status.pending_question_id ?? 0, false).then(() => undefined))}>
               {t("voice.pill.no")}
             </button>
           </div>

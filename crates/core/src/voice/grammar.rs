@@ -391,7 +391,7 @@ const RU: Vocab = Vocab {
     run_suffix: &[],
     stop: &["стоп", "останови", "остановить", "отмени", "отменить", "прекрати", "прекратить", "заверши"],
     stop_suffix: &[],
-    all: &["все", "всё", "всех", "все автоматизации", "все запущенные", "всё запущенное", "все сразу"],
+    all: &["все", "всех", "все автоматизации", "все запущенные", "все запущенное", "все сразу"],
     nouns: &["автоматизацию", "автоматизация", "автоматизации", "мою"],
     subjects: &[
         ("уведомления", Subject::Notifications),
@@ -813,6 +813,23 @@ mod tests {
     }
     fn set(c: SettingChange) -> Intent {
         Intent::Setting(c)
+    }
+
+    /// Every phrase in the tables must already be in normalized form (ё->е, umlauts folded,
+    /// lower case), or it could never match what `normalize` makes of real speech.
+    #[test]
+    fn every_table_phrase_is_normalized() {
+        for (lang, v) in [("en", &EN), ("ru", &RU), ("de", &DE)] {
+            let lists: [&[&str]; 13] = [v.run, v.run_suffix, v.stop, v.stop_suffix, v.all, v.nouns, v.on, v.off, v.glue, v.lang_context, v.polite, v.fillers, v.trailing];
+            let phrases = lists
+                .iter()
+                .flat_map(|l| l.iter().copied())
+                .chain(v.simple.iter().map(|(p, _)| *p))
+                .chain(v.subjects.iter().map(|(p, _)| *p));
+            for p in phrases {
+                assert_eq!(normalize(p), p, "{lang}: {p:?} is not normalized, so it can never match");
+            }
+        }
     }
 
     #[test]

@@ -262,12 +262,12 @@ fn system_automation_needs_the_setting_and_a_confirmation() {
     // 4. the on-screen buttons
     let (b, mut c) = setup_with(vec![sys.clone()], s.clone());
     say(&mut c, "run power off", 0);
-    let r = c.answer_confirmation(true, 500);
+    let r = c.answer_confirmation(c.pending_question_id(500).unwrap_or(0), true, 500);
     assert_eq!(r[0].kind, ReplyKind::Done);
     assert_eq!(b.st().started, vec![9]);
     let (b, mut c) = setup_with(vec![sys.clone()], s.clone());
     say(&mut c, "run power off", 0);
-    assert_eq!(c.answer_confirmation(false, 500)[0].text, "Cancelled.");
+    assert_eq!(c.answer_confirmation(c.pending_question_id(500).unwrap_or(0), false, 500)[0].text, "Cancelled.");
     assert!(b.st().started.is_empty());
 
     // 5. a high-confidence match still asks, and the setting is re-checked at "yes"
@@ -297,7 +297,7 @@ fn confirmations_expire_and_are_cancelled_by_other_commands() {
     // a second stray yes just says there is nothing to confirm
     let r = say(&mut c, "да", CONFIRM_TTL_MS + 10_000);
     assert!(r[0].text.contains("nothing") || r[0].text.contains("нечего"), "{}", r[0].text);
-    assert!(c.answer_confirmation(true, 60_000)[0].text.contains("nothing"));
+    assert!(c.answer_confirmation(c.pending_question_id(60_000).unwrap_or(0), true, 60_000)[0].text.contains("nothing"));
 
     // any other command cancels the question and is carried out
     say(&mut c, "run power off", 100_000);
@@ -486,7 +486,7 @@ fn autostart_and_language_ask_first() {
     say(&mut c, "нет", 11_000);
     assert_eq!(b.st().applied.len(), 1);
     say(&mut c, "Sprache Deutsch", 20_000);
-    assert_eq!(c.answer_confirmation(true, 21_000)[0].kind, ReplyKind::Done);
+    assert_eq!(c.answer_confirmation(c.pending_question_id(21_000).unwrap_or(0), true, 21_000)[0].kind, ReplyKind::Done);
     assert_eq!(b.st().applied[1], SettingChange::Language("de".into()));
 }
 
@@ -563,7 +563,7 @@ fn every_heard_command_is_noticed_before_it_is_acted_on() {
     say(&mut c, "stop listening", 10_000);
     say(&mut c, "dark mode", 20_000);
     say(&mut c, "yes", 30_000);
-    c.answer_confirmation(false, 40_000);
+    c.answer_confirmation(c.pending_question_id(40_000).unwrap_or(0), false, 40_000);
     let s = b.st();
     assert_eq!(s.notices[0], "Voice: run tidy screenshots");
     assert_eq!(s.notices[1], "Voice: stop listening");
@@ -747,7 +747,7 @@ fn spoken_yes_for_a_system_run_needs_push_to_talk_and_confidence() {
     // the button always works
     let (b, mut c) = setup_with(vec![sys(9, "Power off")], sys_settings(ListenMode::PushToTalk));
     heard(&mut c, 1, "run power off", None, 0);
-    assert_eq!(c.answer_confirmation(true, 500)[0].kind, ReplyKind::Done);
+    assert_eq!(c.answer_confirmation(c.pending_question_id(500).unwrap_or(0), true, 500)[0].kind, ReplyKind::Done);
     assert_eq!(b.st().confirmed, vec![true]);
 }
 
@@ -762,14 +762,14 @@ fn always_on_spoken_yes_never_confirms_high_risk() {
     }
     assert!(b.st().started.is_empty());
     assert!(c.pending_confirmation(13_000).is_some(), "the question stays for the button");
-    assert_eq!(c.answer_confirmation(true, 14_000)[0].kind, ReplyKind::Done);
+    assert_eq!(c.answer_confirmation(c.pending_question_id(14_000).unwrap_or(0), true, 14_000)[0].kind, ReplyKind::Done);
     assert_eq!(b.started_and_confirmed(), (vec![9], vec![true]));
     // autostart is high risk too
     let (b, mut c) = setup_with(lib(), VoiceSettings { mode: ListenMode::AlwaysOn, change_settings: true, ..VoiceSettings::default() });
     assert_eq!(say(&mut c, "turn autostart on", 0)[0].kind, ReplyKind::Confirm);
     assert_eq!(heard(&mut c, 1, "yes", Some(0.9), 1_000)[0].kind, ReplyKind::Info);
     assert!(b.st().applied.is_empty());
-    assert_eq!(c.answer_confirmation(true, 2_000)[0].kind, ReplyKind::Done);
+    assert_eq!(c.answer_confirmation(c.pending_question_id(2_000).unwrap_or(0), true, 2_000)[0].kind, ReplyKind::Done);
     assert_eq!(b.st().applied, vec![SettingChange::Autostart(true)]);
     // "no" by voice is always fine
     let (b, mut c) = setup_with(vec![sys(9, "Power off")], sys_settings(ListenMode::AlwaysOn));
@@ -795,7 +795,7 @@ fn pending_questions_are_cancelled_and_never_auto_confirm() {
     say(&mut c, "run power off", 0);
     c.cancel_pending();
     assert!(c.pending_confirmation(1).is_none());
-    assert!(c.answer_confirmation(true, 2)[0].text.contains("nothing"));
+    assert!(c.answer_confirmation(c.pending_question_id(2).unwrap_or(0), true, 2)[0].text.contains("nothing"));
     assert!(b.st().started.is_empty());
     // settings update
     say(&mut c, "run power off", 100_000);
@@ -804,7 +804,7 @@ fn pending_questions_are_cancelled_and_never_auto_confirm() {
     assert!(say(&mut c, "yes", 101_000)[0].text.contains("nothing"));
     // expiry: even the button after the deadline does nothing
     say(&mut c, "run power off", 200_000);
-    let r = c.answer_confirmation(true, 200_000 + CONFIRM_TTL_MS + 1);
+    let r = c.answer_confirmation(c.pending_question_id(200_000 + CONFIRM_TTL_MS + 1).unwrap_or(0), true, 200_000 + CONFIRM_TTL_MS + 1);
     assert!(r[0].text.contains("expired"), "{}", r[0].text);
     assert!(b.st().started.is_empty());
 }
@@ -1055,4 +1055,24 @@ fn every_phrase_in_the_docs_and_mocks_is_understood() {
     assert_eq!(grammar::parse("dark theme", &s), Intent::Setting(SettingChange::Theme("dark".into())));
     assert_eq!(grammar::parse("turn notifications off", &s), Intent::Setting(SettingChange::Notifications(false)));
     assert_eq!(grammar::parse("turn spoken feedback on", &s), Intent::SpokenFeedback(true));
+}
+
+
+#[test]
+fn an_answer_for_an_older_question_never_answers_a_newer_one() {
+    let s = VoiceSettings { run_system_automations: true, ..VoiceSettings::default() };
+    let sys = AutomationInfo { allow_system: true, ..auto(9, "Power off") };
+    let (b, mut c) = setup_with(vec![auto(1, "Zip backup"), sys], s);
+    say(&mut c, "run zip", 0);
+    let old = c.pending_question_id(1).expect("a question about Zip backup");
+    // room speech replaces the question with a system one before the button is clicked
+    say(&mut c, "run power off", 1_000);
+    let new = c.pending_question_id(1_001).expect("a question about Power off");
+    assert_ne!(old, new);
+    let r = c.answer_confirmation(old, true, 1_500);
+    assert!(r[0].text.contains("earlier question"), "{r:?}");
+    assert!(b.st().started.is_empty(), "the stale Yes must not run anything");
+    assert_eq!(c.pending_question_id(1_600), Some(new), "the newer question is still waiting");
+    assert_eq!(c.answer_confirmation(new, true, 1_700)[0].kind, ReplyKind::Done);
+    assert_eq!(b.st().started, vec![9]);
 }

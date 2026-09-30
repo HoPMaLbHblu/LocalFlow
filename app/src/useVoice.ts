@@ -66,9 +66,9 @@ export function useVoice() {
       else if (e.type === "reply") {
         push({ kind: "reply", text: e.reply.text, reply: e.reply.kind });
         refreshRunning();
-      } else if (e.type === "confirm") setStatus((s) => (s ? { ...s, pending_confirmation: e.prompt } : s));
+      } else if (e.type === "confirm") setStatus((s) => (s ? { ...s, pending_confirmation: e.prompt, pending_question_id: e.id } : s));
       else if (e.type === "settings") setSettings(e.settings);
-      if (e.type === "reply" && e.reply.kind !== "confirm") setStatus((s) => (s ? { ...s, pending_confirmation: null } : s));
+      if (e.type === "reply" && e.reply.kind !== "confirm") setStatus((s) => (s ? { ...s, pending_confirmation: null, pending_question_id: null } : s));
     });
     const unCore = onCoreEvent((e) => {
       if (e.type === "run_started" || e.type === "run_finished") refreshRunning();
