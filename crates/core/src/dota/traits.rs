@@ -85,6 +85,23 @@ impl Trait {
             Trait::AreaDamage => "area damage",
         }
     }
+
+    /// "Magic damage", a short capitalised label for lists (hero lookup).
+    pub fn label(self) -> &'static str {
+        match self {
+            Trait::MagicDamage => "Magic damage",
+            Trait::PhysicalDamage => "Physical damage",
+            Trait::Disable => "Stun or disable",
+            Trait::Heal => "Healing or regeneration",
+            Trait::Illusions => "Illusions",
+            Trait::Summons => "Summons",
+            Trait::Invisibility => "Invisibility",
+            Trait::Evasion => "Evasion or blind",
+            Trait::Initiation => "Initiation",
+            Trait::Save => "Saves allies",
+            Trait::AreaDamage => "Area damage",
+        }
+    }
 }
 
 /// (id, short name, position fit 1-5, traits)

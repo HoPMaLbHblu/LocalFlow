@@ -14,6 +14,13 @@
 //! dota.heroes()               -- every hero: id, name, short_name, roles
 //! dota.set_role("mid")        -- your position: "carry", "mid", ... or 1-5
 //! dota.show()                 -- open the companion window in the desktop app
+//! dota.live()                 -- gold, clock and items from Game State Integration (nil outside a match)
+//! dota.next_item()            -- the next item of your plan and the gold still missing (or nil, reason)
+//! dota.reminders(from, to)    -- runes, wisdom, lotus, ... between two game-clock seconds
+//! dota.lookup("Axe", 5)       -- any hero: strong / weak against, common items
+//! dota.last_match()           -- review of your last match (needs your account id)
+//! dota.recent_matches(10)     -- your recent matches
+//! dota.set_account("https://www.opendota.com/players/123")  -- your account id for the review
 //! ```
 //!
 //! Nothing here clicks, types or reads the game's memory; screenshots stay on this PC.
@@ -31,7 +38,11 @@ use crate::{
         data::{self, DotaSource, SourceInfo},
         data_dir,
         launch::{self, GameState, OpenOutcome},
-        now, recommend, vision, DotaSettings, DraftState, Hero, HeroSuggestion, ItemPlan, PickSource, Role, Side, Slot, Team,
+        live::{self, LiveState, NextItem, Reminder},
+        lookup::{self, HeroLookup},
+        now, recommend,
+        review::{self, MatchReview, MatchSummary},
+        vision, DotaSettings, DraftState, Hero, HeroSuggestion, ItemPlan, PickSource, Role, Side, Slot, Team,
         UNCERTAIN,
     },
     CoreEvent,
@@ -420,6 +431,132 @@ pub fn status() -> Status {
     }
 }
 
+// ---- live helper, hero lookup and post-game review ---------------------------------------------
+
+/// How far ahead (game-clock seconds) the window shows upcoming reminders.
+pub const REMINDER_WINDOW: i64 = 180;
+
+/// What Game State Integration says right now; `None` outside a match or without GSI.
+pub fn live() -> Option<LiveState> {
+    live::live_state()
+}
+
+/// The item plan for the hero in the live match (GSI), else the draft's hero.
+fn live_plan(src: &dyn DotaSource, state: &LiveState) -> Result<ItemPlan, String> {
+    let draft = DraftState::load();
+    let id = state
+        .hero_id
+        .or(draft.player_hero)
+        .ok_or("your hero isn't known yet. Wait for Game State Integration or pick it in the Dota 2 window")?;
+    recommend::item_plan(src, id, &draft).map_err(|e| format!("no item plan: {e}"))
+}
+
+/// The next item of the plan the player doesn't own yet. `Ok(None)` = everything bought.
+pub fn next_item_for(state: &LiveState) -> Result<Option<NextItem>, String> {
+    let src = source();
+    let plan = live_plan(&*src, state)?;
+    let items = src.items().map_err(|e| format!("the item list isn't available ({e}). Check the internet connection"))?;
+    Ok(live::next_item(&plan, state, &items))
+}
+
+/// Reminders whose time falls in (`from`, `to`] (game-clock seconds).
+pub fn reminders(from: i64, to: i64) -> Result<Vec<Reminder>, String> {
+    if to < from {
+        return Err(format!("`to` ({to}) must not be before `from` ({from})"));
+    }
+    Ok(live::reminders_between(from, to))
+}
+
+/// The Live panel in the Dota 2 window.
+#[derive(Debug, Clone, Serialize)]
+pub struct LiveView {
+    pub state: LiveState,
+    /// The hero's name, when known.
+    pub hero: Option<String>,
+    pub next_item: Option<NextItem>,
+    /// Why there is no next item ("everything in the plan is bought", no plan, offline, ...).
+    pub next_note: Option<String>,
+    /// Reminders in the next [`REMINDER_WINDOW`] seconds of game time.
+    pub reminders: Vec<Reminder>,
+}
+
+pub fn live_view() -> Option<LiveView> {
+    let state = live()?;
+    let hero = state.hero_id.and_then(|id| hero_list(&*source()).ok().map(|h| hero_name(&h, id)));
+    let (next_item, next_note) = match next_item_for(&state) {
+        Ok(Some(next)) => (Some(next), None),
+        Ok(None) => (None, Some("everything in the plan is bought".to_string())),
+        Err(e) => (None, Some(e)),
+    };
+    let reminders = live::reminders_between(state.clock, state.clock + REMINDER_WINDOW);
+    Some(LiveView { state, hero, next_item, next_note, reminders })
+}
+
+/// Any hero by name: who it's strong and weak against, and the items it usually buys.
+pub fn lookup(hero: &str, count: usize) -> Result<HeroLookup, String> {
+    let src = source();
+    let heroes = hero_list(&*src)?;
+    // Nicknames ("am", "cm", "wk") and unique prefixes first, then the general resolver.
+    let id = match lookup::find_hero(&heroes, hero) {
+        Some(h) => h.id,
+        None => resolve_hero(&heroes, hero)?,
+    };
+    lookup::hero_lookup(&*src, id, count.clamp(1, 30)).map_err(|e| format!("the hero lookup isn't available ({e})"))
+}
+
+/// Shown when the post-game review needs an account id that isn't set.
+pub const NO_ACCOUNT: &str = "your Dota account isn't set. Paste your Dotabuff or OpenDota profile link in Settings › Dota 2 companion, or call dota.set_account(\"https://www.opendota.com/players/<id>\")";
+
+/// The saved account id, or why there is none.
+pub fn account_id() -> Result<u64, String> {
+    DotaSettings::load().account_id.ok_or_else(|| NO_ACCOUNT.to_string())
+}
+
+/// An account id from a profile link, a Steam32 or a Steam64 id.
+pub fn parse_account(text: &str) -> Result<u64, String> {
+    let text = text.trim();
+    if text.is_empty() {
+        return Err("paste your Dotabuff, OpenDota or STRATZ profile link, or your Steam id".into());
+    }
+    review::account_id_from(text).ok_or_else(|| {
+        format!(
+            "couldn't find a Dota account id in \"{}\". Paste your Dotabuff, OpenDota or STRATZ profile link (like https://www.opendota.com/players/123456), or your Steam id",
+            text.chars().take(80).collect::<String>()
+        )
+    })
+}
+
+/// Save the account id from `text`, or forget it with `None`/"". Returns the saved id.
+pub fn set_account(text: Option<&str>) -> Result<Option<u64>, String> {
+    let id = match text.map(str::trim).filter(|t| !t.is_empty()) {
+        Some(text) => Some(parse_account(text)?),
+        None => None,
+    };
+    let mut settings = DotaSettings::load();
+    settings.account_id = id;
+    settings.save()?;
+    launch::emit(CoreEvent::DotaChanged);
+    Ok(id)
+}
+
+/// Switch the live match helper on or off.
+pub fn set_live_helper(enabled: bool) -> Result<(), String> {
+    let mut settings = DotaSettings::load();
+    settings.live_helper = enabled;
+    settings.save()?;
+    launch::emit(CoreEvent::DotaChanged);
+    Ok(())
+}
+
+/// A review of the player's last match (public match data from OpenDota).
+pub fn last_match() -> Result<MatchReview, String> {
+    review::review_last_match(account_id()?).map_err(|e| format!("no match review: {e}"))
+}
+
+pub fn recent_matches(count: usize) -> Result<Vec<MatchSummary>, String> {
+    review::recent_matches(account_id()?, count.clamp(1, 100)).map_err(|e| format!("no recent matches: {e}"))
+}
+
 // ---- Lua ---------------------------------------------------------------------------------------
 
 fn err(function: &str, error: impl std::fmt::Display) -> mlua::Error {
@@ -562,6 +699,69 @@ pub fn register(lua: &Lua, deadline: Instant) -> mlua::Result<()> {
         })?,
     )?;
     dota.set("show", lua.create_function(|_, ()| Ok(launch::emit(CoreEvent::ShowDota)))?)?;
+
+    dota.set("live", lua.create_function(|lua, ()| to_lua(lua, &live()))?)?;
+    dota.set(
+        "next_item",
+        lua.create_function(|lua, ()| {
+            let Some(state) = live() else {
+                return Ok((Value::Nil, Some("no live match data. Game State Integration sends it during a match".to_string())));
+            };
+            match next_item_for(&state) {
+                Ok(Some(next)) => Ok((to_lua(lua, &next)?, None)),
+                Ok(None) => Ok((Value::Nil, Some("everything in the plan is bought".to_string()))),
+                Err(e) => Ok((Value::Nil, Some(e))),
+            }
+        })?,
+    )?;
+    dota.set(
+        "reminders",
+        lua.create_function(|lua, (from, to): (i64, Option<i64>)| {
+            let list = reminders(from, to.unwrap_or(from + 300)).map_err(|e| err("reminders", e))?;
+            to_lua(lua, &list)
+        })?,
+    )?;
+    dota.set(
+        "lookup",
+        lua.create_function(|lua, (hero, count): (Value, Option<usize>)| {
+            let hero = match hero {
+                Value::String(s) => s.to_str().map(|s| s.to_string()).unwrap_or_default(),
+                Value::Integer(n) => n.to_string(),
+                Value::Number(n) => (n as i64).to_string(),
+                _ => return Err(err("lookup", "name a hero, like dota.lookup(\"Axe\")")),
+            };
+            to_lua(lua, &lookup(&hero, count.unwrap_or(5)).map_err(|e| err("lookup", e))?)
+        })?,
+    )?;
+    dota.set(
+        "last_match",
+        lua.create_function(move |lua, wait: Option<f64>| {
+            if let Some(wait) = wait {
+                if !(0.0..=600.0).contains(&wait) {
+                    return Err(err("last_match", "the wait must be between 0 and 600 seconds"));
+                }
+                // Say at once when the account is missing, not after the wait.
+                account_id().map_err(|e| err("last_match", e))?;
+                // OpenDota needs a moment after a game. Keep 20 s for the request itself.
+                let left = deadline
+                    .checked_sub(Duration::from_secs(20))
+                    .map(|d| d.saturating_duration_since(Instant::now()))
+                    .unwrap_or_default();
+                std::thread::sleep(Duration::from_secs_f64(wait).min(left));
+            }
+            to_lua(lua, &last_match().map_err(|e| err("last_match", e))?)
+        })?,
+    )?;
+    dota.set(
+        "recent_matches",
+        lua.create_function(|lua, count: Option<usize>| {
+            to_lua(lua, &recent_matches(count.unwrap_or(10)).map_err(|e| err("recent_matches", e))?)
+        })?,
+    )?;
+    dota.set(
+        "set_account",
+        lua.create_function(|_, text: Option<String>| set_account(text.as_deref()).map_err(|e| err("set_account", e)))?,
+    )?;
 
     lua.globals().set("dota", dota)
 }

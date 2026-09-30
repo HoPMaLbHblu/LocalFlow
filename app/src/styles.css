@@ -623,3 +623,44 @@ section.card label.check.nested { margin-left: 1.6rem; }
 .dota-gsi { margin: .3rem 0; display: flex; flex-direction: column; gap: .2rem; }
 .dota-path { word-break: break-all; font-family: var(--mono); font-size: .78rem; }
 .dota-cfg { max-height: 240px; overflow: auto; font-size: .78rem; background: var(--surface-2); padding: .5rem .7rem; border-radius: 6px; user-select: all; }
+
+/* ---- Dota 2 companion: tabs, live helper, hero lookup, post-game review ---- */
+.dota-window .push-right { margin-left: auto; }
+.dota-tabs { padding: 0; flex-shrink: 0; }
+.dota-tabs button { display: inline-flex; align-items: center; gap: .35rem; }
+.dota-live-dot { display: inline-block; width: .5rem; height: .5rem; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px var(--ok-soft); }
+.dota-live { border-color: var(--ok); }
+.dota-live .dota-heading { margin: .2rem 0; }
+.dota-gold { color: var(--warn); font-variant-numeric: tabular-nums; }
+.dota-next { display: flex; flex-direction: column; gap: .3rem; }
+.dota-bar { display: block; height: .45rem; background: var(--surface-2); border-radius: 999px; overflow: hidden; min-width: 5rem; }
+.dota-bar > span { display: block; height: 100%; background: var(--accent); border-radius: 999px; }
+.dota-bar > span.low { background: var(--bad); }
+.dota-bar > span.mid { background: var(--warn); }
+.dota-bar > span.high { background: var(--ok); }
+.dota-reminders { list-style: none; margin: .2rem 0; padding: 0; display: flex; flex-direction: column; gap: .2rem; }
+.dota-reminder-time { display: inline-block; min-width: 3.2rem; font-family: var(--mono); color: var(--muted); }
+.dota-chips { display: flex; flex-wrap: wrap; gap: .3rem; margin: .35rem 0; }
+.dota-hero-picker { max-height: 11rem; overflow-y: auto; }
+.dota-item-chip { border: 1px solid var(--border); border-radius: 6px; padding: .1rem .5rem; font-size: .8rem; background: var(--surface-2); }
+.dota-stage { color: var(--muted); margin-top: .4rem; }
+.dota-lookup-search { display: flex; flex-direction: column; gap: .25rem; }
+.dota-account-input { flex: 1; min-width: 12rem; }
+.dota-empty { border-left: 3px solid var(--warn); padding: .2rem .6rem; margin: .3rem 0; }
+.dota-empty p { margin: .2rem 0; }
+.dota-match-card { border: 1px solid var(--border); border-radius: var(--radius); padding: .5rem .7rem; margin: .3rem 0; display: flex; flex-direction: column; gap: .35rem; }
+.dota-match-hero { font-size: 1.05rem; }
+.dota-result { font-size: .75rem; font-weight: 600; border-radius: 999px; padding: 0 .5rem; }
+.dota-result.won { background: var(--ok-soft); color: var(--ok); }
+.dota-result.lost { background: var(--bad-soft); color: var(--bad); }
+.dota-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(5.5rem, 1fr)); gap: .4rem; }
+.dota-stats > div { display: flex; flex-direction: column; }
+.dota-stats strong { font-variant-numeric: tabular-nums; }
+.dota-benchmarks { list-style: none; margin: .2rem 0; padding: 0; display: flex; flex-direction: column; gap: .35rem; }
+.dota-benchmarks li { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(4rem, 1fr) auto; align-items: center; gap: .5rem; }
+.dota-bench-label { min-width: 0; overflow-wrap: anywhere; }
+.dota-matches { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .25rem; }
+.dota-match-row { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; font-variant-numeric: tabular-nums; }
+.dota-launch-option { border: 1px dashed var(--border); border-radius: var(--radius); padding: .5rem .7rem; margin: .4rem 0; }
+.dota-launch-option p { margin: .25rem 0; }
+.dota-launch-text { font-family: var(--mono); background: var(--surface-2); padding: .15rem .5rem; border-radius: 4px; user-select: all; }

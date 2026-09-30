@@ -370,8 +370,89 @@ export interface DotaSettings {
   role: DotaRole | null;
   gsi_port: number;
   launch_assistant: boolean;
+  /** The player's Dota account id (Steam32) for the post-game review. */
+  account_id: number | null;
+  /** Live match helper (needs Game State Integration). */
+  live_helper: boolean;
   /** The Game State Integration file's text, to copy by hand if needed. */
   cfg_text: string;
+}
+
+/** What Game State Integration says about the player during a match. */
+export interface DotaLiveState {
+  /** Game clock in seconds (negative before the horn). */
+  clock: number;
+  gold: number;
+  items: string[];
+  hero_id: number | null;
+  alive: boolean;
+  updated_at: number;
+}
+
+export interface DotaReminder {
+  clock: number;
+  text: string;
+  kind: string;
+}
+
+export interface DotaNextItem {
+  advice: DotaItemAdvice;
+  missing_gold: number;
+  affordable: boolean;
+}
+
+export interface DotaLive {
+  state: DotaLiveState;
+  hero: string | null;
+  next_item: DotaNextItem | null;
+  next_note: string | null;
+  reminders: DotaReminder[];
+}
+
+export interface DotaMatchup {
+  hero_id: number;
+  hero: string;
+  reason: DotaReason;
+}
+
+export interface DotaHeroLookup {
+  hero_id: number;
+  hero: string;
+  strong_against: DotaMatchup[];
+  weak_against: DotaMatchup[];
+  common_items: DotaItemAdvice[];
+  traits: string[];
+  data_note: string;
+}
+
+export interface DotaMatchSummary {
+  match_id: number;
+  hero_id: number;
+  hero: string;
+  won: boolean;
+  kills: number;
+  deaths: number;
+  assists: number;
+  gpm: number;
+  xpm: number;
+  last_hits: number;
+  duration_secs: number;
+  start_time: number;
+  items: string[];
+}
+
+export interface DotaBenchmark {
+  metric: string;
+  value: number;
+  /** 0-1 compared with other players of this hero. */
+  percentile: number | null;
+}
+
+export interface DotaMatchReview {
+  summary: DotaMatchSummary;
+  benchmarks: DotaBenchmark[];
+  notes: DotaReason[];
+  data_note: string;
 }
 
 export type CommandError =
@@ -496,4 +577,11 @@ export const api = {
   dotaSuggest: (count = 8) => invoke<DotaHeroSuggestion[]>("dota_suggest", { count }),
   dotaBuild: (hero: string | null = null) => invoke<DotaItemPlan>("dota_build", { hero }),
   dotaHeroes: () => invoke<DotaHero[]>("dota_heroes"),
+  dotaLive: () => invoke<DotaLive | null>("dota_live"),
+  dotaLookup: (hero: string, count = 8) => invoke<DotaHeroLookup>("dota_lookup", { hero, count }),
+  dotaLastMatch: () => invoke<DotaMatchReview>("dota_last_match"),
+  dotaRecentMatches: (count = 10) => invoke<DotaMatchSummary[]>("dota_recent_matches", { count }),
+  dotaParseAccount: (text: string) => invoke<number>("dota_parse_account", { text }),
+  dotaSetAccount: (text: string | null) => invoke<number | null>("dota_set_account", { text }),
+  dotaSetLiveHelper: (enabled: boolean) => invoke<void>("dota_set_live_helper", { enabled }),
 };

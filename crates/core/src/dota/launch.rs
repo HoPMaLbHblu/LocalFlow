@@ -40,6 +40,9 @@ pub const CFG_NAME: &str = "gamestate_integration_localflow.cfg";
 /// started. Longer when Game State Integration is set up, because then its data should come.
 pub const FALLBACK_MENU_SECS: i64 = 60;
 pub const FALLBACK_MENU_SECS_WITH_GSI: i64 = 180;
+/// Without Game State Integration data: the menu is assumed this long after the game's
+/// window first appears (loading to the menu usually takes about this long).
+pub const WINDOW_MENU_SECS: i64 = 25;
 
 /// Largest request body accepted (the game's posts with our sections are a few kilobytes).
 const MAX_BODY: usize = 2 * 1024 * 1024;
@@ -214,6 +217,16 @@ pub fn token() -> String {
 }
 
 /// The text of the `.cfg` file with this port and token.
+///
+/// Sections (all only about the player's own hero, never other players):
+/// - `provider`, `auth`: who sends and the token;
+/// - `map`: `game_state`, `matchid`, `clock_time` (game clock, negative before the horn);
+/// - `player`: `activity`, `team_name`, `gold` (reliable + unreliable);
+/// - `hero`: `id`, `name`, `alive`;
+/// - `items`: `slot0`-`slot8` (6-8 are the backpack), `stash0`-`stash5`, `teleport0`,
+///   `neutral0`, each `{ "name": "item_black_king_bar" | "empty", ... }`. Used by the live helper.
+///
+/// Field names as documented by the Dota2GSI (C#) and dota-gsi (Rust) libraries.
 pub fn gsi_config_text_with(port: u16, token: &str) -> String {
     format!(
         r#""LocalFlow Dota 2 companion"
@@ -230,6 +243,7 @@ pub fn gsi_config_text_with(port: u16, token: &str) -> String {
         "map"       "1"
         "player"    "1"
         "hero"      "1"
+        "items"     "1"
     }}
     "auth"
     {{
@@ -262,6 +276,10 @@ pub fn install_gsi_into(dota_dir: &Path, port: u16) -> Result<PathBuf, String> {
     let dir = cfg_dir(dota_dir);
     let path = dir.join(CFG_NAME);
     let text = gsi_config_text(port);
+    if std::fs::read_to_string(&path).is_ok_and(|old| old == text) {
+        // Already up to date: installing again changes nothing.
+        return Ok(path);
+    }
     let write = || -> std::io::Result<()> {
         std::fs::create_dir_all(&dir)?;
         std::fs::write(&path, text.as_bytes())
@@ -273,6 +291,38 @@ pub fn install_gsi_into(dota_dir: &Path, port: u16) -> Result<PathBuf, String> {
         )
     })?;
     Ok(path)
+}
+
+/// The first line of every `.cfg` file LocalFlow writes. Files without it are not ours.
+const CFG_HEADER: &str = "\"LocalFlow Dota 2 companion\"";
+
+/// Whether an existing `.cfg` text was written by LocalFlow.
+pub fn is_our_cfg(text: &str) -> bool {
+    text.trim_start().starts_with(CFG_HEADER)
+}
+
+/// Bring an installed `.cfg` file up to date (e.g. files from older versions without the
+/// `items` section). Only rewrites our own file, only when it is already there and differs.
+/// True when it was rewritten: the game reads the file when it starts, so Dota needs a restart.
+pub fn upgrade_gsi_in(dota_dir: &Path, port: u16) -> Result<bool, String> {
+    let path = cfg_path(dota_dir);
+    let Ok(old) = std::fs::read_to_string(&path) else { return Ok(false) };
+    if !is_our_cfg(&old) || port == 0 {
+        return Ok(false);
+    }
+    if old == gsi_config_text(port) {
+        return Ok(false);
+    }
+    install_gsi_into(dota_dir, port)?;
+    Ok(true)
+}
+
+/// [`upgrade_gsi_in`] for the installed game, with the port from the settings.
+pub fn upgrade_gsi() -> Result<bool, String> {
+    match find_dota_dir() {
+        Some(dota) => upgrade_gsi_in(&dota, DotaSettings::load().gsi_port),
+        None => Ok(false),
+    }
 }
 
 /// Find the game and write our `.cfg` file into it. The game reads it when it starts.
@@ -351,6 +401,16 @@ pub struct GameState {
     pub match_id: Option<String>,
     /// Unix seconds of the last accepted post.
     pub last_update: Option<i64>,
+    /// `map.clock_time`: the game clock in seconds (negative before the horn).
+    pub clock: Option<i64>,
+    /// `player.gold` (reliable + unreliable).
+    pub gold: Option<u32>,
+    /// `hero.alive`.
+    pub alive: Option<bool>,
+    /// Item keys without the `item_` prefix from `items.slot0`-`slot8` (inventory and
+    /// backpack) and `items.stash0`-`stash5`, in that order. Empty slots are left out.
+    #[serde(default)]
+    pub items: Vec<String>,
 }
 
 /// Why a post was refused.
@@ -409,15 +469,61 @@ pub fn state_from_json(json: &serde_json::Value) -> GameState {
         .and_then(|m| m.get("matchid"))
         .and_then(|v| v.as_str().map(str::to_string).or_else(|| v.as_u64().map(|n| n.to_string())))
         .filter(|m| !m.is_empty() && m != "0");
+    let in_match = phase != Phase::Menu;
+    let clock = map.and_then(|m| m.get("clock_time")).and_then(json_int);
+    let gold = player
+        .and_then(|p| p.get("gold").and_then(json_int).or_else(|| {
+            // Older posts: only the two parts.
+            let reliable = p.get("gold_reliable").and_then(json_int)?;
+            let unreliable = p.get("gold_unreliable").and_then(json_int)?;
+            Some(reliable + unreliable)
+        }))
+        .map(|g| g.clamp(0, u32::MAX as i64) as u32);
+    let alive = hero.and_then(|h| h.get("alive")).and_then(|v| v.as_bool());
+    let items = json.get("items").map(item_keys).unwrap_or_default();
     GameState {
         phase,
         game_state,
         team,
-        hero_id: if phase == Phase::Menu { None } else { hero_id },
-        hero_name: if phase == Phase::Menu { None } else { hero_name },
+        hero_id: if in_match { hero_id } else { None },
+        hero_name: if in_match { hero_name } else { None },
         match_id,
         last_update: Some(now()),
+        clock: if in_match { clock } else { None },
+        gold: if in_match { gold } else { None },
+        alive: if in_match { alive } else { None },
+        items: if in_match { items } else { Vec::new() },
     }
+}
+
+/// A whole number sent as an integer or a float.
+fn json_int(value: &serde_json::Value) -> Option<i64> {
+    value.as_i64().or_else(|| value.as_f64().filter(|f| f.is_finite()).map(|f| f.floor() as i64))
+}
+
+/// The player's items from the `items` section: inventory and backpack (`slot0`-`slot8`),
+/// then the stash (`stash0`-`stash5`). `"empty"` slots, the teleport and neutral slots
+/// are left out. `"item_black_king_bar"` becomes `"black_king_bar"`.
+pub fn item_keys(items: &serde_json::Value) -> Vec<String> {
+    let Some(items) = items.as_object() else { return Vec::new() };
+    let mut slots: Vec<(u8, u32, String)> = items
+        .iter()
+        .filter_map(|(slot, item)| {
+            let (group, number) = if let Some(n) = slot.strip_prefix("slot") {
+                (0, n)
+            } else if let Some(n) = slot.strip_prefix("stash") {
+                (1, n)
+            } else {
+                return None;
+            };
+            let number: u32 = number.parse().ok()?;
+            let name = item.get("name")?.as_str()?;
+            let key = name.strip_prefix("item_")?;
+            (!key.is_empty()).then(|| (group, number, key.to_string()))
+        })
+        .collect();
+    slots.sort();
+    slots.into_iter().map(|(_, _, key)| key).collect()
 }
 
 // ---- the local listener -----------------------------------------------------------------------
@@ -764,6 +870,29 @@ pub fn menu_reached(process: Option<&DotaProcess>, state: &GameState, now: i64, 
     now - started >= fallback_secs
 }
 
+/// When the current launch's game window was first seen: (launch id, unix seconds).
+static WINDOW_SEEN: std::sync::Mutex<Option<(String, i64)>> = std::sync::Mutex::new(None);
+
+/// Whether the Dota window of this launch has been visible for `WINDOW_MENU_SECS`.
+/// Only a fallback: when the game sends Game State Integration data, that decides.
+pub fn window_ready(process: &DotaProcess, state: &GameState, now: i64) -> bool {
+    let gsi_this_launch = state.last_update.is_some_and(|t| t + 5 >= process.started as i64);
+    if gsi_this_launch {
+        return false;
+    }
+    let id = process.launch_id();
+    let mut seen = WINDOW_SEEN.lock().unwrap_or_else(|e| e.into_inner());
+    if seen.as_ref().map(|(l, _)| l != &id).unwrap_or(true) {
+        *seen = None;
+        let has_window = crate::lua::control::find_window("dota2").is_some_and(|w| !w.minimized || !w.title.is_empty());
+        if has_window {
+            *seen = Some((id, now));
+        }
+        return false;
+    }
+    seen.as_ref().is_some_and(|(_, first)| now - first >= WINDOW_MENU_SECS)
+}
+
 fn fallback_secs() -> i64 {
     if listening_port().is_some() {
         FALLBACK_MENU_SECS_WITH_GSI
@@ -774,7 +903,9 @@ fn fallback_secs() -> i64 {
 
 /// True when Dota is running and in its main menu (see [`menu_reached`]).
 pub fn in_menu() -> bool {
-    menu_reached(dota_process().as_ref(), &game_state(), now(), fallback_secs())
+    let process = dota_process();
+    let state = game_state();
+    menu_reached(process.as_ref(), &state, now(), fallback_secs()) || process.as_ref().is_some_and(|p| window_ready(p, &state, now()))
 }
 
 /// What happened when asked to open the launch page.
@@ -840,8 +971,9 @@ pub fn open_launch_url() -> Result<OpenOutcome, String> {
 
 // ---- background service ------------------------------------------------------------------------
 
-/// Runs until LocalFlow closes: keeps the listener going while the file is installed, and
-/// opens the launch page when the assistant is on. Does nothing for players without Dota,
+/// Runs until LocalFlow closes: keeps the listener going while the file is installed (and up
+/// to date), opens the launch page when the assistant is on, and runs the live match helper
+/// when it is switched on (see `live.rs`). Does nothing for players without Dota,
 /// and nothing at all unless the desktop app called `set_data_dir`.
 pub async fn serve(events: Option<EventHandler>) {
     set_events(events);
@@ -874,6 +1006,18 @@ pub async fn serve(events: Option<EventHandler>) {
 fn tick(check_listener: bool) -> Option<String> {
     let mut problem = None;
     if check_listener {
+        // Files from older versions lack what the live helper needs: rewrite ours (only ours).
+        match upgrade_gsi() {
+            Ok(true) => {
+                tracing::info!("Dota 2 companion: updated the Game State Integration file");
+                emit(CoreEvent::Notice {
+                    message: "Dota 2 companion: the Game State Integration file was updated for the live match helper.                               If Dota 2 is running, restart it so it reads the new file."
+                        .into(),
+                });
+            }
+            Ok(false) => {}
+            Err(e) => tracing::warn!("Dota 2 companion: could not update the Game State Integration file: {e}"),
+        }
         ensure_listening();
         if gsi_installed() && listening_port().is_none() {
             problem = listen_error();
@@ -881,7 +1025,8 @@ fn tick(check_listener: bool) -> Option<String> {
     }
     if launch_assistant_enabled() {
         if let Some(process) = dota_process() {
-            if menu_reached(Some(&process), &game_state(), now(), fallback_secs()) {
+            let state = game_state();
+            if menu_reached(Some(&process), &state, now(), fallback_secs()) || window_ready(&process, &state, now()) {
                 match open_once_with(&process.launch_id(), &DotaSettings::load().launch_url, &open_in_browser) {
                     Ok(OpenOutcome::Opened) => tracing::info!("Dota 2 companion: opened the launch page"),
                     Ok(_) => {}
@@ -890,5 +1035,6 @@ fn tick(check_listener: bool) -> Option<String> {
             }
         }
     }
+    super::live::background_tick(&game_state(), now());
     problem
 }
