@@ -62,6 +62,27 @@ pub async fn serve(flow: LocalFlow) {
     }
 }
 
+pub enum Pick {
+    One(usize),
+    None,
+    Several(Vec<String>),
+}
+
+/// Which automation `/run <text>` means: an exact name (any capitals), otherwise the only
+/// name containing the text. Several partial matches are not guessed.
+pub fn pick_automation(names: &[&str], wanted: &str) -> Pick {
+    let wanted = wanted.trim().to_lowercase();
+    if let Some(i) = names.iter().position(|n| n.to_lowercase() == wanted) {
+        return Pick::One(i);
+    }
+    let partial: Vec<usize> = names.iter().enumerate().filter(|(_, n)| n.to_lowercase().contains(&wanted)).map(|(i, _)| i).collect();
+    match partial.as_slice() {
+        [] => Pick::None,
+        [i] => Pick::One(*i),
+        many => Pick::Several(many.iter().take(5).map(|i| names[*i].to_string()).collect()),
+    }
+}
+
 async fn send(text: String) {
     let _ = tokio::task::spawn_blocking(move || messaging::telegram_send(&text, Duration::from_secs(30))).await;
 }
@@ -85,14 +106,18 @@ async fn handle(flow: &LocalFlow, command: &str, args: &str) {
                 return;
             }
             let list = flow.list().await.unwrap_or_default();
-            let wanted = args.to_lowercase();
-            let found = list
-                .iter()
-                .find(|a| a.automation.name.to_lowercase() == wanted)
-                .or_else(|| list.iter().find(|a| a.automation.name.to_lowercase().contains(&wanted)));
-            let Some(found) = found else {
-                send(format!("No automation called \"{args}\". Send /list to see them.")).await;
-                return;
+            let names: Vec<&str> = list.iter().map(|a| a.automation.name.as_str()).collect();
+            let found = match pick_automation(&names, args) {
+                Pick::One(i) => &list[i],
+                Pick::None => {
+                    send(format!("No automation called \"{args}\". Send /list to see them.")).await;
+                    return;
+                }
+                Pick::Several(matches) => {
+                    // Never guess when running something from a phone.
+                    send(format!("\"{args}\" matches several automations: {}. Send the full name.", matches.join(", "))).await;
+                    return;
+                }
             };
             let (id, name) = (found.automation.id, found.automation.name.clone());
             send(format!("Running {name}...")).await;
@@ -128,6 +153,16 @@ async fn handle(flow: &LocalFlow, command: &str, args: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn run_never_guesses() {
+        let names = ["Tidy screenshots", "Backup notes", "Backup photos"];
+        assert!(matches!(pick_automation(&names, "backup notes"), Pick::One(1)));
+        assert!(matches!(pick_automation(&names, "tidy"), Pick::One(0)));
+        assert!(matches!(pick_automation(&names, "backup"), Pick::Several(v) if v.len() == 2));
+        assert!(matches!(pick_automation(&names, "a"), Pick::Several(_)));
+        assert!(matches!(pick_automation(&names, "nothing"), Pick::None));
+    }
 
     #[test]
     fn any_text_becomes_a_safe_lua_string() {

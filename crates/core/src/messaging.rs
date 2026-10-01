@@ -148,7 +148,8 @@ pub fn parse_updates(result: &serde_json::Value) -> Vec<(i64, i64, String, Strin
         .flatten()
         .filter_map(|u| {
             let id = u["update_id"].as_i64()?;
-            let message = if u["message"].is_object() { &u["message"] } else { &u["edited_message"] };
+            // Only new messages: editing an old "/restart" must not run it again.
+            let message = &u["message"];
             let chat = message["chat"]["id"].as_i64().unwrap_or(0);
             let name = message["from"]["first_name"].as_str().unwrap_or("").to_string();
             let text = message["text"].as_str().or(message["caption"].as_str()).unwrap_or("").to_string();
@@ -183,7 +184,7 @@ fn read_commands(poll_seconds: u32, timeout: Duration) -> Result<Vec<(String, St
     let result = telegram_call(
         &token,
         "getUpdates",
-        serde_json::json!({ "offset": offset, "timeout": poll_seconds, "allowed_updates": ["message", "edited_message"] }),
+        serde_json::json!({ "offset": offset, "timeout": poll_seconds, "allowed_updates": ["message"] }),
         timeout,
     )?;
     let mut out = Vec::new();
@@ -354,7 +355,8 @@ mod tests {
         let updates = parse_updates(&json);
         assert_eq!(updates.len(), 3);
         assert_eq!(updates[0], (5, 42, "Sam".into(), "/status".into()));
-        assert_eq!(updates[1].1, 7);
+        // An edited message is skipped (no chat, no text), but its id still counts as read.
+        assert_eq!((updates[1].0, updates[1].1, updates[1].3.as_str()), (6, 0, ""));
         assert_eq!(updates[2].3, "");
     }
 

@@ -255,3 +255,12 @@ fn template_hotkeys_are_unique() {
         }
     }
 }
+
+#[test]
+fn template_schedules_are_valid() {
+    for example in EXAMPLES {
+        if !example.schedule.is_empty() {
+            localflow_core::scheduler::validate_cron(example.schedule).unwrap_or_else(|e| panic!("{}: {e}", example.slug));
+        }
+    }
+}
