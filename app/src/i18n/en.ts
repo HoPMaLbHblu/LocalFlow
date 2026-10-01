@@ -771,6 +771,16 @@ export const en = {
   "dota.account.privateHelp": "Stored on this PC only. OpenDota can read your matches only if \"Expose Public Match Data\" is on in Dota 2 (Settings › Options › Social).",
   "template.dota-post-game-review.title": "Dota 2: post-game review",
   "template.dota-post-game-review.description": "When Dota 2 closes, waits a minute for OpenDota, then shows a short review of your last match.",
+  "update.available": "LocalFlow {version} is available (you have {current}).",
+  "update.download": "Download",
+  "update.later": "Later",
+  "update.setting": "Tell me about new versions",
+  "update.settingText": "Once a day LocalFlow asks GitHub whether a newer version has been released, and shows a notification and a banner if so. Only that public request is made; nothing about you or your automations is sent.",
+  "update.checkNow": "Check now",
+  "update.checking": "Checking…",
+  "update.upToDate": "You have the latest version.",
+  "template.dota-live-helper.title": "Dota 2: live match helper",
+  "template.dota-live-helper.description": "Press Ctrl+Alt+H in a match to check the live helper, which tells you when you can afford your next item and reminds you of runes and timings.",
 };
 
 export type Key = keyof typeof en;

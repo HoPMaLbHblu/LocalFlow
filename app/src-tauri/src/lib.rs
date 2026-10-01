@@ -7,6 +7,7 @@
 mod commands;
 mod ai;
 mod bots;
+mod updates;
 mod links;
 mod dota;
 mod hotkeys;
@@ -59,7 +60,7 @@ pub fn show_main_window(app: &AppHandle) {
     }
 }
 
-fn notify(app: &AppHandle, title: &str, body: &str) {
+pub(crate) fn notify(app: &AppHandle, title: &str, body: &str) {
     if let Err(e) = app.notification().builder().title(title).body(body).show() {
         tracing::warn!("could not show notification: {e}");
     }
@@ -159,6 +160,8 @@ fn init(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         sharing::file_argument(std::env::args()),
     )));
     app.manage(hotkeys::Hotkeys::default());
+    app.manage(updates::UpdateCache::default());
+    updates::start(handle.clone());
     tray::create(&handle)?;
     hotkeys::refresh(&handle);
 
@@ -281,6 +284,11 @@ pub fn run() {
             links::links_parse,
             links::links_import_bookmarks,
             bots::get_bot_settings,
+            updates::update_status,
+            updates::dismiss_update,
+            updates::get_update_check,
+            updates::set_update_check,
+            updates::open_release_page,
             bots::set_bot_settings,
             bots::clear_bot,
             bots::find_telegram_chats,

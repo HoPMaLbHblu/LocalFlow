@@ -2,6 +2,7 @@ import LinksView from "./components/LinksView";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, onCoreEvent, type AutomationSummary, type Template } from "./api";
 import Sidebar from "./components/Sidebar";
+import UpdateBanner from "./components/UpdateBanner";
 import Home from "./components/Home";
 import AutomationView from "./components/AutomationView";
 import TemplatePicker from "./components/TemplatePicker";
@@ -251,6 +252,7 @@ export default function App({ initialView, onLanguageChange }: Props) {
         onForward={goForward}
       />
       <main className="main">
+        <UpdateBanner />
         {notice && (
           <div className="banner ok" onClick={() => setNotice(null)}>
             {notice}

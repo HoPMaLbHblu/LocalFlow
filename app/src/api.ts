@@ -485,11 +485,26 @@ export function onOpenFile(handler: (path: string) => void): Promise<UnlistenFn>
   return listen<string>("localflow://open-file", (e) => handler(e.payload));
 }
 
+/** A newer LocalFlow release on GitHub. */
+export interface UpdateInfo {
+  current: string;
+  latest: { version: string; url: string; name: string; published_at: string };
+}
+
+export function onUpdateAvailable(handler: (info: UpdateInfo) => void): Promise<UnlistenFn> {
+  return listen<UpdateInfo>("localflow://update", (e) => handler(e.payload));
+}
+
 export function onCoreEvent(handler: (event: CoreEvent) => void): Promise<UnlistenFn> {
   return listen<CoreEvent>("localflow://event", (e) => handler(e.payload));
 }
 
 export const api = {
+  updateStatus: (refresh: boolean) => invoke<UpdateInfo | null>("update_status", { refresh }),
+  dismissUpdate: (version: string) => invoke<void>("dismiss_update", { version }),
+  getUpdateCheck: () => invoke<boolean>("get_update_check"),
+  setUpdateCheck: (enabled: boolean) => invoke<void>("set_update_check", { enabled }),
+  openReleasePage: (url: string) => invoke<void>("open_release_page", { url }),
   listAutomations: () => invoke<AutomationSummary[]>("list_automations"),
   getAutomation: (id: number) => invoke<AutomationDetail>("get_automation", { id }),
   createAutomation: (input: AutomationInput) => invoke<Automation>("create_automation", { input }),
