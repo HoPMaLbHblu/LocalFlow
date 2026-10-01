@@ -1,4 +1,80 @@
+<div align="center">
+
+<img src="app/app-icon.svg" width="112" alt="LocalFlow logo" />
+
 # LocalFlow
+
+**Your PC, on autopilot.** Small Lua automations that run on a schedule, on a trigger, or when you just ask out loud — privately, on your own computer.
+
+[![Website](https://img.shields.io/badge/website-localflow--9dp.pages.dev-5b6cf9?style=for-the-badge&logo=cloudflare&logoColor=white)](https://localflow-9dp.pages.dev)
+[![Download](https://img.shields.io/github/v/release/HoPMaLbHblu/LocalFlow?style=for-the-badge&label=download&color=ffd166&labelColor=3a45d8)](https://github.com/HoPMaLbHblu/LocalFlow/releases/latest)
+
+![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?logo=windows&logoColor=white)
+![macOS](https://img.shields.io/badge/macOS-11%2B-111?logo=apple&logoColor=white)
+![Rust](https://img.shields.io/badge/Rust-Tauri%202-dea584?logo=rust&logoColor=white)
+![Languages](https://img.shields.io/badge/UI-EN%20%C2%B7%20RU%20%C2%B7%20DE-a3a9d1)
+
+[**Website**](https://localflow-9dp.pages.dev) · [**100 templates**](https://localflow-9dp.pages.dev/templates) · [**Suggest a feature**](https://localflow-9dp.pages.dev/suggestions) · [**Download**](https://github.com/HoPMaLbHblu/LocalFlow/releases/latest)
+
+<a href="https://localflow-9dp.pages.dev"><img src="docs/images/website-home.png" width="860" alt="The LocalFlow website" /></a>
+
+</div>
+
+<table>
+<tr>
+<td width="33%" valign="top">
+
+**⏰ Schedules & triggers**<br/>
+Every morning, every 15 minutes, when a file appears, an app starts, the battery drops or the PC goes idle.
+
+</td>
+<td width="33%" valign="top">
+
+**🎙️ Voice control**<br/>
+Say what you want in English, Russian or German. LocalFlow asks before anything it can't undo.
+
+</td>
+<td width="33%" valign="top">
+
+**🧩 Simple Lua scripts**<br/>
+A friendly API for files, apps, windows, network, clipboard, images and more — plus an AI helper that drafts scripts for you.
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+**📱 Phone & chat**<br/>
+Reports in Telegram or Discord, and commands to your PC from your phone.
+
+</td>
+<td valign="top">
+
+**📈 System monitor**<br/>
+Processor, memory, disk and battery history, with automations that react to it.
+
+</td>
+<td valign="top">
+
+**🛡️ Private & safe**<br/>
+No account, no cloud. Risky actions need your permission; deleted files go to the Recycle Bin.
+
+</td>
+</tr>
+</table>
+
+<details>
+<summary><b>📸 More from the website</b></summary>
+<br/>
+<a href="https://localflow-9dp.pages.dev/templates"><img src="docs/images/website-templates.png" width="49%" alt="Template gallery" /></a>
+<a href="https://localflow-9dp.pages.dev/templates/#game-night"><img src="docs/images/website-template-code.png" width="49%" alt="A template's script" /></a>
+</details>
+
+> 💬 **Questions or ideas?** Chat with the developer or post a suggestion on [the website](https://localflow-9dp.pages.dev).
+
+**Contents:** [Install](#install-the-desktop-app) · [Writing automations](#writing-automations) · [Lua API](#lua-api) · [Telegram](#control-your-pc-from-telegram) · [Dota 2 companion](#dota-2-companion) · [Voice control](#voice-control) · [Your data is safe](#your-data-is-safe) · [Web server](#web-server) · [Development](#development)
+
+## About
 
 Automate chores on your computer with small **Lua** scripts: tidy your Downloads folder, back up notes, move screenshots. Run them with one click or on a schedule. LocalFlow lives in the system tray on Windows (the icons next to the clock on the taskbar) or the menu bar on a Mac, and keeps your schedules running in the background. Available in English, Russian and German, with light and dark themes.
 
