@@ -13,6 +13,7 @@ pub mod messaging;
 pub mod updates;
 pub mod voice;
 pub mod remote;
+pub mod phone;
 pub mod backup;
 pub mod config;
 pub mod db;
