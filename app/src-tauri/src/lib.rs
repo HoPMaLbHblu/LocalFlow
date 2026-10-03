@@ -7,6 +7,7 @@
 mod commands;
 mod ai;
 mod bots;
+mod phone;
 mod updates;
 mod links;
 mod dota;
@@ -69,6 +70,8 @@ pub(crate) fn notify(app: &AppHandle, title: &str, body: &str) {
 
 /// Forward core events to the UI, and turn some of them into desktop notifications.
 fn handle_event(app: &AppHandle, prefs: &Prefs, event: CoreEvent) {
+    // Paired phones see runs and notifications too (only if Phone remote is on).
+    phone::forward(app, &event);
     // Always shown, even with notifications off: remote control must never be silent.
     if let CoreEvent::Notice { message } = &event {
         notify(app, "LocalFlow", message);
@@ -176,6 +179,8 @@ fn init(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     app.manage(updates::UpdateCache::default());
     updates::start(handle.clone());
     tray::create(&handle)?;
+    app.manage(phone::PhoneRemote::new(data_dir.clone()));
+    phone::load(&handle);
     hotkeys::refresh(&handle);
     voice::init(&handle);
 
@@ -298,6 +303,12 @@ pub fn run() {
             links::links_parse,
             links::links_import_bookmarks,
             bots::get_bot_settings,
+            phone::phone_status,
+            phone::phone_set_enabled,
+            phone::phone_pair,
+            phone::phone_answer,
+            phone::phone_revoke,
+            phone::phone_set_permissions,
             updates::update_status,
             updates::dismiss_update,
             updates::get_update_check,

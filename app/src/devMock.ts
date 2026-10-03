@@ -230,6 +230,8 @@ export function installDevMock() {
       case "links_open": return linkSets.find((l) => l.name === args.name)?.links.length ?? 0;
       case "links_parse": return String(args.text).split(/\r?\n/).map((l) => l.match(/https?:\/\/\S+/)?.[0]).filter(Boolean).map((url) => ({ url, title: "" }));
       case "links_import_bookmarks": throw { kind: "error", message: `no bookmarks folder called "${args.folder}"` };
+      case "phone_status": return { enabled: true, online: true, relay: "wss://relay.example", phones: [{ device: "d1", name: "Pixel 8", permissions: ["status", "view", "run", "share"], added_at: 1790000000, connected: true }], pending: [] };
+      case "phone_pair": return "lfremote://pair?v=1&relay=wss%3A%2F%2Frelay.example&pc=AAAAAAAAAAAAAAAAAAAAAA&key=preview&s=preview&name=Preview";
       default: return null;
     }
   }, { shouldMockEvents: true });

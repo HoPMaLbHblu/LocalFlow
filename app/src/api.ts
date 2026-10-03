@@ -712,6 +712,12 @@ export const api = {
     }),
   clearAiCache: () => invoke<number>("clear_ai_cache"),
   getBotSettings: () => invoke<BotSettings>("get_bot_settings"),
+  phoneStatus: () => invoke<PhoneStatus>("phone_status"),
+  phoneSetEnabled: (enabled: boolean) => invoke<void>("phone_set_enabled", { enabled }),
+  phonePair: () => invoke<string>("phone_pair"),
+  phoneAnswer: (device: string, allow: boolean) => invoke<void>("phone_answer", { device, allow }),
+  phoneRevoke: (device: string) => invoke<void>("phone_revoke", { device }),
+  phoneSetPermissions: (device: string, permissions: PhonePermission[]) => invoke<void>("phone_set_permissions", { device, permissions }),
   setBotSettings: (token: string | null, chat: string | null, webhook: string | null, remote: boolean, remotePower: boolean) =>
     invoke<void>("set_bot_settings", { token, chat, webhook, remote, remotePower }),
   clearBot: (which: "telegram" | "discord") => invoke<void>("clear_bot", { which }),
@@ -756,3 +762,29 @@ export const api = {
   dotaSetAccount: (text: string | null) => invoke<number | null>("dota_set_account", { text }),
   dotaSetLiveHelper: (enabled: boolean) => invoke<void>("dota_set_live_helper", { enabled }),
 };
+
+/** Settings › Phone remote. */
+export type PhonePermission = "status" | "view" | "run" | "edit" | "power" | "clipboard" | "share" | "screen";
+export const PHONE_PERMISSIONS: PhonePermission[] = ["status", "view", "run", "edit", "share", "clipboard", "power", "screen"];
+
+export interface PairedPhone {
+  device: string;
+  name: string;
+  permissions: PhonePermission[];
+  added_at: number;
+  connected: boolean;
+}
+
+export interface PhoneStatus {
+  enabled: boolean;
+  online: boolean;
+  relay: string;
+  phones: PairedPhone[];
+  /** [device, name] of phones waiting for "Allow?". */
+  pending: [string, string][];
+}
+
+/** Phone remote changed: a phone asks to pair, connects, or the relay goes on/offline. */
+export function onPhoneEvent(handler: () => void): Promise<UnlistenFn> {
+  return listen("localflow://phone", () => handler());
+}
