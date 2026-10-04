@@ -209,6 +209,32 @@ mod tests {
         assert!(pc_s.open(&st.seal(b"run everything")).is_err());
     }
 
+    /// Fixed inputs and outputs that the phone app's Dart code must reproduce exactly.
+    /// `LF_PRINT_VECTORS=1 cargo test -p localflow-core --lib vectors -- --nocapture`
+    #[test]
+    fn vectors() {
+        let k = |n: u8| KeyPair::from_secret([n; 32]);
+        let (pc, phone, pc_e, ph_e) = (k(1), k(2), k(3), k(4));
+        let (pc_id, dev) = ([5u8; 16], [6u8; 16]);
+        let mut p = Session::derive(Side::Phone, &phone.secret, &pc.public, &ph_e.secret, &pc_e.public, &pc_id, &dev).unwrap();
+        let mut c = Session::derive(Side::Pc, &pc.secret, &phone.public, &pc_e.secret, &ph_e.public, &pc_id, &dev).unwrap();
+        let from_phone = p.seal(br#"{"id":1,"m":"pc.info"}"#);
+        let from_pc = c.seal(br#"{"id":1,"ok":true}"#);
+        assert_eq!(c.open(&from_phone).unwrap(), br#"{"id":1,"m":"pc.info"}"#);
+        if std::env::var("LF_PRINT_VECTORS").is_ok() {
+            println!(
+                "{}",
+                serde_json::json!({
+                    "pc_secret": b64(&[1; 32]), "phone_secret": b64(&[2; 32]), "pc_eph_secret": b64(&[3; 32]), "phone_eph_secret": b64(&[4; 32]),
+                    "pc_public": b64(&pc.public), "phone_public": b64(&phone.public), "pc_eph_public": b64(&pc_e.public), "phone_eph_public": b64(&ph_e.public),
+                    "pc_id": b64(&pc_id), "device_id": b64(&dev),
+                    "from_phone": from_phone, "from_phone_plain": r#"{"id":1,"m":"pc.info"}"#,
+                    "from_pc": from_pc, "from_pc_plain": r#"{"id":1,"ok":true}"#,
+                })
+            );
+        }
+    }
+
     #[test]
     fn low_order_keys_are_refused() {
         let me = KeyPair::generate();
