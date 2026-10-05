@@ -17,7 +17,7 @@ use super::crypto::{b64, random, sha256_hex, unb64, unb64_32, KeyPair, Session, 
 use super::handler::{handle, Permission, PcInfo, Request};
 use crate::LocalFlow;
 
-pub const DEFAULT_RELAY: &str = "wss://localflow-relay.workers.dev";
+pub const DEFAULT_RELAY: &str = "wss://localflow-relay.vfvf5389127.workers.dev";
 const PAIRING_SECONDS: u64 = 300;
 
 /// A phone that was paired with this PC. Stored in `phone_remote.json` (no secrets).
