@@ -65,6 +65,9 @@ impl PhoneRemote {
         }
         let flow = app.state::<AppState>().flow.clone();
         let handle = app.clone();
+        // Called from setup and from a synchronous command: enter Tauri's async runtime so the
+        // link's background task can be spawned (without it, tokio::spawn panics).
+        let _runtime = tauri::async_runtime::handle().inner().enter();
         *link = Some(Link::start(
             flow,
             self.dir.clone(),
