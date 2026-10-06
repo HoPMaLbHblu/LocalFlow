@@ -77,7 +77,8 @@ pub fn required(method: &str) -> Option<Permission> {
         "automations.list" | "automations.get" | "runs.list" | "runs.get" | "runs.log" => View,
         "automations.run" | "runs.stop" | "voice.command" | "confirm.answer" => Run,
         "automations.set_enabled" | "automations.set_schedule" => Edit,
-        "system.lock" | "system.sleep" | "system.volume" | "system.mute" | "wol.wake" => Power,
+        "system.lock" | "system.sleep" | "system.volume" | "system.mute" | "wol.wake" | "system.shutdown" | "system.restart"
+        | "system.cancel_shutdown" | "system.sign_out" | "apps.open" | "apps.close_all" => Power,
         "clipboard.get" | "clipboard.set" => Clipboard,
         "share.open_url" | "share.text" => Share,
         "screen.capture" => Screen,
@@ -257,6 +258,27 @@ async fn dispatch(flow: &LocalFlow, perms: &BTreeSet<Permission>, info: &PcInfo,
             let on = p.get("on").and_then(Value::as_bool).unwrap_or(true);
             lua(flow, format!("system.set_mute({on})")).await.map(|_| json!({ "on": on }))
         }
+        "system.shutdown" | "system.restart" => {
+            // Always with a delay, so it can still be cancelled (from the phone or with shutdown /a).
+            let delay = p.get("delay").and_then(Value::as_i64).unwrap_or(60).clamp(10, 3600);
+            let f = if m == "system.shutdown" { "shutdown" } else { "restart" };
+            lua(flow, format!("system.{f}({delay})")).await.map(|_| json!({ "delay": delay }))
+        }
+        "system.cancel_shutdown" => lua(flow, "system.cancel_shutdown()".into()).await.map(|_| json!({})),
+        "system.sign_out" => sign_out().map(|_| json!({})),
+
+        "apps.open" => {
+            let apps = open_apps(flow).await?;
+            Ok(json!(apps.into_iter().map(|(app, title, keep)| json!({ "app": app, "title": title, "kept": keep })).collect::<Vec<_>>()))
+        }
+        "apps.close_all" => {
+            let mut extra: Vec<String> = Vec::new();
+            if let Some(list) = p.get("except").and_then(Value::as_array) {
+                extra = list.iter().filter_map(Value::as_str).map(|s| s.trim().to_lowercase()).filter(|s| !s.is_empty() && s.len() <= 60).take(50).collect();
+            }
+            close_all(flow, &extra).await
+        }
+
         "wol.wake" => {
             let mac = text(p, "mac", 32)?;
             crate::lua::control::magic_packet(mac).map_err(|e| fail("bad_request", e))?;
@@ -343,14 +365,95 @@ mod tests {
     use super::*;
 
     #[test]
+    fn close_all_keeps_windows_apps_and_sota() {
+        assert!(kept("explorer.exe", &[]));
+        assert!(kept("Explorer.EXE", &[]));
+        assert!(kept("SotaConnect.exe", &[]));
+        assert!(kept("sota-vpn", &[]));
+        assert!(kept("localflow-desktop.exe", &[]));
+        assert!(!kept("chrome.exe", &[]));
+        assert!(!kept("Telegram.exe", &[]));
+        assert!(kept("Telegram.exe", &["telegram".into()]));
+    }
+
+    #[test]
     fn every_method_needs_the_right_permission() {
         assert_eq!(required("pc.info"), None);
         assert_eq!(required("automations.run"), Some(Permission::Run));
         assert_eq!(required("system.sleep"), Some(Permission::Power));
         assert_eq!(required("screen.capture"), Some(Permission::Screen));
         assert_eq!(required("clipboard.get"), Some(Permission::Clipboard));
+        assert_eq!(required("system.shutdown"), Some(Permission::Power));
+        assert_eq!(required("apps.close_all"), Some(Permission::Power));
         assert!(!Permission::defaults().contains(&Permission::Power));
         assert!(!Permission::defaults().contains(&Permission::Screen));
         assert!(!Permission::defaults().contains(&Permission::Clipboard));
     }
+}
+
+/// Programs that belong to Windows (or keep LocalFlow working); "Close all apps" never touches them.
+const WINDOWS_APPS: &[&str] = &[
+    "explorer", "applicationframehost", "systemsettings", "textinputhost", "shellexperiencehost", "searchhost",
+    "searchapp", "startmenuexperiencehost", "lockapp", "taskmgr", "dwm", "winlogon", "sihost", "ctfmon",
+    "localflow-desktop", "localflow", "msedgewebview2", "securityhealthsystray", "widgets",
+];
+
+/// Always kept, matched anywhere in the program's name (the user's VPN: "Sota Connect").
+const ALWAYS_KEEP: &[&str] = &["sota"];
+
+fn kept(app: &str, extra: &[String]) -> bool {
+    let a = app.to_lowercase();
+    let stem = a.trim_end_matches(".exe");
+    WINDOWS_APPS.contains(&stem) || ALWAYS_KEEP.iter().any(|k| stem.contains(k)) || extra.iter().any(|k| stem.contains(k.as_str()))
+}
+
+/// Visible windows as (id, program, title), read through the same `window.list()` scripts use.
+async fn windows(flow: &LocalFlow) -> Result<Vec<(i64, String, String)>, Failure> {
+    let code = "for _, w in ipairs(window.list()) do log(w.id .. '\\t' .. w.app .. '\\t' .. w.title) end";
+    let lines = lua(flow, code.into()).await?;
+    Ok(lines
+        .into_iter()
+        .filter_map(|l| {
+            let mut parts = l.splitn(3, '\t');
+            let id = parts.next()?.parse().ok()?;
+            let app = parts.next()?.to_string();
+            let title = parts.next()?.to_string();
+            (!title.trim().is_empty()).then_some((id, app, title))
+        })
+        .collect())
+}
+
+/// Open windows: (program, title, kept?).
+async fn open_apps(flow: &LocalFlow) -> Result<Vec<(String, String, bool)>, Failure> {
+    Ok(windows(flow).await?.into_iter().map(|(_, a, t)| { let k = kept(&a, &[]); (a, t, k) }).collect())
+}
+
+/// Ask every app window (except Windows' own and the kept ones) to close, like clicking X:
+/// apps with unsaved work can still ask to save.
+async fn close_all(flow: &LocalFlow, extra: &[String]) -> Out {
+    let mut ids = Vec::new();
+    let mut closed = std::collections::BTreeSet::new();
+    let mut kept_apps = std::collections::BTreeSet::new();
+    for (id, app, _) in windows(flow).await? {
+        if kept(&app, extra) {
+            kept_apps.insert(app);
+        } else {
+            ids.push(id.to_string());
+            closed.insert(app);
+        }
+    }
+    if !ids.is_empty() {
+        lua(flow, format!("for _, id in ipairs({{{}}}) do pcall(window.close, id) end", ids.join(","))).await?;
+    }
+    Ok(json!({ "closed": closed, "kept": kept_apps }))
+}
+
+fn sign_out() -> Result<(), Failure> {
+    #[cfg(windows)]
+    {
+        let status = std::process::Command::new("shutdown.exe").arg("/l").status().map_err(|e| fail("error", e.to_string()))?;
+        if status.success() { Ok(()) } else { Err(fail("error", "Windows refused to sign out")) }
+    }
+    #[cfg(not(windows))]
+    Err(fail("not_supported", "Signing out is only available on Windows"))
 }
