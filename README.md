@@ -72,7 +72,7 @@ No account, no cloud. Risky actions need your permission; deleted files go to th
 
 > 💬 **Questions or ideas?** Chat with the developer or post a suggestion on [the website](https://localflow-9dp.pages.dev).
 
-**Contents:** [Install](#install-the-desktop-app) · [Writing automations](#writing-automations) · [Lua API](#lua-api) · [Telegram](#control-your-pc-from-telegram) · [Dota 2 companion](#dota-2-companion) · [Voice control](#voice-control) · [Your data is safe](#your-data-is-safe) · [Web server](#web-server) · [Development](#development)
+**Contents:** [Install](#install-the-desktop-app) · [Writing automations](#writing-automations) · [Lua API](#lua-api) · [Telegram](#control-your-pc-from-telegram) · [Dota 2 companion](#dota-2-companion) · [Phone remote](#phone-remote-android) · [Voice control](#voice-control) · [Your data is safe](#your-data-is-safe) · [Web server](#web-server) · [Development](#development)
 
 ## About
 
@@ -410,6 +410,17 @@ The page opens once per launch of the game (identified by the game's process and
 - Without Game State Integration, your team is assumed to be Radiant (switch it in the Dota 2 window), your hero must be picked by hand, and the menu is assumed a minute after the game starts.
 - Suggestions support your decisions; they don't promise wins. Each reason is labelled *Data* (statistics, with source and age) or *Rule of thumb*.
 - The post-game review needs a public match history. OpenDota may take a few minutes to list a finished match; the template waits about a minute (within the script's time limit) and says when the newest match is older.
+
+## Phone remote (Android)
+
+Control LocalFlow from your phone with the **LocalFlow Remote** app: run and stop automations, turn them on or off, change schedules, read runs and logs, see the PC's processor, memory, disk and battery, lock / sleep / shut down / restart / sign out, mute and set the volume, close open apps (Windows' own programs and apps you choose stay open), send links and text to the PC, get its clipboard, take a screenshot, say an automation's name, and wake other devices with Wake-on-LAN. Results and `notify()` messages show up as phone notifications.
+
+1. Install **LocalFlow Remote** on your Android phone (the `.apk` from the [latest release](../../releases/latest)).
+2. On the PC: **Settings → Phone remote** → turn on **Allow phone remote** → **Pair a phone**.
+3. In the app, tap **Scan the code on my PC** and scan the QR code (it works once and expires after 5 minutes).
+4. Click **Allow** on the PC. Choose what that phone may do in the same card; power actions, the clipboard and the screen start off.
+
+The phone and the PC talk through a small relay so it works from anywhere without opening ports on your router. Everything between them is **end-to-end encrypted** (X25519 + XChaCha20-Poly1305, fresh keys per connection, replays refused): the relay only forwards locked messages it can't read. Each phone has its own key; **Remove** in the card disconnects it immediately. Phone remote is off until you turn it on, and the PC's keys live in Windows Credential Manager / the macOS Keychain.
 
 ## Voice control
 
